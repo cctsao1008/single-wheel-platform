@@ -1,0 +1,12 @@
+[package]
+name = "swp-measurement-model"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-plant-model = { path = "../plant-model" }
+
+[lib]
+path = "src/lib.rs"

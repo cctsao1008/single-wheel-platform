@@ -65,6 +65,16 @@ ElectricalOutput
 Physical Actuators
 ```
 
+The estimator is bounded by explicit plant and measurement models:
+
+```text
+plant-model
+    x_dot = f(x, u, p)
+
+measurement-model
+    y = h(x, u, p)
+```
+
 Recording is a branch from the raw-observation boundary:
 
 ```text
@@ -81,6 +91,10 @@ RawObservation
 plant-model
     full robot configuration, reduced balance coordinates,
     physical parameters, nonlinear/linear plant contracts
+
+measurement-model
+    physical sensor equation, IMU lever-arm semantics,
+    encoder kinematics, local observability structure
 
 plant-observation
     raw values, timing, quality, acquisition status
@@ -131,7 +145,7 @@ M(q_b, p) q_b_ddot
 + g(q_b, p)
 + d(q_b_dot, p)
 =
-Q(q_b, q_b_dot, u_ref, p)
+B(p) u_ref
 ```
 
 Roll and pitch are not assumed decoupled. Any reduction or decoupling must emerge from model structure, operating-region analysis, or physical correlation.
@@ -139,6 +153,37 @@ Roll and pitch are not assumed decoupled. Any reduction or decoupling must emerg
 Yaw remains part of the full robot model even though it is not currently part of the reduced balance state. Turning, path following, and finite-speed gyroscopic coupling belong to the wider nonholonomic mobility problem rather than being hidden inside ad-hoc balance terms.
 
 See [`plant_model.md`](plant_model.md).
+
+## Measurement-model boundary
+
+The estimator does not treat calibrated sensor values as if they were state variables. It compares physical body-frame observations against
+
+```text
+y = h(x, u, p)
+```
+
+or the stationary-upright local form
+
+```text
+y = y_0 + C x + D u
+```
+
+The current measurement model includes:
+
+```text
+body-frame accelerometer specific force
+body-frame gyroscope angular rate
+drive-wheel relative encoder angle
+reaction-wheel relative encoder rate
+```
+
+The accelerometer equation includes gravity, translational acceleration, angular acceleration at the IMU lever arm, and direct actuator feedthrough. Accelerometer output is therefore not promoted to a geometric tilt angle before estimation.
+
+The ideal local seven-state balance plant is structurally observable from encoder/gyro channels alone. This does not remove the accelerometer from the estimator: real bias, scale, timing, noise, vibration, and model error make independent specific-force evidence valuable.
+
+Encoder scale/sign and IMU placement remain physical evidence requirements. Until measured, raw counts and an assumed lever arm are not promoted into the numeric measurement model.
+
+See [`measurement_model.md`](measurement_model.md).
 
 ## Hardware ownership
 
@@ -173,13 +218,15 @@ Board capability, assembly population, and robot semantics remain separate types
 
 Roll, pitch, and yaw follow the right-hand rule about +X, +Y, and +Z respectively.
 
-## Measurement model
+## Measurement timing and quality
 
 Scheduler time, physical source-sample time, peripheral capture time, readout completion time, and transmission time are distinct.
 
 The MPU6050 source-sample timestamp is `Unknown` because the reference board does not route the device data-ready interrupt. I2C read start/completion times remain available.
 
 `MeasurementQuality` carries independent availability, I/O, timing, freshness, saturation, staleness, and retry state. An unset flag does not imply the opposite property.
+
+The physical measurement equation and measurement timing/quality are complementary contracts: a mathematically valid sensor model does not make stale or mistimed data valid.
 
 ## Runtime authority
 

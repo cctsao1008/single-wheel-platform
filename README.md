@@ -2,7 +2,7 @@
 
 A Rust `no_std` embedded control platform for a self-balancing single-wheel robot.
 
-The repository is structured around explicit physical and semantic boundaries: board wiring, installed hardware, observation, calibration, coordinate mapping, state estimation, control, actuator authority, and electrical output are separate parts of the system.
+The repository is structured around explicit physical and semantic boundaries: board wiring, installed hardware, observation, calibration, coordinate mapping, physical modeling, measurement modeling, state estimation, control, actuator authority, and electrical output are separate parts of the system.
 
 ## Core Architecture
 
@@ -44,6 +44,16 @@ ElectricalOutput
       |
       v
 Physical Actuators
+```
+
+The estimator is grounded by two explicit models:
+
+```text
+plant-model
+    x_dot = f(x, u, p)
+
+measurement-model
+    y = h(x, u, p)
 ```
 
 Observation and control remain independent from transport and user interfaces:
@@ -101,6 +111,9 @@ robot-domain
 plant-model
     full robot configuration, reduced balance coordinates,
     physical parameters, and plant dynamics
+
+measurement-model
+    physical sensor equation and local observability structure
 ```
 
 ## Runtime
@@ -204,6 +217,24 @@ The symbolic derivation shows that the nonlinear balance plant is coupled, while
 
 Unknown physical parameters remain unknown until measured or identified.
 
+## Measurement Model
+
+The estimator does not treat sensor values as direct state variables. It compares body-frame observations with a physical sensor model:
+
+```text
+y = h(x, u, p)
+```
+
+Around stationary upright the implemented local form is:
+
+```text
+y = y_0 + C x + D u
+```
+
+The accelerometer is modeled as a specific-force sensor, including translational acceleration, angular acceleration at the IMU lever arm, gravity, and direct actuator feedthrough. It is not treated as a pure tilt sensor.
+
+The ideal upright model is structurally observable from encoder/gyro information alone. This is a local mathematical result, not a claim that accelerometer data is unnecessary in the physical estimator; bias, scale uncertainty, timing, noise, and model error still make independent specific-force information valuable.
+
 ## Recording and Replay
 
 `RawObservation` is encoded as a fixed-size CRC-protected `RecordedObservation` and streamed from USART2 through the on-board ECB02S2 BLE module.
@@ -236,7 +267,8 @@ The host checks sequence continuity, CRC validity, and firmware-reported dropped
 ```text
 crates/
   robot-domain/          Robot state and actuator-domain types
-  plant-model/           Physical plant coordinates, parameters, and model contracts
+  plant-model/           Physical plant coordinates, parameters, and dynamics
+  measurement-model/     Sensor equation and local observability model
   reference-assembly/    Installed hardware and board-to-role mapping
   plant-observation/     Raw acquisition, timing, and quality
   sensor-calibration/    Sensor scaling and measured calibration
@@ -275,6 +307,7 @@ CI checks formatting, Cortex-M workspace compilation, Clippy, host-side unit tes
 
 - [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
 - [`docs/architecture/plant_model.md`](docs/architecture/plant_model.md)
+- [`docs/architecture/measurement_model.md`](docs/architecture/measurement_model.md)
 - [`docs/architecture/body_frame_contract.md`](docs/architecture/body_frame_contract.md)
 - [`docs/architecture/runtime_authority.md`](docs/architecture/runtime_authority.md)
 - [`docs/architecture/calibration_contract.md`](docs/architecture/calibration_contract.md)
