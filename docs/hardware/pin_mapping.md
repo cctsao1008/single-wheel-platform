@@ -6,19 +6,19 @@ This document records the schematic-level mapping of the ONE_V2.0 reference boar
 
 | Schematic function | MCU resource | Net / connector detail | Status |
 |---|---|---|---|
-| BLDC_1 PWM | PB1 / TIM3_CH4 | `PWM_BLDC_1`, side brushless connector pin 4 | Schematic-mapped |
-| BLDC_1 direction | PB11 | `DIR_BLDC_1`, connector pin 5 | Schematic-mapped |
+| BLDC_1 PWM | PB1 / TIM3_CH4 | `PWM_BLDC_1`, PCB silk `M2` | Schematic + assembly mapped |
+| BLDC_1 direction | PB11 | `DIR_BLDC_1`, PCB silk `M2` | Schematic + assembly mapped |
 | BLDC_1 enable | Not MCU-controlled | `EN_BLDC_1`, connector pin 3 tied to 3.3 V | Hard-wired high |
-| Encoder 1 A/B | PA1 / PA0 | `Ecoder_1_A/B`, connector pins 8/7 | Schematic-mapped |
-| BLDC_2 PWM | PA6 / TIM3_CH1 | `PWM_BLDC_2`, front/back brushless connector pin 4 | Schematic-mapped |
-| BLDC_2 direction | PA4 | `DIR_BLDC_2`, connector pin 5 | Schematic-mapped |
+| Encoder 1 A/B | PA1 / PA0 | `Ecoder_1_A/B`, same BLDC_1 / PCB `M2` harness | Schematic + assembly mapped |
+| BLDC_2 PWM | PA6 / TIM3_CH1 | `PWM_BLDC_2`, PCB silk `M1` | Schematic + assembly mapped |
+| BLDC_2 direction | PA4 | `DIR_BLDC_2`, PCB silk `M1` | Schematic + assembly mapped |
 | BLDC_2 enable | Not MCU-controlled | `EN_BLDC_2`, connector pin 3 tied to 3.3 V | Hard-wired high |
-| Encoder 2 A/B | PB7 / PB6 | `Ecoder_2_A/B`, connector pins 8/7 | Schematic-mapped |
-| BLDC_3 PWM | PB0 / TIM3_CH3 | `PWM_BLDC_3`, spin connector pin 3 | Schematic-mapped |
-| BLDC_3 direction | PB10 | `DIR_BLDC_3`, spin connector pin 4 | Schematic-mapped |
-| BLDC_3 brake | PA7 | `Brake`, spin connector pin 5 | Pin mapped; active polarity not specified |
-| BLDC_3 enable | Not MCU-controlled | `EN_BLDC_3`, spin connector pin 6 tied to 3.3 V | Hard-wired high |
-| Encoder 3 A/B | No MCU route shown | `Ecoder_3_A/B`, spin connector pins 7/8 | Connector-only |
+| Encoder 2 A/B | PB7 / PB6 | `Ecoder_2_A/B`, same BLDC_2 / PCB `M1` harness | Schematic + assembly mapped |
+| BLDC_3 PWM | PB0 / TIM3_CH3 | `PWM_BLDC_3`, PCB silk `M3`, schematic `CN1` | Schematic + assembly mapped |
+| BLDC_3 direction | PB10 | `DIR_BLDC_3`, PCB silk `M3` | Schematic + assembly mapped |
+| BLDC_3 brake | PA7 | `Brake`, PCB silk `M3` | Pin mapped; active polarity not specified |
+| BLDC_3 enable | Not MCU-controlled | `EN_BLDC_3`, connector pin 6 tied to 3.3 V | Hard-wired high |
+| Encoder 3 A/B | No MCU route shown | `Ecoder_3_A/B`, BLDC_3 connector | Connector-only |
 | MPU6050 SDA | PB8 | `MPU_SDA`; 4.7 kOhm pull-up to 3.3 V | Schematic-mapped |
 | MPU6050 SCL | PB9 | `MPU_SCL`; 4.7 kOhm pull-up to 3.3 V | Schematic-mapped |
 | MPU6050 AD0 | N/A | R11 pulls AD0 low | Address 0x68 |
@@ -31,27 +31,39 @@ This document records the schematic-level mapping of the ONE_V2.0 reference boar
 | OLED SDA/SCL | PB4 / PB5 | `OLED_SDA` / `OLED_SCL` | Schematic-mapped |
 | SWDIO/SWCLK | PA13 / PA14 | Nets `SDIO` / `SCLK`, exposed on P2 | Schematic-mapped |
 
-## Physical PCB connector observation — 2026-09-05
+## Verified connector / actuator topology — 2026-09-05
 
-Inspection of the assembled board shows silkscreen motor connectors `M1`, `M2`, and `M3`.
-
-`M3` is uniquely identifiable as schematic `BLDC_3 / CN1` because its PCB silkscreen includes `BRA` / brake, matching the only schematic motor interface that exposes the `Brake` signal. In the inspected robot, `M3` is **not cabled to a motor**.
-
-Observed population:
+The physical PCB silk, schematic connector details, and manual cable tracing establish the following mapping:
 
 ```text
-M1  populated / cabled
-M2  populated / cabled
-M3  unpopulated in this assembly
+PCB M2 -> schematic BLDC_1 -> upper reaction-wheel motor
+PCB M1 -> schematic BLDC_2 -> lower Nidec ground-drive motor
+PCB M3 -> schematic BLDC_3 -> no motor installed
 ```
 
-The M1 harness can be visually traced to the lower Nidec motor (`24H404H-160`). The exact M2 destination and final robot-domain role mapping remain pending direct physical trace confirmation. See `assembly_observation_2026-09-05.md`.
+The schematic component designators are worth noting because they are not a simple `M1/M2/M3` sequence:
+
+```text
+BLDC_1 connector component: M2
+BLDC_2 connector component: CN2
+BLDC_3 connector component: CN1
+```
+
+The corresponding feedback-path association is:
+
+```text
+Encoder_1 -> reaction-wheel motor path
+Encoder_2 -> drive-wheel motor path
+Encoder_3 -> no installed actuator and no MCU route shown
+```
+
+Encoder polarity, counts per mechanical revolution, and any gearing ratio remain unverified.
 
 ## Motor connector power
 
 Each brushless connector provides `12V_P`, GND, and 3.3 V logic/encoder supply. The three `EN_BLDC_*` lines are not driven by the MCU; each is tied to 3.3 V directly on the schematic.
 
-The third connector additionally exposes `Brake`. The schematic establishes only the PA7-to-Brake connection; it does not establish the brake input's active polarity.
+The BLDC_3 / PCB M3 interface additionally exposes `Brake`. The schematic establishes only the PA7-to-Brake connection; it does not establish the brake input's active polarity. The inspected assembly has no motor connected to M3.
 
 ## MPU6050 bus consequence
 
@@ -70,10 +82,10 @@ MCU TX -> CH340_RX
 MCU RX <- CH340_TX
 ```
 
-The current telemetry firmware transmits only on MCU PA9 / `TX`; it does not assume that USB-C/CH340 is already electrically connected to that net.
+The current recording firmware transmits only on MCU PA9 / `TX`; it does not assume that USB-C/CH340 is already electrically connected to that net.
 
-## Electrical behavior not determined by the schematic
+## Electrical behavior not yet physically verified
 
-The schematic does not define the brushless motor modules' PWM active level, direction sign, brake polarity, or the robot-positive encoder direction. Those are board/actuator integration properties and must not be inferred from net names alone.
+The schematic does not define the installed brushless motor modules' PWM active level, direction sign, or robot-positive encoder direction. Those are board/actuator integration properties and must not be inferred from net names alone.
 
-The established hardware integration convention is that BLDC_1 and BLDC_2 use active-low PWM command waveforms and BLDC_3 uses active-high PWM. Connector waveforms must still be checked before first powered commissioning of a newly assembled board.
+Private legacy firmware suggests BLDC_1/2 active-low PWM and historical direction conventions, but those remain source-derived evidence rather than verified electrical facts. Connector waveforms must be measured before first powered actuator commissioning.
