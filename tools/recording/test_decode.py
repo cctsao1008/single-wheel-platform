@@ -29,7 +29,15 @@ def make_record() -> bytes:
     struct.pack_into("<H", record, 48, 0x0003)
     struct.pack_into("<IHH", record, 50, 1420, 100, 0x000B)
     struct.pack_into("<IHH", record, 58, 1430, 200, 0x000B)
-    struct.pack_into("<IHHHH", record, 66, 1700, 3000, 0x0003, 0x0007, 9)
+    acquisition_status = (
+        decode.ACQ_BUS_READY
+        | decode.ACQ_IMU_PRESENT
+        | decode.ACQ_IMU_CONFIGURED
+        | decode.ACQ_IMU_DATA_READY_IRQ_ENABLED
+        | decode.ACQ_IMU_DATA_READY_SEEN
+        | decode.ACQ_IMU_TIMING_HEALTHY
+    )
+    struct.pack_into("<IHHHH", record, 66, 1700, 3000, 0x0003, acquisition_status, 9)
     crc = decode.crc16_ccitt_false(record[: decode.CRC_OFFSET])
     struct.pack_into("<H", record, decode.CRC_OFFSET, crc)
     return bytes(record)
@@ -46,6 +54,25 @@ class DecoderTests(unittest.TestCase):
         self.assertEqual(row["encoder_2_count"], 200)
         self.assertEqual(row["battery_adc_raw"], 3000)
         self.assertEqual(row["dropped_records"], 9)
+
+    def test_record_decodes_timing_health(self) -> None:
+        row = decode.decode_record(make_record())
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row["imu_data_ready_seen"], 1)
+        self.assertEqual(row["imu_timing_healthy"], 1)
+        self.assertEqual(row["imu_timing_late"], 0)
+        self.assertEqual(row["imu_timing_timeout"], 0)
+        self.assertEqual(
+            decode.imu_timing_label(int(row["acquisition_status"])),
+            "OK",
+        )
+
+    def test_timing_label_prioritizes_fault_states(self) -> None:
+        self.assertEqual(decode.imu_timing_label(0), "STARTUP")
+        self.assertEqual(decode.imu_timing_label(decode.ACQ_IMU_TIMING_HEALTHY), "OK")
+        self.assertEqual(decode.imu_timing_label(decode.ACQ_IMU_TIMING_LATE), "LATE")
+        self.assertEqual(decode.imu_timing_label(decode.ACQ_IMU_TIMING_TIMEOUT), "TIMEOUT")
 
     def test_stream_resynchronizes_after_corruption(self) -> None:
         good = make_record()
