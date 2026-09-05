@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/robot-domain",
+    "crates/reference-assembly",
     "crates/plant-observation",
     "crates/sensor-calibration",
     "crates/mpu6050",
