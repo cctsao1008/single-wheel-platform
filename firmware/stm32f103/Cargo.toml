@@ -14,3 +14,4 @@ stm32f1xx-hal.workspace = true
 swp-board-one-v2 = { path = "../../crates/board-one-v2" }
 swp-mpu6050 = { path = "../../crates/mpu6050" }
 swp-robot-domain = { path = "../../crates/robot-domain" }
+swp-software-i2c = { path = "../../crates/software-i2c" }
