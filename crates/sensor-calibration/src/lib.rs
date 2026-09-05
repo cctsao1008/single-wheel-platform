@@ -52,10 +52,7 @@ pub struct AffineCalibration3 {
 impl AffineCalibration3 {
     pub fn new(bias: [f32; 3], matrix: [[f32; 3]; 3]) -> Option<Self> {
         if bias.iter().all(|value| value.is_finite())
-            && matrix
-                .iter()
-                .flatten()
-                .all(|value| value.is_finite())
+            && matrix.iter().flatten().all(|value| value.is_finite())
         {
             Some(Self { bias, matrix })
         } else {
@@ -153,7 +150,8 @@ pub fn calibrate_imu(
 }
 
 fn require_usable_input(quality: MeasurementQuality) -> Result<(), CalibrationError> {
-    if quality.contains(MeasurementQuality::IO_ERROR) || !quality.contains(MeasurementQuality::IO_OK)
+    if quality.contains(MeasurementQuality::IO_ERROR)
+        || !quality.contains(MeasurementQuality::IO_OK)
     {
         return Err(CalibrationError::InputIoError);
     }
@@ -235,7 +233,10 @@ mod tests {
     fn io_error_blocks_semantic_upgrade() {
         let mut raw = raw_sample();
         raw.quality = MeasurementQuality::AVAILABLE | MeasurementQuality::IO_ERROR;
-        assert_eq!(scale_mpu6050(raw, config()), Err(CalibrationError::InputIoError));
+        assert_eq!(
+            scale_mpu6050(raw, config()),
+            Err(CalibrationError::InputIoError)
+        );
     }
 
     #[test]
