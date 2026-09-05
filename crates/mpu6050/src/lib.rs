@@ -3,6 +3,7 @@
 use embedded_hal::i2c::I2c;
 
 pub const DEFAULT_ADDRESS: u8 = 0x68;
+pub const STANDARD_GRAVITY_MPS2: f32 = 9.806_65;
 
 const REG_SMPLRT_DIV: u8 = 0x19;
 const REG_CONFIG: u8 = 0x1a;
@@ -15,6 +16,7 @@ const REG_WHO_AM_I: u8 = 0x75;
 
 const WHO_AM_I_VALUE: u8 = 0x68;
 const CLOCK_PLL_X_GYRO: u8 = 0x01;
+const DEG_TO_RAD: f32 = core::f32::consts::PI / 180.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -204,6 +206,43 @@ where
     }
 }
 
+/// Datasheet transfer function only. No measured calibration is applied.
+pub fn accel_raw_to_mps2(raw: i16, range: AccelRange) -> f32 {
+    f32::from(raw) / range.lsb_per_g() * STANDARD_GRAVITY_MPS2
+}
+
+/// Datasheet transfer function only. No measured calibration is applied.
+pub fn gyro_raw_to_rad_per_sec(raw: i16, range: GyroRange) -> f32 {
+    f32::from(raw) / range.lsb_per_dps() * DEG_TO_RAD
+}
+
+/// MPU6050 nominal temperature transfer function in degrees Celsius.
+pub fn temperature_raw_to_celsius(raw: i16) -> f32 {
+    f32::from(raw) / 340.0 + 36.53
+}
+
 const fn be_i16(msb: u8, lsb: u8) -> i16 {
     i16::from_be_bytes([msb, lsb])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn acceleration_transfer_function_uses_selected_range() {
+        assert!((accel_raw_to_mps2(8_192, AccelRange::G4) - STANDARD_GRAVITY_MPS2).abs() < 0.000_1);
+        assert!((accel_raw_to_mps2(4_096, AccelRange::G8) - STANDARD_GRAVITY_MPS2).abs() < 0.000_1);
+    }
+
+    #[test]
+    fn gyro_transfer_function_is_si() {
+        let radians_per_second = gyro_raw_to_rad_per_sec(328, GyroRange::Dps1000);
+        assert!((radians_per_second - 10.0_f32.to_radians()).abs() < 0.000_1);
+    }
+
+    #[test]
+    fn temperature_transfer_function_matches_zero_code() {
+        assert!((temperature_raw_to_celsius(0) - 36.53).abs() < 0.000_1);
+    }
 }
