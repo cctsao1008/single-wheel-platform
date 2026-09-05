@@ -149,7 +149,11 @@ where
         self.write_u8(REG_SMPLRT_DIV, (divider_plus_one - 1) as u8)?;
         self.write_u8(
             REG_INT_ENABLE,
-            if config.data_ready_interrupt { 0x01 } else { 0x00 },
+            if config.data_ready_interrupt {
+                0x01
+            } else {
+                0x00
+            },
         )?;
 
         self.config = Some(config);
