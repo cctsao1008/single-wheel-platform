@@ -229,11 +229,8 @@ mod app {
         health_timer.listen(TimerEvent::Update);
 
         let (record_producer, record_consumer) = ctx.local.record_queue.split();
-        let record_pump = UartRecordDmaPump::new(
-            record_dma,
-            record_consumer,
-            ctx.local.record_dma_buffer,
-        );
+        let record_pump =
+            UartRecordDmaPump::new(record_dma, record_consumer, ctx.local.record_dma_buffer);
 
         let initial_cycle = DWT::cycle_count();
         let timing_started_at_us = u64::from(initial_cycle) / CYCLES_PER_US;
@@ -290,10 +287,8 @@ mod app {
     )]
     fn timing_health(mut ctx: timing_health::Context) {
         ctx.local.health_timer.clear_interrupt(TimerEvent::Update);
-        let now_us = capture_timestamp_us(
-            ctx.local.health_last_cycle,
-            ctx.local.health_cycle_epoch,
-        );
+        let now_us =
+            capture_timestamp_us(ctx.local.health_last_cycle, ctx.local.health_cycle_epoch);
         ctx.shared
             .imu_timing_monitor
             .lock(|monitor| monitor.poll(now_us));
