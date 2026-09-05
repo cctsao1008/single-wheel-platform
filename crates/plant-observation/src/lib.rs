@@ -11,6 +11,10 @@ impl AcquisitionStatus {
     pub const IMU_PRESENT: Self = Self(1 << 1);
     pub const IMU_CONFIGURED: Self = Self(1 << 2);
     pub const IMU_DATA_READY_IRQ_ENABLED: Self = Self(1 << 3);
+    pub const IMU_DATA_READY_SEEN: Self = Self(1 << 4);
+    pub const IMU_TIMING_HEALTHY: Self = Self(1 << 5);
+    pub const IMU_TIMING_LATE: Self = Self(1 << 6);
+    pub const IMU_TIMING_TIMEOUT: Self = Self(1 << 7);
 
     pub const fn from_bits(bits: u16) -> Self {
         Self(bits)
