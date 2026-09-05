@@ -277,9 +277,6 @@ mod tests {
     fn crc_rejects_corruption() {
         let mut encoded = SensorSnapshotFrame::default().encode();
         encoded[20] ^= 0x01;
-        assert_eq!(
-            SensorSnapshotFrame::decode(&encoded),
-            Err(DecodeError::Crc)
-        );
+        assert_eq!(SensorSnapshotFrame::decode(&encoded), Err(DecodeError::Crc));
     }
 }
