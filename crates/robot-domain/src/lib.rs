@@ -25,8 +25,9 @@ pub enum StateValidity {
 
 /// State presented to the control domain.
 ///
-/// The type is intentionally specific to the single-wheel plant rather than a
-/// generic robotics state container.
+/// The type is intentionally specific to the inspected single-wheel plant
+/// rather than a generic robotics state container. Yaw rate remains observable
+/// from the IMU even though the verified assembly has no dedicated yaw actuator.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct RobotState {
     pub timestamp: TimestampUs,
@@ -41,19 +42,25 @@ pub struct RobotState {
     pub validity: StateValidity,
 }
 
-/// Requested control effort before actuator-specific electrical translation.
+/// Generalized control demand for the two physically installed actuation axes.
+///
+/// There is intentionally no yaw demand: the inspected reference assembly has
+/// a reaction-wheel actuator and a ground-drive actuator, while the third PCB
+/// motor interface is not populated.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct ControlEffort {
+pub struct GeneralizedDemand {
     pub roll: f32,
     pub pitch: f32,
-    pub yaw: f32,
 }
 
+/// Robot-semantic actuator identity for the currently verified assembly.
+///
+/// PCB motor-channel identity remains in `swp-board-one-v2`; the mapping between
+/// those channels and these roles belongs to the assembly layer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Actuator {
     ReactionWheel,
     DriveWheel,
-    Spin,
 }
 
 /// Bounded actuator request in the abstract actuator domain.
@@ -82,9 +89,9 @@ impl Default for NormalizedCommand {
     }
 }
 
+/// Robot-semantic actuator request before board-specific electrical mapping.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ActuatorCommand {
     pub command: NormalizedCommand,
     pub enabled: bool,
-    pub brake_requested: bool,
 }
