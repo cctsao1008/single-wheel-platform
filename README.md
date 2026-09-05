@@ -2,7 +2,7 @@
 
 A clean re-architecture of the embedded software for a self-balancing single-wheel robot.
 
-The repository is organized around physical truth and semantic transitions rather than inherited firmware structure. Device access, board wiring, acquisition evidence, device scaling, measured calibration, robot-domain state, real-time scheduling, estimation, control, and actuation are separate concerns.
+The repository is organized around physical truth and semantic transitions rather than inherited firmware structure. Device access, board wiring, physical assembly, acquisition evidence, device scaling, measured calibration, robot-domain state, real-time scheduling, estimation, control, and actuation are separate concerns.
 
 The current implementation uses **Rust `no_std`**, **embedded-hal 1.0**, **stm32f1xx-hal**, and **RTIC** on the STM32F103 reference target. The earlier C/CMake scaffold is not retained as a compatibility layer.
 
@@ -60,6 +60,27 @@ The MPU6050 device crate owns nominal transfer functions for the configured full
 
 The current target firmware intentionally continues to record raw evidence because no verified physical calibration profile has yet been established for the unit. Zero bias and an identity matrix are not treated as a production calibration merely to make the pipeline executable.
 
+## Verified physical actuator topology
+
+Physical inspection and manual cable tracing establish the current reference assembly as a **two-actuator plant**:
+
+```text
+PCB silk M2 / schematic BLDC_1 -> upper reaction-wheel motor
+PCB silk M1 / schematic BLDC_2 -> lower ground-drive motor
+PCB silk M3 / schematic BLDC_3 -> no motor installed
+```
+
+The corresponding robot-domain actuator roles are therefore:
+
+```text
+ReactionWheel
+DriveWheel
+```
+
+The unpopulated third motor interface remains a board capability, not a robot actuator. `swp-board-one-v2` continues to describe only PCB wiring; `swp-reference-assembly` owns the verified transition from board channels to installed robot roles.
+
+Encoder association follows the installed harness: Encoder 1 belongs to the reaction-wheel motor path and Encoder 2 to the drive-wheel motor path. Encoder sign and mechanical scale remain unverified commissioning facts.
+
 ## Recording and deterministic replay
 
 Recording/replay is a first-class data path:
@@ -78,7 +99,8 @@ RawObservation
 
 ```text
 crates/
-  robot-domain/          Single-wheel physical/control-domain types
+  robot-domain/          Verified single-wheel physical/control-domain types
+  reference-assembly/    Installed actuator population and board-to-role mapping
   plant-observation/     Raw evidence, timing, and measurement quality
   sensor-calibration/    Device scaling boundary and measured IMU correction
   observation-record/   Deterministic binary record/replay contract
@@ -94,17 +116,30 @@ tools/
 
 docs/
   architecture/          Semantic, timing, replay, calibration, authority contracts
-  hardware/              Schematic review and board mapping
+  hardware/              Schematic review, assembly observation, and board mapping
   commissioning/         Bring-up and characterization notes
 ```
 
-## Board/robot separation
+## Board / assembly / robot separation
 
-The board crate describes PCB identities such as `BLDC_1`, `BLDC_2`, `BLDC_3`, `Encoder_1`, and `Encoder_2`. It does not promote those channels into reaction-wheel, drive-wheel, or spin semantics until the physical harness mapping is established.
+The project now treats these as three distinct facts:
+
+```text
+Board capability
+    BLDC_1 / BLDC_2 / BLDC_3 exist
+
+Assembly population
+    BLDC_1 and BLDC_2 installed
+    BLDC_3 unpopulated
+
+Robot semantics
+    BLDC_1 -> ReactionWheel
+    BLDC_2 -> DriveWheel
+```
 
 Important reviewed hardware facts include:
 
-- STM32F103C8T6 reference MCU.
+- STM32F103C8T6 reference MCU from the schematic; physical top marking still needs direct visual confirmation.
 - MPU6050 address `0x68`.
 - MPU SDA/SCL are PB8/PB9 as drawn, requiring software I2C for this PCB wiring.
 - PC13 net `MPU_INT` reaches MPU6050 **FSYNC**, while the actual MPU6050 INT pin is not routed.
@@ -129,10 +164,10 @@ HSI 8 MHz
 
 The acquisition task is currently scheduled at 100 Hz. That period is a scheduler intent, not a claim that every physical sensor sample occurred exactly 10 ms apart.
 
-No TIM3 motor PWM, direction, or brake output is configured. Motor activation remains outside the current passive observation cut.
+No TIM3 motor PWM or direction output is configured. Motor activation remains outside the current passive observation cut.
 
 ## Build
 
 Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI enforces formatting, full Cortex-M workspace check, Clippy with warnings denied, MPU transfer-function tests, sensor-calibration tests, observation-record host tests, Python recording decoder tests, and the final release firmware link.
 
-See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md), [`docs/architecture/typed_dataflow.md`](docs/architecture/typed_dataflow.md), [`docs/architecture/calibration_contract.md`](docs/architecture/calibration_contract.md), and [`docs/architecture/observation_time_health_replay.md`](docs/architecture/observation_time_health_replay.md).
+See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md), [`docs/architecture/typed_dataflow.md`](docs/architecture/typed_dataflow.md), [`docs/architecture/calibration_contract.md`](docs/architecture/calibration_contract.md), [`docs/architecture/observation_time_health_replay.md`](docs/architecture/observation_time_health_replay.md), and [`docs/hardware/assembly_observation_2026-09-05.md`](docs/hardware/assembly_observation_2026-09-05.md).
