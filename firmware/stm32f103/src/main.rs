@@ -33,7 +33,7 @@ mod app {
     };
     use swp_software_i2c::SoftwareI2c;
 
-    const CPU_HZ: u64 = 8_000_000;
+    const CPU_HZ: u64 = 72_000_000;
     const CYCLES_PER_US: u64 = CPU_HZ / 1_000_000;
 
     const MPU_ACQUISITION_HZ: u16 = 500;
@@ -137,10 +137,11 @@ mod app {
 
         let mut flash = ctx.device.FLASH.constrain();
         let mut rcc = ctx.device.RCC.freeze(
-            rcc::Config::hsi()
-                .sysclk(8.MHz())
-                .pclk1(8.MHz())
-                .pclk2(8.MHz()),
+            rcc::Config::hse(8.MHz())
+                .sysclk(72.MHz())
+                .pclk1(36.MHz())
+                .pclk2(72.MHz())
+                .adcclk(12.MHz()),
             &mut flash.acr,
         );
 
