@@ -1,5 +1,5 @@
 [package]
-name = "swp-board-one-v2"
+name = "swp-plant-observation"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true

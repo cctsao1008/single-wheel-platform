@@ -26,8 +26,9 @@ mod app {
     };
     use swp_board_one_v2 as board;
     use swp_mpu6050::{AccelRange, Config as MpuConfig, Dlpf, GyroRange, Mpu6050, RawSample};
+    use swp_plant_observation::{ObservationFlags, RawImuObservation, RawObservation};
     use swp_software_i2c::SoftwareI2c;
-    use swp_telemetry_protocol::{SENSOR_SNAPSHOT_FRAME_LEN, SensorSnapshotFrame, status};
+    use swp_telemetry_protocol::{SENSOR_SNAPSHOT_FRAME_LEN, SensorSnapshotFrame};
 
     const CPU_HZ: u64 = 8_000_000;
     const CYCLES_PER_US: u64 = CPU_HZ / 1_000_000;
@@ -246,48 +247,49 @@ mod app {
     fn sample_tick(ctx: sample_tick::Context) {
         let timestamp_us = capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
 
-        let mut status_bits = status::ENCODER_1_VALID | status::ENCODER_2_VALID;
+        let mut validity = ObservationFlags::ENCODER_1_VALID | ObservationFlags::ENCODER_2_VALID;
         if *ctx.local.bus_ready {
-            status_bits |= status::BUS_READY;
+            validity |= ObservationFlags::BUS_READY;
         }
         if *ctx.local.imu_present {
-            status_bits |= status::IMU_PRESENT;
+            validity |= ObservationFlags::IMU_PRESENT;
         }
         if *ctx.local.imu_configured {
-            status_bits |= status::IMU_CONFIGURED;
+            validity |= ObservationFlags::IMU_CONFIGURED;
         }
 
         let mut sample = RawSample::default();
         if *ctx.local.imu_configured {
             if let Ok(value) = ctx.local.imu.read_raw() {
                 sample = value;
-                status_bits |= status::SAMPLE_VALID;
+                validity |= ObservationFlags::IMU_SAMPLE_VALID;
             }
         }
 
-        let encoder_1_count = ctx.local.encoder_1.count();
-        let encoder_2_count = ctx.local.encoder_2.count();
+        let encoder_counts = [ctx.local.encoder_1.count(), ctx.local.encoder_2.count()];
         let battery_adc_raw = match ctx.local.battery_adc.read(ctx.local.battery_adc_pin) {
             Ok(value) => {
-                status_bits |= status::BATTERY_ADC_VALID;
+                validity |= ObservationFlags::BATTERY_ADC_VALID;
                 value
             }
             Err(_) => 0,
         };
 
-        let frame = SensorSnapshotFrame {
-            sequence: *ctx.local.sequence,
+        let observation = RawObservation {
+            sample_index: *ctx.local.sequence,
             timestamp_us,
-            accel_raw: sample.accel,
-            temperature_raw: sample.temperature,
-            gyro_raw: sample.gyro,
-            encoder_1_count,
-            encoder_2_count,
+            imu: RawImuObservation {
+                accel_raw: sample.accel,
+                temperature_raw: sample.temperature,
+                gyro_raw: sample.gyro,
+            },
+            encoder_counts,
             battery_adc_raw,
-            status: status_bits,
-            dropped_frames: *ctx.local.dropped_frames,
-        }
-        .encode();
+            validity,
+        };
+
+        let frame = SensorSnapshotFrame::from_observation(observation, *ctx.local.dropped_frames)
+            .encode();
 
         if ctx.local.telemetry_producer.enqueue(frame).is_ok() {
             rtic::pend(pac::Interrupt::USART1);

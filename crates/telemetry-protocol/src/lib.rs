@@ -1,5 +1,7 @@
 #![no_std]
 
+use swp_plant_observation::{ObservationFlags, RawObservation};
+
 pub const MAGIC: [u8; 2] = *b"SW";
 pub const VERSION: u8 = 1;
 pub const KIND_RAW_IMU: u8 = 1;
@@ -12,13 +14,15 @@ const HEADER_LEN: usize = 6;
 const CRC_LEN: usize = 2;
 
 pub mod status {
-    pub const BUS_READY: u16 = 1 << 0;
-    pub const IMU_PRESENT: u16 = 1 << 1;
-    pub const IMU_CONFIGURED: u16 = 1 << 2;
-    pub const SAMPLE_VALID: u16 = 1 << 3;
-    pub const ENCODER_1_VALID: u16 = 1 << 4;
-    pub const ENCODER_2_VALID: u16 = 1 << 5;
-    pub const BATTERY_ADC_VALID: u16 = 1 << 6;
+    use swp_plant_observation::ObservationFlags;
+
+    pub const BUS_READY: u16 = ObservationFlags::BUS_READY.bits();
+    pub const IMU_PRESENT: u16 = ObservationFlags::IMU_PRESENT.bits();
+    pub const IMU_CONFIGURED: u16 = ObservationFlags::IMU_CONFIGURED.bits();
+    pub const SAMPLE_VALID: u16 = ObservationFlags::IMU_SAMPLE_VALID.bits();
+    pub const ENCODER_1_VALID: u16 = ObservationFlags::ENCODER_1_VALID.bits();
+    pub const ENCODER_2_VALID: u16 = ObservationFlags::ENCODER_2_VALID.bits();
+    pub const BATTERY_ADC_VALID: u16 = ObservationFlags::BATTERY_ADC_VALID.bits();
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -89,6 +93,21 @@ impl RawImuFrame {
 }
 
 impl SensorSnapshotFrame {
+    pub fn from_observation(observation: RawObservation, dropped_frames: u16) -> Self {
+        Self {
+            sequence: observation.sample_index,
+            timestamp_us: observation.timestamp_us,
+            accel_raw: observation.imu.accel_raw,
+            temperature_raw: observation.imu.temperature_raw,
+            gyro_raw: observation.imu.gyro_raw,
+            encoder_1_count: observation.encoder_counts[0],
+            encoder_2_count: observation.encoder_counts[1],
+            battery_adc_raw: observation.battery_adc_raw,
+            status: observation.validity.bits(),
+            dropped_frames,
+        }
+    }
+
     pub fn encode(self) -> [u8; SENSOR_SNAPSHOT_FRAME_LEN] {
         let mut out = [0_u8; SENSOR_SNAPSHOT_FRAME_LEN];
         write_header(&mut out, KIND_SENSOR_SNAPSHOT, SENSOR_SNAPSHOT_PAYLOAD_LEN);
@@ -229,6 +248,7 @@ fn get_u64(src: &[u8], offset: usize) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use swp_plant_observation::{ObservationFlags, RawImuObservation};
 
     #[test]
     fn crc_matches_reference_vector() {
@@ -271,6 +291,30 @@ mod tests {
 
         let encoded = frame.encode();
         assert_eq!(SensorSnapshotFrame::decode(&encoded), Ok(frame));
+    }
+
+    #[test]
+    fn observation_converts_without_semantic_upgrade() {
+        let observation = RawObservation {
+            sample_index: 7,
+            timestamp_us: 88,
+            imu: RawImuObservation {
+                accel_raw: [10, 11, 12],
+                temperature_raw: 13,
+                gyro_raw: [14, 15, 16],
+            },
+            encoder_counts: [17, 18],
+            battery_adc_raw: 19,
+            validity: ObservationFlags::IMU_SAMPLE_VALID | ObservationFlags::ENCODER_1_VALID,
+        };
+
+        let frame = SensorSnapshotFrame::from_observation(observation, 3);
+        assert_eq!(frame.sequence, 7);
+        assert_eq!(frame.encoder_1_count, 17);
+        assert_eq!(frame.encoder_2_count, 18);
+        assert_eq!(frame.battery_adc_raw, 19);
+        assert_eq!(frame.status, observation.validity.bits());
+        assert_eq!(frame.dropped_frames, 3);
     }
 
     #[test]

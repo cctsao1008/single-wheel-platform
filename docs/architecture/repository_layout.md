@@ -10,7 +10,10 @@ rust-toolchain.toml
 
 crates/
   robot-domain/
-    src/lib.rs          Single-wheel physical/domain types
+    src/lib.rs          Single-wheel physical state and actuator-domain types
+
+  plant-observation/
+    src/lib.rs          Raw plant evidence before calibration or coordinate mapping
 
   mpu6050/
     src/lib.rs          Generic embedded-hal device driver
@@ -19,10 +22,10 @@ crates/
     src/lib.rs          Portable open-drain embedded-hal I2C implementation
 
   telemetry-protocol/
-    src/lib.rs          Fixed binary target/host telemetry contract
+    src/lib.rs          Versioned binary telemetry transport format
 
   board-one-v2/
-    src/lib.rs          Schematic-derived board wiring facts
+    src/lib.rs          Schematic-derived PCB wiring facts only
 
 firmware/
   stm32f103/
@@ -37,21 +40,23 @@ docs/
   commissioning/
 
 tools/
-  telemetry/            Python capture and decode utilities
+  telemetry/            Host-side capture decoding and analysis
 ```
 
 The important boundary is semantic rather than directory depth:
 
 ```text
 robot-domain       knows the single-wheel plant, not STM32
+plant-observation  carries raw evidence, not calibrated robot meaning
 mpu6050            knows the sensor, not the board or controller
 software-i2c       implements the standard I2C contract, not board wiring
-telemetry-protocol defines bytes on the wire, not transport ownership
-board-one-v2       knows the reference PCB wiring, not control policy
+telemetry-protocol serializes observations, but does not own acquisition
+board-one-v2       knows PCB channels and pins, not robot actuator roles
 firmware           owns STM32 peripherals and composes the above pieces
 stm32f1xx-hal      owns STM32F1 peripheral access
 RTIC               owns the real-time task/resource model
-Python tools       consume target data without entering target runtime
 ```
 
-New abstractions are added only when they represent a real boundary in this platform. A private `board_*` HAL is not recreated when an `embedded-hal` trait already expresses the required contract.
+New abstractions are added only when they represent a real change in ownership or semantic meaning. A private `board_*` HAL is not recreated when an ecosystem trait already expresses the required contract, and a PCB channel is not renamed into a robot role until that mapping is physically established.
+
+See [`typed_dataflow.md`](typed_dataflow.md) for the runtime information-flow model.
