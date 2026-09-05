@@ -4,64 +4,88 @@ The plant model is the canonical physical model used by system identification, e
 
 It is a current model, not a versioned artifact. When evidence changes the model, this document and the corresponding source are updated directly; Git preserves the evolution.
 
-## Modeling scope
+## Model hierarchy
 
-The current balance model uses the generalized coordinates
+The physical robot and the balance controller do not require the same state description.
+
+The full robot configuration keeps planar pose, yaw, body attitude, and both motor-relative wheel coordinates available:
 
 ```text
-q = [s, theta, phi, psi]^T
+q_full = [x_w, y_w, gamma, theta, phi, delta_d, psi_r]^T
 
-s       forward displacement
-
-theta   body pitch angle
-phi     body roll angle
-psi     reaction-wheel angle relative to the body
+x_w, y_w   world-plane position
+gamma      yaw
+theta      body pitch
+phi        body roll
+delta_d    drive-wheel angle relative to the body
+psi_r      reaction-wheel angle relative to the body
 ```
 
-The drive-wheel absolute rotation is eliminated with the local no-slip constraint
+The single-wheel ground contact is nonholonomic, so these coordinates do not imply seven independent generalized velocities. Rolling/contact constraints determine the admissible motion.
+
+The current balance model is a local reduction for upright and straight-line balance. It uses
 
 ```text
-alpha_drive = s / r_drive
+q_b = [s, theta, phi, psi_r]^T
+
+s       forward path displacement
+theta   body pitch
+phi     body roll
+psi_r   reaction-wheel angle relative to the body
 ```
 
-The reaction-wheel angle `psi` is retained in the generalized coordinates because it is required by the mechanical energy and virtual-work formulation. For an axisymmetric reaction wheel, absolute wheel phase is cyclic, so the reduced control state omits `psi` itself and retains its rate.
-
-The reduced state is
+The drive-wheel relative coordinate is eliminated through the local pure-rolling relation
 
 ```text
-x = [
+delta_d = s / r_drive - theta
+```
+
+with signs defined by the body-frame and actuator conventions.
+
+The reduced balance state is
+
+```text
+x_b = [
     s,
     s_dot,
     theta,
     theta_dot,
     phi,
     phi_dot,
-    psi_dot,
+    psi_r_dot,
 ]^T
 ```
 
-The physical input is
+For an axisymmetric reaction wheel, wheel phase is cyclic in the current balance model, so `psi_r` itself is omitted from the reduced state while its relative rate is retained.
+
+This reduced state is not declared to be the full robot state. Yaw, planar path geometry, and nonholonomic coupling remain part of the wider plant description and are promoted into estimator/controller state when the operating problem requires them.
+
+## Reference input
+
+The populated reference assembly currently has two physical actuator inputs:
 
 ```text
-u = [
+u_ref = [
     tau_drive,
     tau_reaction,
 ]^T
 ```
 
-where both inputs are motor-shaft torques expressed with the model sign convention, not PWM values.
+Both are motor torques expressed with the model sign convention, not PWM values.
+
+The board exposes a third motor channel, but the current reference assembly does not populate it. A yaw/turn input is therefore not part of `u_ref`; it is added only when a physical actuator and its mechanical input mapping are part of the reference assembly.
 
 ## Canonical nonlinear form
 
-The plant is represented in generalized-coordinate form:
+The reduced balance plant is represented in generalized-coordinate form:
 
 ```text
-M(q, p) q_ddot
-+ c(q, q_dot, p)
-+ g(q, p)
-+ d(q_dot, p)
+M(q_b, p) q_b_ddot
++ c(q_b, q_b_dot, p)
++ g(q_b, p)
++ d(q_b_dot, p)
 =
-G(q, p) u
+Q(q_b, q_b_dot, u_ref, p)
 ```
 
 where
@@ -70,26 +94,32 @@ where
 M   coupled inertia matrix
 c   Coriolis / centrifugal terms
 g   gravity terms
-d   identified dissipation and unmodeled low-order losses
-G   physical input mapping
+d   identified dissipation and low-order losses
+Q   generalized actuator forces
 p   physical parameter set
 ```
 
-`M`, `c`, and `g` are not assumed block diagonal. Roll and pitch are not separated merely because the legacy firmware used independent control loops. Any useful decoupling must emerge from the derived model, linearization, scale analysis, or measured correlation.
+`M`, `c`, and `g` are not assumed block diagonal. Roll and pitch are separated only if the derived model, linearization, scale analysis, or measured correlation demonstrates that the coupling is negligible in a specified operating region.
 
-## Input mapping
+## Virtual-work input mapping
 
-Virtual work defines the current actuator-coordinate contract.
+The actuator mapping follows the coordinates actually chosen by the model.
 
-For the drive motor,
+For the drive motor, the motor-relative wheel angle is
 
 ```text
-alpha_drive = s / r_drive
+delta_d = s / r_drive - theta
 ```
 
-and positive drive torque increases the drive-wheel rotation associated with positive forward motion while applying the equal/opposite torque to the body pitch coordinate.
+so virtual work is
 
-Therefore the generalized contribution is
+```text
+dW_drive
+    = tau_drive d(delta_d)
+    = (tau_drive / r_drive) ds - tau_drive d(theta)
+```
+
+and therefore
 
 ```text
 Q_drive = [
@@ -100,20 +130,26 @@ Q_drive = [
 ]^T
 ```
 
-For the reaction wheel, motor torque acts internally between body roll and wheel relative rotation:
+For the reaction wheel, `psi_r` is already the wheel angle relative to the body. The motor acts directly on that relative coordinate:
+
+```text
+dW_reaction = tau_reaction d(psi_r)
+```
+
+so
 
 ```text
 Q_reaction = [
     0,
     0,
-    -tau_reaction,
-    +tau_reaction,
+    0,
+    tau_reaction,
 ]^T
 ```
 
-The complete generalized force is the sum of these contributions.
+There is intentionally no second explicit `-tau_reaction` term in the roll coordinate. The equal-and-opposite body reaction appears through the coupled kinetic energy because the reaction wheel's inertial angular rate contains both body roll rate and wheel-relative spin rate. Adding an explicit roll torque in these coordinates would double-count the internal action/reaction pair.
 
-Electrical polarity, PWM direction, connector identity, and motor-driver sign are intentionally outside this model. Those mappings belong below actuator semantics and are verified during commissioning.
+Electrical polarity, PWM direction, connector identity, and motor-driver sign are outside this model. Those mappings belong below actuator semantics and are verified during commissioning.
 
 ## Physical parameters
 
@@ -147,23 +183,21 @@ actuation / losses
     actuator delay
 ```
 
-Product-level facts such as total platform mass, nominal motor data, and reaction-wheel geometry constrain identification, but they do not automatically determine the separated inertial and actuator parameters required by the model.
-
-Unknown parameters remain unknown until identified. Generic textbook values are not substituted into the canonical parameter set.
+Unknown parameters remain unknown until measured or identified. Generic textbook values are not substituted into the canonical parameter set.
 
 ## Upright operating point
 
-The principal linearization point for balancing is the stationary upright condition:
+The principal balance linearization point is the stationary upright condition:
 
 ```text
 theta = 0
 phi   = 0
 s_dot = 0
-psi_dot = 0
-u = 0
+psi_r_dot = 0
+u_ref = 0
 ```
 
-Absolute forward position and reaction-wheel phase are arbitrary cyclic coordinates.
+Forward position and reaction-wheel phase are cyclic coordinates in this operating problem.
 
 For a nonlinear state equation
 
@@ -180,25 +214,25 @@ B = df/du
 
 evaluated at the selected operating point.
 
-The real-time control model is then discretized with the actual control period. For the current 500 Hz inner-loop target:
+The real-time control model is discretized using the actual control period. For the current 500 Hz inner-loop target:
 
 ```text
 T_s = 0.002 s
 ```
 
-and the canonical discrete form is
+and the discrete form is
 
 ```text
 x[k+1] = A_d x[k] + B_d u[k]
 ```
 
-Zero-order hold is the default discretization assumption unless actuator characterization supports a more accurate input model.
+Zero-order hold is the default input assumption until actuator characterization justifies a different model.
 
 ## Controllability and observability
 
-Controller synthesis does not begin from legacy gain topology.
+Controller synthesis begins from plant structure rather than legacy controller topology.
 
-The model must first establish the relevant structure through:
+The model must establish:
 
 ```text
 controllability rank
@@ -209,13 +243,15 @@ dominant coupling terms
 parameter sensitivity
 ```
 
-A state that cannot be measured directly may remain usable if the estimator has sufficient observability. A state that is dynamically irrelevant should be removed because the model demonstrates that fact, not because legacy code omitted it.
+A state that cannot be measured directly may remain usable when the estimator has sufficient observability. A state is removed only because model structure and measured behavior justify the reduction.
 
-## Yaw
+## Yaw and mobility
 
-Yaw rate is observable from the IMU, but the current reference assembly has no dedicated yaw actuator and no canonical yaw-position measurement.
+Yaw is part of the full robot configuration even though it is not currently part of the reduced balance state.
 
-The balance model therefore does not currently promote yaw position into the reduced state. This is a model-scope decision, not a claim that yaw coupling is physically zero. If measured correlation shows that yaw dynamics or gyroscopic coupling materially affects balance, the generalized-coordinate model is expanded rather than compensated with ad-hoc controller terms.
+The reduced balance model is intended for upright / straight-line stabilization. It does not assert that yaw coupling is zero. Turning, path-following, finite-speed gyroscopic effects, or a future populated yaw actuator require the full nonholonomic mobility model rather than ad-hoc correction terms inside the balance controller.
+
+Model reduction is therefore an explicit operating-region decision, not an erasure of physical degrees of freedom.
 
 ## Correlation contract
 
@@ -230,6 +266,8 @@ reaction-wheel acceleration
 drive-wheel acceleration
 actuator step response
 frequency response
+cross-axis response
+finite-speed behavior
 saturation behavior
 closed-loop residuals
 ```
