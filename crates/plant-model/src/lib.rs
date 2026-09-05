@@ -148,7 +148,9 @@ impl PlantParameters {
             self.reaction_wheel_transverse_inertia_kg_m2,
         ];
 
-        positive.iter().all(|value| value.is_finite() && *value > 0.0)
+        positive
+            .iter()
+            .all(|value| value.is_finite() && *value > 0.0)
     }
 }
 
