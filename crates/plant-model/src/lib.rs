@@ -185,6 +185,67 @@ impl PlantParameters {
             .iter()
             .all(|value| value.is_finite() && *value > 0.0)
     }
+
+    /// Aggregate quantities that appear in the stationary-upright balance model.
+    pub fn upright_aggregates(self) -> Option<UprightAggregates> {
+        if !self.is_physically_valid() {
+            return None;
+        }
+
+        let h = self.body_mass_kg * self.body_com_height_m
+            + self.reaction_wheel_mass_kg * self.reaction_wheel_com_height_m;
+        let s = self.body_mass_kg * self.body_com_height_m * self.body_com_height_m
+            + self.reaction_wheel_mass_kg
+                * self.reaction_wheel_com_height_m
+                * self.reaction_wheel_com_height_m;
+        let m_s = self.body_mass_kg
+            + self.reaction_wheel_mass_kg
+            + self.drive_wheel_mass_kg
+            + self.drive_wheel_spin_inertia_kg_m2
+                / (self.drive_wheel_radius_m * self.drive_wheel_radius_m);
+        let j_theta = s
+            + self.body_inertia_pitch_kg_m2
+            + self.reaction_wheel_transverse_inertia_kg_m2;
+        let j_phi = s + self.body_inertia_roll_kg_m2;
+        let delta_pitch = m_s * j_theta - h * h;
+
+        let aggregates = UprightAggregates {
+            gravitational_first_moment_kg_m: h,
+            vertical_second_moment_kg_m2: s,
+            equivalent_translation_mass_kg: m_s,
+            pitch_inertia_kg_m2: j_theta,
+            roll_body_inertia_kg_m2: j_phi,
+            pitch_inertia_determinant_kg2_m2: delta_pitch,
+        };
+
+        aggregates.is_physically_valid().then_some(aggregates)
+    }
+}
+
+/// Aggregate parameters of the reduced stationary-upright model.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UprightAggregates {
+    pub gravitational_first_moment_kg_m: f32,
+    pub vertical_second_moment_kg_m2: f32,
+    pub equivalent_translation_mass_kg: f32,
+    pub pitch_inertia_kg_m2: f32,
+    pub roll_body_inertia_kg_m2: f32,
+    pub pitch_inertia_determinant_kg2_m2: f32,
+}
+
+impl UprightAggregates {
+    pub fn is_physically_valid(self) -> bool {
+        [
+            self.gravitational_first_moment_kg_m,
+            self.vertical_second_moment_kg_m2,
+            self.equivalent_translation_mass_kg,
+            self.pitch_inertia_kg_m2,
+            self.roll_body_inertia_kg_m2,
+            self.pitch_inertia_determinant_kg2_m2,
+        ]
+        .iter()
+        .all(|value| value.is_finite() && *value > 0.0)
+    }
 }
 
 /// Map reference-assembly motor torques into the reduced balance coordinates.
@@ -213,6 +274,93 @@ pub fn balance_generalized_forces(
         roll_torque_nm: 0.0,
         reaction_wheel_relative_torque_nm: input.reaction_wheel_torque_nm,
     })
+}
+
+/// Continuous seven-state linearization about stationary upright.
+///
+/// State order is
+/// `[s, s_dot, theta, theta_dot, phi, phi_dot, psi_r_dot]` and input order is
+/// `[tau_drive, tau_reaction]`.
+///
+/// The nonlinear balance model is coupled away from upright.  At this operating
+/// point its first-order Jacobian separates into translation/pitch and
+/// roll/reaction-wheel blocks; the zero cross-axis terms here are therefore a
+/// derived local property rather than an assumed controller topology.
+pub fn linearize_stationary_upright(
+    parameters: PlantParameters,
+) -> Option<ContinuousLinearPlant> {
+    let p = parameters.upright_aggregates()?;
+    let h = p.gravitational_first_moment_kg_m;
+    let m_s = p.equivalent_translation_mass_kg;
+    let j_theta = p.pitch_inertia_kg_m2;
+    let j_phi = p.roll_body_inertia_kg_m2;
+    let delta = p.pitch_inertia_determinant_kg2_m2;
+    let g = parameters.gravity_m_per_s2;
+    let r = parameters.drive_wheel_radius_m;
+    let j_r = parameters.reaction_wheel_spin_inertia_kg_m2;
+
+    let mut a = [[0.0; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT];
+    let mut b = [[0.0; REFERENCE_INPUT_COUNT]; REDUCED_BALANCE_STATE_COUNT];
+
+    a[0][1] = 1.0;
+    a[1][2] = -(h * h * g) / delta;
+    a[2][3] = 1.0;
+    a[3][2] = h * m_s * g / delta;
+
+    a[4][5] = 1.0;
+    a[5][4] = h * g / j_phi;
+    a[6][4] = -(h * g / j_phi);
+
+    b[1][0] = (j_theta / r + h) / delta;
+    b[3][0] = -(h / r + m_s) / delta;
+    b[5][1] = -1.0 / j_phi;
+    b[6][1] = 1.0 / j_r + 1.0 / j_phi;
+
+    Some(ContinuousLinearPlant { a, b })
+}
+
+/// Analytic nonzero-determinant indicators for the two local upright blocks.
+///
+/// The determinant magnitude is state/unit scaling dependent; only its nonzero
+/// structure is used here.  Positive finite physical parameters and a positive
+/// pitch inertia determinant make both indicators positive.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UprightControllabilityIndicators {
+    pub pitch_determinant: f32,
+    pub roll_determinant: f32,
+}
+
+impl UprightControllabilityIndicators {
+    pub fn is_structurally_controllable(self) -> bool {
+        [self.pitch_determinant, self.roll_determinant]
+            .iter()
+            .all(|value| value.is_finite() && *value > 0.0)
+    }
+}
+
+pub fn upright_controllability_indicators(
+    parameters: PlantParameters,
+) -> Option<UprightControllabilityIndicators> {
+    let p = parameters.upright_aggregates()?;
+    let h = p.gravitational_first_moment_kg_m;
+    let m_s = p.equivalent_translation_mass_kg;
+    let j_phi = p.roll_body_inertia_kg_m2;
+    let delta = p.pitch_inertia_determinant_kg2_m2;
+    let g = parameters.gravity_m_per_s2;
+    let r = parameters.drive_wheel_radius_m;
+    let j_r = parameters.reaction_wheel_spin_inertia_kg_m2;
+
+    let pitch_numerator = h * h * g * g * (h + m_s * r) * (h + m_s * r);
+    let pitch_denominator = r * r * r * r * delta * delta * delta * delta;
+    let pitch_determinant = pitch_numerator / pitch_denominator;
+    let roll_determinant = h * g / (j_r * j_phi * j_phi * j_phi);
+
+    let result = UprightControllabilityIndicators {
+        pitch_determinant,
+        roll_determinant,
+    };
+
+    result.is_structurally_controllable().then_some(result)
 }
 
 /// Continuous linearization about a specified operating point.
@@ -258,6 +406,7 @@ mod tests {
         p.drive_wheel_radius_m = 0.0;
         assert!(!p.is_physically_valid());
         assert!(balance_generalized_forces(ReferencePlantInput::default(), p).is_none());
+        assert!(linearize_stationary_upright(p).is_none());
     }
 
     #[test]
@@ -314,5 +463,37 @@ mod tests {
             reaction_wheel_relative_angle_rad: 7.0,
         };
         assert_eq!(q.as_vector(), [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
+    }
+
+    #[test]
+    fn upright_linearization_contains_the_derived_local_block_structure() {
+        let model = linearize_stationary_upright(parameters()).unwrap();
+
+        assert_eq!(model.a[0][1], 1.0);
+        assert_eq!(model.a[2][3], 1.0);
+        assert_eq!(model.a[4][5], 1.0);
+
+        assert!(model.a[3][2] > 0.0);
+        assert!(model.a[5][4] > 0.0);
+        assert!(model.a[6][4] < 0.0);
+
+        assert!(model.b[3][0] < 0.0);
+        assert!(model.b[5][1] < 0.0);
+        assert!(model.b[6][1] > 0.0);
+
+        for row in 0..4 {
+            assert_eq!(model.b[row][1], 0.0);
+        }
+        for row in 4..7 {
+            assert_eq!(model.b[row][0], 0.0);
+        }
+    }
+
+    #[test]
+    fn upright_model_is_structurally_controllable_for_valid_test_parameters() {
+        let indicators = upright_controllability_indicators(parameters()).unwrap();
+        assert!(indicators.is_structurally_controllable());
+        assert!(indicators.pitch_determinant > 0.0);
+        assert!(indicators.roll_determinant > 0.0);
     }
 }
