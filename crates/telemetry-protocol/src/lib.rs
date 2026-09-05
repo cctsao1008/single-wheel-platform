@@ -1,6 +1,6 @@
 #![no_std]
 
-use swp_plant_observation::{ObservationFlags, RawObservation};
+use swp_plant_observation::RawObservation;
 
 pub const MAGIC: [u8; 2] = *b"SW";
 pub const VERSION: u8 = 1;
