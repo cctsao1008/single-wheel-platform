@@ -112,7 +112,8 @@ robot-domain
     robot state, generalized demand, actuator roles
 
 runtime-state
-    operating state, limits, physical-output authority
+    operating state, sensor timing health, limits,
+    physical-output authority
 ```
 
 ## Plant-model boundary
@@ -224,9 +225,9 @@ Physical source-sample time, DATA_RDY event service time, peripheral capture tim
 
 The MPU6050 INT pin is routed to PC13 / EXTI13 and the current runtime enables DATA_RDY. Successful interrupt-triggered reads are freshness-verified. EXTI task entry is timestamped with DWT, but that timestamp is not the MPU6050 internal sensing instant; `source_sample_at_us` therefore remains `Unknown` and sensor-filter delay remains explicit.
 
-`MeasurementQuality` carries independent availability, I/O, timing, freshness, saturation, staleness, and retry state. An unset flag does not imply the opposite property.
+DATA_RDY drives the 500 Hz acquisition boundary, while TIM1 independently supervises it at 1 kHz. `SensorTimingMonitor` requires an observed inter-event cadence before declaring the boundary healthy, then classifies elapsed DATA_RDY time as `Healthy`, `Late`, or `Timeout`. A sensor interrupt cannot be responsible for detecting its own disappearance.
 
-The physical measurement equation and measurement timing/quality are complementary contracts: a mathematically valid sensor model does not make stale or mistimed data valid.
+`MeasurementQuality` carries independent availability, I/O, timing, freshness, saturation, staleness, and retry state. `AcquisitionStatus` exposes DATA_RDY presence and timing-health state. A mathematically valid sensor model does not make stale or mistimed data valid.
 
 ## Runtime authority
 
@@ -242,7 +243,9 @@ Boot
        |-> Fault
 ```
 
-Only authorized closed-loop states may reach physical outputs. Reaction-wheel speed/headroom is part of actuator authority. Missing DATA_RDY and stale IMU state must become authority-revocation conditions before balancing is enabled.
+Only authorized closed-loop states may reach physical outputs. Reaction-wheel speed/headroom and primary sensor timing are independent authority constraints. `Balancing` or `MomentumLimited` may receive closed-loop authority only when primary sensor timing is `Healthy`; `Startup`, `Late`, and `Timeout` deny physical output authority.
+
+The current firmware remains observation-only, so this timing gate is established before motor output exists rather than added after balancing is enabled.
 
 ## Real-time runtime
 
@@ -251,18 +254,30 @@ The STM32F103 target uses Rust `no_std`, `embedded-hal` 1.0, `stm32f1xx-hal`, an
 The target composition is:
 
 ```text
-DWT           monotonic acquisition timing
-PB8/PB9       software I2C -> MPU6050
-PC13/EXTI13   MPU6050 DATA_RDY -> 500 Hz acquisition task
-TIM2          Encoder_1 QEI
-TIM4          Encoder_2 QEI
-ADC1 / PA5    battery ADC
-USART2        ECB02S2 wireless record transport
-USART1        wired engineering interface
-PB4/PB5       OLED status interface
+DWT            monotonic acquisition timing
+PB8/PB9        software I2C -> MPU6050
+PC13/EXTI13    MPU6050 DATA_RDY -> 500 Hz acquisition task
+TIM1           independent 1 kHz sensor-timing watchdog
+TIM2           Encoder_1 QEI
+TIM4           Encoder_2 QEI
+ADC1 / PA5     battery ADC
+USART2_TX      ECB02S2 wireless record transport
+DMA1 channel 7 USART2 TX record transfer
+USART1         wired engineering interface
+PB4/PB5        OLED status interface
 ```
 
-Control/acquisition work does not block on UART, BLE, display rendering, storage, or host traffic.
+Task priority follows control relevance:
+
+```text
+TIM1 timing health     priority 3
+MPU DATA_RDY / EXTI13  priority 2
+USART2 TX DMA complete priority 1
+```
+
+Control/acquisition work does not block on UART, BLE, display rendering, storage, or host traffic. The previous per-byte USART2 TXE interrupt path is replaced by DMA1 channel 7; an 80-byte record is transferred without 80 CPU service interrupts.
+
+DMA is used where the hardware request topology creates a real reduction in CPU service work. MPU acquisition remains software I2C because the board routes PB8/PB9 opposite the STM32F103 I2C1-remap SCL/SDA assignment. DMA is not treated as a goal independent of hardware semantics.
 
 The canonical IMU path is raw 500 Hz DATA_RDY acquisition. Vendor DMP output is not part of the control architecture.
 
@@ -279,6 +294,6 @@ OLED
     optional local status interface
 ```
 
-The host-side BLE observer reassembles the byte stream independently of BLE packet boundaries and preserves the canonical binary records for decode and replay.
+The host-side BLE observer reassembles the byte stream independently of BLE packet boundaries and preserves the canonical binary records for decode and replay. DMA boundaries are likewise not record semantics.
 
 Transport and UI components may observe state or submit validated requests; they do not own physical semantics or bypass runtime authority.
