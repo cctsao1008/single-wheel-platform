@@ -1,26 +1,16 @@
 # Actuator Authority
 
-Controller computation and physical motor access are different responsibilities.
+Controller computation and physical actuator ownership are separate responsibilities.
 
 ```text
 maintenance request ----\
-                         > Motor Authority -> board_motor -> actuator
+                         > authority / limits -> typed actuator owner -> hardware
 control request --------/
 fault condition --------/
 ```
 
-A minimal ownership model is:
+The architectural invariant is that only one runtime owner can mutate the physical PWM/direction resources for an actuator at a time.
 
-```c
-typedef enum
-{
-    MOTOR_OWNER_NONE = 0,
-    MOTOR_OWNER_MAINTENANCE,
-    MOTOR_OWNER_CONTROL,
-    MOTOR_OWNER_FAULT
-} motor_owner_t;
-```
+In the Rust implementation this is represented by ownership of the concrete HAL peripheral and pin types rather than by globally reachable timer registers or a numeric owner flag. RTIC shared/local resources provide controlled access when ownership must cross task boundaries.
 
-Key invariant: only one software ownership boundary may command a physical actuator at a time.
-
-The final electrical safe state — coast, brake, standby, or another behavior — belongs to the hardware contract and must be defined per actuator.
+The final electrical safe state — PWM inactive level, coast, brake, standby or another behavior — is a board/actuator property. It must not be guessed from a generic `enabled` boolean when the hardware polarity is not established.

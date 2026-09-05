@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/robot-domain",
+    "crates/mpu6050",
+    "crates/board-one-v2",
+    "firmware/stm32f103",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+
+[workspace.dependencies]
+embedded-hal = "1.0.0"
+cortex-m = { version = "0.7.9", features = ["critical-section-single-core"] }
+panic-halt = "1.0.0"
+rtic = { version = "2.3.1", features = ["thumbv7-backend"] }
+stm32f1xx-hal = { version = "0.11.0", features = ["rt", "stm32f103", "medium"] }
+
+[profile.dev]
+opt-level = "s"
+panic = "abort"
+
+[profile.release]
+codegen-units = 1
+debug = 2
+lto = true
+opt-level = "s"
+panic = "abort"

@@ -2,31 +2,44 @@
 
 ## Purpose
 
-The Self-Balancing Single-Wheel Platform is a re-architecture of the embedded control software around the existing physical system.
+The project is a clean re-architecture of the embedded software around the existing single-wheel physical platform. It is not a preservation exercise for the previous source structure.
 
-The architecture separates device access, measurement, coordinate mapping, state estimation, control computation, actuator translation, and hardware ownership into explicit boundaries. The intent is to keep the critical control path understandable and deterministic while preventing control logic from depending directly on MCU-specific implementation details.
+The architecture separates four kinds of knowledge:
 
-The reference platform contains three physical actuation paths:
+1. **robot-domain knowledge** — roll, pitch, yaw, wheel states, actuator requests and physical units,
+2. **device knowledge** — register/protocol behavior of devices such as the MPU6050,
+3. **board knowledge** — which MCU pins and timer channels are wired to which physical functions,
+4. **target-runtime knowledge** — STM32F103 peripheral ownership, scheduling, interrupts and execution timing.
 
-- **roll / lateral balance** through a reaction wheel,
-- **pitch / longitudinal balance** through the ground-contact drive wheel,
-- **yaw / spin** through a third actuator path.
+Rust type ownership and ecosystem hardware traits are used to enforce those boundaries directly instead of recreating a custom C-style HAL.
 
-The third path is represented explicitly, but its effective control authority and coupling are properties of the physical plant and are not assumed by the software architecture.
+## Dependency structure
 
-## Primary control path
+```text
+                    firmware/stm32f103
+                      /      |      \
+                     v       v       v
+          swp-robot-domain  board-one-v2  swp-mpu6050
+                                  |            |
+                                  |       embedded-hal 1.0
+                                  |            |
+                                  +------ stm32f1xx-hal
+                                              |
+                                         STM32F103C8
+```
+
+RTIC is the firmware concurrency model. It owns task priority, shared/local resources and interrupt-driven execution; it does not define robot-domain behavior.
+
+## Primary runtime path
 
 ```text
 Physical Sensors / Encoders
           |
           v
-   Platform Bus / I/O
+       Drivers
           |
           v
-     Device Drivers
-          |
-          v
-  Sensor Acquisition
+  Timestamped Measurements
           |
           v
  Coordinate Transform
@@ -41,176 +54,71 @@ Physical Sensors / Encoders
      Control Policy
           |
           v
-   Actuator Mapper
+   Actuator Mapping
           |
           v
- Output Protection
+ Limits / Authority
           |
           v
-   Motor Authority
-          |
-          v
-  Platform Motor I/O
+ HAL-owned Outputs
           |
           v
   Physical Actuators
 ```
 
-Non-critical services remain outside this path:
+Telemetry, display rendering, persistent storage, maintenance commands and log transfer remain outside the timing-critical path.
 
-```text
-telemetry / trace
-UART / Bluetooth
-OLED / UI
-configuration
-persistent storage
-maintenance commands
-log transfer / offline analysis
-```
+## Robot domain
 
-## Module ownership
+`swp-robot-domain` owns state and command types that have physical meaning on this system. It is `no_std` and has no dependency on an MCU, HAL, device driver or scheduler.
 
-### Platform API
+The domain is intentionally not generalized into a robotics framework. The state representation remains specific to the single-wheel plant: roll/pitch state, reaction-wheel speed, drive-wheel speed, yaw-rate information, battery state and validity.
 
-Defines board-level hardware services such as I2C transactions, timestamps, GPIO interrupt delivery, encoder access, ADC access, serial transport, storage, and motor output.
+## Device drivers
 
-The API describes behavior and units; it does not expose STM32 register details and it does not depend on `control/` or device-specific types.
+Device drivers are generic over standard `embedded-hal` traits. The MPU6050 driver owns MPU6050 register configuration, range selection, sample-rate configuration, raw acquisition and conversion scales. It does not own sensor mounting orientation, robot coordinates or balancing policy.
 
-### Platform implementation
+This removes the need for a project-specific transport callback layer. The driver accepts any I2C implementation that satisfies `embedded_hal::i2c::I2c`.
 
-`platform/stm32f103/` owns the STM32F103-specific realization of the platform contracts:
+## Board description
 
-- peripheral initialization,
-- pins and alternate functions,
-- timers and PWM generation,
-- interrupt wiring,
-- I2C / UART / ADC implementation,
-- startup and shutdown behavior,
-- electrical safe-off behavior.
+`swp-board-one-v2` records reference-board wiring facts independently of the STM32 HAL implementation.
 
-### Device drivers
+Important reviewed facts include:
 
-`drivers/` owns device-specific protocol and register behavior without robot control policy.
+- BLDC1 / lateral: PB1 TIM3_CH4, PB11 direction, encoder on PA1/PA0,
+- BLDC2 / longitudinal: PA6 TIM3_CH1, PA4 direction, encoder on PB7/PB6,
+- BLDC3 / spin: PB0 TIM3_CH3, PB10 direction, PA7 brake,
+- MPU6050 SDA/SCL: PB8/PB9 as drawn by the board schematic,
+- PC13 net `MPU_INT` connects to MPU6050 FSYNC; the actual MPU6050 INT pin is not routed,
+- MPU6050 AD0 is low, selecting address `0x68`,
+- PA5 is the battery ADC node,
+- the reviewed schematic does not label the external crystal frequency.
 
-The reference MPU6050 driver owns sensor register configuration, full-scale settings, DLPF selection, sample-rate configuration, raw-data conversion primitives, and device probing. It receives bus, delay, and timestamp functions through injected transport callbacks.
+Electrical behaviors that are not established by the schematic, such as motor-module brake polarity or robot-positive direction, are not promoted into board constants prematurely.
 
-The application binds those callbacks to `platform/api/` services. This keeps the driver portable while also keeping `platform/api/` free of MPU6050-specific types.
+## STM32F103 firmware
 
-A device driver must not depend on `platform/stm32f103/` directly.
+`firmware/stm32f103` is the only workspace member allowed to own concrete STM32 peripheral instances. It uses `stm32f1xx-hal` rather than handwritten memory-mapped register definitions.
 
-### Sensor acquisition
+The current migration baseline intentionally leaves actuators inactive and does not force a 72 MHz clock configuration because the schematic itself does not identify the HSE frequency. Hardware bring-up is added directly through typed HAL ownership after the required board fact is established.
 
-Owns coherent, timestamped measurements presented to the control domain. Acquisition decides when a sample is accepted and how freshness is represented; it does not contain balancing policy.
+The unusual MPU wiring is handled above the GPIO layer by a software-I2C implementation satisfying `embedded-hal::i2c::I2c`; the MPU6050 driver itself remains unaware of that board constraint.
 
-### Coordinate transform
+## Real-time execution
 
-Maps physical sensor and encoder axes into the robot coordinate convention. Mounting orientation, encoder polarity, actuator direction, and roll/pitch/yaw sign conventions are explicit configuration or hardware-mapping data rather than implicit assumptions in controller code.
+RTIC replaces ad-hoc global peripheral access and monolithic interrupt bodies with explicit local/shared resources and statically prioritized tasks.
 
-### State estimation
+A hardware interrupt should perform only the work necessary for deterministic acquisition/control execution or should release work to a lower-priority software task. UART formatting, display rendering, Flash operations and maintenance parsing are not part of the control ISR path.
 
-Converts measurements into the state required by the active control policy. Estimation is replaceable behind a stable state interface and does not command actuators.
+The control-loop rate is not inherited from the previous firmware. Acquisition rate, estimator rate and controller rate are selected from measured plant, sensor, actuator and WCET requirements.
 
-### State validation
+## Actuator ownership
 
-Determines whether the state is sufficiently fresh and valid for automatic control. Invalid or stale state must not allow an old actuator request to remain active indefinitely.
+Controller output and physical output ownership remain separate concepts. A control policy requests effort in robot-domain terms; actuator mapping and authority logic decide whether and how that request reaches a physical motor.
 
-### Control policy
-
-Consumes robot state and produces requested control effort in control-domain terms.
-
-The control-policy interface does not assume a specific control law. Controller implementation and controller synthesis method are separate concerns; changing a controller must not require changes to board I/O, sensor drivers, or motor peripherals.
-
-### Actuator mapper
-
-Translates requested control effort into actuator-domain commands. It owns the mapping between control axes and physical actuators together with sign, normalization, scaling, and actuator-specific command conventions.
-
-Plant-dependent compensation belongs here only when it is part of command translation rather than control-policy state feedback.
-
-### Output protection
-
-Applies command-domain limits required before physical actuation, including saturation, slew limits, reversal constraints, operating envelopes, and fault-forced safe commands.
-
-Reaction-wheel speed and momentum limits, motor torque/current capability, and other finite actuator constraints must remain visible system properties rather than being hidden inside peripheral code.
-
-### Motor authority
-
-Owns which software path may command each physical actuator. Automatic control, maintenance functions, commissioning tools, and fault handling must not independently write the same motor hardware.
-
-### Application layer
-
-`app/` owns system orchestration and is the binding point between portable modules and the selected platform:
-
-- startup sequencing,
-- driver transport binding,
-- module initialization,
-- runtime mode selection,
-- control-loop scheduling,
-- background-service coordination,
-- transitions between disabled, commissioning, maintenance, and automatic-control states.
-
-It coordinates modules but does not absorb device-driver or controller implementation details.
-
-## Dependency rules
-
-The intended compile-time dependency direction is:
-
-```text
-app/ ---------------------> control/
-  |
-  +------------------------> drivers/
-  |
-  +------------------------> platform/api/
-
-platform/stm32f103/ -------> platform/api/
-
-control/  -----------------> no platform-specific dependency
-drivers/  -----------------> no MCU-specific dependency
-platform/api/ -------------> no control/device-specific dependency
-```
-
-The application supplies platform services to portable device drivers through explicit bindings rather than by making device drivers include STM32 implementation headers.
-
-Additional rules:
-
-- `control/` must build without STM32 headers or MCU register definitions.
-- `drivers/` must build without STM32-specific implementation headers.
-- `platform/api/` must not depend on `control/` or device-driver types.
-- `platform/stm32f103/` implements hardware contracts; it does not own balancing policy.
-- `app/` is the integration point between portable control logic, device drivers, and the selected platform implementation.
-
-## Timing semantics
-
-Timing is part of the interface contract.
-
-- Sensor samples are timestamped at a defined acquisition point.
-- Estimation uses declared sample timing rather than silently assuming a fixed period.
-- Control-loop rate, jitter, and worst-case execution time are measured properties of the implementation.
-- Blocking telemetry, formatted output, display rendering, Flash operations, and long protocol processing remain outside the critical control path.
-
-Detailed timing rules are maintained in [`timing_architecture.md`](timing_architecture.md).
-
-## Physical units
-
-Control-domain interfaces use explicit units wherever practical:
-
-- angle: radians,
-- angular rate: rad/s,
-- wheel speed: rad/s,
-- voltage: volts,
-- current: amperes when available,
-- time: microseconds or seconds as declared by the API,
-- normalized actuator request: `[-1.0, +1.0]` only where a normalized interface is intentional.
-
-Raw register units and ADC counts remain inside the appropriate driver or acquisition boundary.
-
-## Hardware mapping
-
-Software names must follow confirmed physical roles rather than historical channel names.
-
-The mapping between board connectors, motor channels, encoder channels, IMU axes, and robot axes is maintained in `docs/hardware/` and the platform configuration. Controller code must not infer physical meaning from names such as `motor1`, `motor2`, `x`, or `y`.
+Rust ownership is used to make the physical PWM/timer resource have one software owner. Maintenance, commissioning and automatic control therefore do not receive independent mutable access to the same timer peripheral.
 
 ## Extension policy
 
-The architecture allows estimation and control implementations to change without restructuring the hardware-facing layers. Modeling, system identification, replay, and more advanced control methods may be added as engineering capabilities, but they are not required to define the platform architecture.
-
-The repository remains specific to the self-balancing single-wheel system; abstractions are introduced only when they clarify a real boundary in this physical platform.
+New control laws, estimators, replay tools and system-identification utilities may be added without changing the board or device-driver contracts. They are capabilities enabled by the architecture, not the project identity.

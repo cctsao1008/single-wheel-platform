@@ -1,117 +1,103 @@
 # Self-Balancing Single-Wheel Platform
 
-A re-architected embedded control platform for a self-balancing single-wheel robot, with clear separation of sensing, estimation, control, actuation, and hardware-specific implementation.
+A clean re-architecture of the embedded software for a self-balancing single-wheel robot.
 
-The project reorganizes the existing platform into explicit software boundaries so that control and estimation logic can evolve without being coupled directly to MCU-specific code. Modeling, system identification, and advanced control are supported as future capabilities, but the primary goal is the platform architecture itself.
+The repository is intentionally organized around the physical system rather than around inherited firmware structure. Device access, board wiring, robot-domain state, real-time scheduling, estimation, control, and actuation are separated so that changes in one area do not leak through the rest of the system.
+
+The current implementation uses **Rust `no_std`**, **embedded-hal 1.0**, **stm32f1xx-hal**, and **RTIC** on the STM32F103 reference target. The earlier C/CMake scaffold has been removed rather than carried forward as a compatibility layer.
 
 ## Physical system
 
-The reference platform combines three physical actuation paths:
+The reference platform has three actuation paths:
 
-- **Roll / lateral balance** — reaction-wheel actuation.
-- **Pitch / longitudinal balance** — ground-contact drive-wheel actuation.
-- **Yaw / spin** — a third actuation path whose control authority and coupling are treated as plant properties to characterize.
+- **Roll / lateral balance** — reaction wheel.
+- **Pitch / longitudinal balance** — ground-contact drive wheel.
+- **Yaw / spin** — third brushless actuator path.
 
-State information is derived from an MPU6050-class IMU and wheel encoders on the reference hardware.
+The reference board also contains an MPU6050 and wheel-encoder feedback. Board facts are kept separate from controller conventions; the software does not infer robot meaning from historical names such as `motor1`, `x`, or `y`.
 
 ## Architecture
 
 ```text
-Physical Sensors / Encoders
-          |
-          v
-  Sensor Acquisition
-          |
-          v
- Coordinate Transform
-          |
-          v
-   State Estimation
-          |
-          v
-  Control Policy
-          |
-          v
-   Actuator Mapper
-          |
-          v
- Safety / Authority
-          |
-          v
-   Platform I/O
-          |
-          v
- Physical Actuators
+                    RTIC application
+                         |
+        +----------------+----------------+
+        |                |                |
+        v                v                v
+ robot-domain        device drivers    board description
+        |                |                |
+        |        embedded-hal traits      |
+        |                |                |
+        +----------------+----------------+
+                         |
+                  stm32f1xx-hal
+                         |
+                    STM32F103C8
+                         |
+                  physical hardware
 ```
 
-Non-critical services such as telemetry, storage, user interfaces, configuration, and maintenance traffic remain outside the critical control path.
+At runtime the critical path remains:
 
-## Design goals
+```text
+measurement
+   -> coordinate mapping
+   -> state estimation
+   -> state validation
+   -> control policy
+   -> actuator mapping
+   -> authority / limits
+   -> physical output
+```
 
-- Separate device drivers from MCU- and board-specific implementation.
-- Keep control and estimation logic independent of hardware registers and SDK headers.
-- Make coordinate conventions, units, timing, and actuator directions explicit.
-- Keep the control path deterministic and free from blocking non-critical work.
-- Represent controller output as requested physical effort rather than direct motor access.
-- Allow estimation and control methods to be replaced without restructuring the platform.
-- Keep the architecture tied to the physical single-wheel system rather than growing into a generic robotics framework.
-
-## Control perspective
-
-The architecture does not assume a particular control law.
-
-A controller consumes an estimated robot state and produces an actuator request through a defined interface. Linear state feedback, model-based methods, robust control, constrained control, or nonlinear methods can therefore be introduced without changing the hardware-facing layers.
-
-Reaction-wheel momentum, actuator speed, torque, saturation, sensing delay, and real-time execution limits are treated as physical constraints of the platform rather than hidden implementation details.
-
-## Reference platform
-
-The current reference hardware is based on:
-
-- STM32F103C8T6-class MCU
-- MPU6050-class inertial sensing
-- reaction-wheel actuator
-- ground-contact drive-wheel actuator
-- additional spin actuator
-- encoder feedback
-- battery and analog monitoring
-- UART / serial communication and local display interfaces
-
-Exact board mappings, polarities, timer assignments, and coordinate transforms are maintained in the platform and hardware documentation.
+RTIC owns concurrency and scheduling. Peripheral ownership is represented by Rust types instead of globally accessible registers or a custom C board API.
 
 ## Repository layout
 
 ```text
-app/                 System orchestration and services
-control/             Platform-independent estimation and control
-  estimation/        State-estimation algorithms
-  controllers/       Control-policy implementations
-  safety/            State and output protection
+Cargo.toml
+rust-toolchain.toml
+.cargo/
 
-drivers/             Device-level drivers independent of robot policy
-platform/
-  api/                Board and platform contracts
-  stm32f103/          STM32F103 reference-platform implementation
-telemetry/            Runtime telemetry and trace infrastructure
-tests/                Host-side control and interface tests
-tools/                Analysis, replay, plotting, and system tools
+crates/
+  robot-domain/          Physical state and actuator-domain types
+  mpu6050/               Portable embedded-hal MPU6050 driver
+  board-one-v2/          Reference-board wiring and hardware facts
+
+firmware/
+  stm32f103/             no_std RTIC application for STM32F103C8
+
 docs/
-  architecture/       System, control, timing, and interface architecture
-  hardware/           Hardware baseline and mapping
-  commissioning/      Sensor and actuator bring-up notes
+  architecture/          Architecture and timing contracts
+  hardware/              Schematic review and board mapping
+  commissioning/         Bring-up and characterization notes
+
+tools/                   Host-side engineering tools
 ```
 
-## Architectural rules
+## Design rules
 
-1. `control/` must not depend on STM32-specific registers or SDK headers.
-2. Hardware pins, timers, channels, and polarities belong to the platform layer.
-3. Coordinate conventions and physical units are explicit contracts.
-4. Controller output is a requested control effort, not direct motor access.
-5. Telemetry, storage, UI, and maintenance traffic remain outside the critical control path.
-6. The control-loop rate is a measured system property, not a fixed assumption inherited from another implementation.
+- Use ecosystem-standard hardware traits where a standard contract exists; do not recreate a private HAL for its own sake.
+- Keep device drivers generic over `embedded-hal` and independent of STM32 types.
+- Keep board-specific wiring in the board crate, not in device drivers or control code.
+- Keep robot-domain state and actuator semantics independent of the MCU and HAL.
+- Make coordinate conventions, physical units, timestamps, and actuator authority explicit.
+- Keep blocking telemetry, display work, storage, and maintenance traffic outside the critical control path.
+- Do not hard-code unconfirmed hardware facts. For example, the reviewed schematic does not label the HSE crystal frequency, and the net named `MPU_INT` is connected to MPU6050 **FSYNC**, while the actual MPU6050 INT pin is not routed.
 
-See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md) for the detailed architecture.
+## Reference target
 
-## Status
+- STM32F103C8T6, Cortex-M3
+- 64 KiB Flash / 20 KiB SRAM
+- MPU6050 at schematic-selected address `0x68`
+- MPU SDA on PB8 and SCL on PB9, requiring a software-I2C implementation for this board wiring rather than the STM32F1 I2C1 remap
+- TIM3 motor PWM paths, TIM2/TIM4 encoder paths
+- SWD development workflow through `probe-rs`
 
-The repository currently establishes the platform architecture, interface boundaries, and reference-hardware structure. Device integration, hardware mapping, runtime scheduling, and control implementations are being built on top of these boundaries.
+See [`docs/hardware/pin_mapping.md`](docs/hardware/pin_mapping.md) for the reviewed board mapping and [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md) for the software boundaries.
+
+## Build direction
+
+Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. The repository pins architecture dependencies in the Cargo workspace; `cargo fw` builds the STM32F103 release target.
+
+The firmware target currently boots into a safe, inactive RTIC skeleton. Peripheral ownership and bring-up are being added directly in the new architecture rather than by porting the removed C board layer line-for-line.

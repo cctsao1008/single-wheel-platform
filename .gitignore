@@ -1,40 +1,15 @@
-# Build output
-build/
-out/
-cmake-build-*/
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-compile_commands.json
+/target/
+**/*.rs.bk
 
-# Embedded artifacts
-*.o
-*.obj
-*.d
-*.dep
-*.elf
-*.axf
-*.hex
-*.bin
-*.map
-*.lst
-*.srec
-*.su
-
-# IDE / editor
 .vscode/
 .idea/
-*.uvguix.*
-*.uvoptx
-*.uvguix
-*.user
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Local captures / generated analysis
-captures/
-logs/
-plots/
+*.log
+*.bin
+*.hex
+*.elf
+*.map
+*.lst
+*.dmp
