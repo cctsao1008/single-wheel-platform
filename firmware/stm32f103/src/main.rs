@@ -9,17 +9,25 @@ mod app {
     use cortex_m::peripheral::DWT;
     use heapless::spsc::{Consumer, Producer, Queue};
     use stm32f1xx_hal::{
-        gpio::{OpenDrain, Output, PinState, gpiob::PB8, gpiob::PB9},
+        adc::Adc,
+        gpio::{
+            Analog, OpenDrain, Output, PinState,
+            gpioa::PA5,
+            gpiob::{PB8, PB9},
+        },
         pac,
         prelude::*,
         rcc,
         serial::{Config as SerialConfig, Tx},
-        timer::{CounterMs, Event, SysDelay},
+        timer::{
+            CounterMs, Event, SysDelay, Timer,
+            pwm_input::{Qei, QeiOptions},
+        },
     };
     use swp_board_one_v2 as board;
     use swp_mpu6050::{AccelRange, Config as MpuConfig, Dlpf, GyroRange, Mpu6050, RawSample};
     use swp_software_i2c::SoftwareI2c;
-    use swp_telemetry_protocol::{RAW_IMU_FRAME_LEN, RawImuFrame, status};
+    use swp_telemetry_protocol::{SENSOR_SNAPSHOT_FRAME_LEN, SensorSnapshotFrame, status};
 
     const CPU_HZ: u64 = 8_000_000;
     const CYCLES_PER_US: u64 = CPU_HZ / 1_000_000;
@@ -29,15 +37,21 @@ mod app {
 
     type ImuBus = SoftwareI2c<PB8<Output<OpenDrain>>, PB9<Output<OpenDrain>>, SysDelay>;
     type Imu = Mpu6050<ImuBus>;
+    type Encoder1 = Qei<pac::TIM2>;
+    type Encoder2 = Qei<pac::TIM4>;
+    type BatteryAdc = Adc<pac::ADC1>;
+    type BatteryAdcPin = PA5<Analog>;
     type SampleTimer = CounterMs<pac::TIM1>;
     type TelemetryTx = Tx<pac::USART1>;
-    type TelemetryProducer = Producer<'static, [u8; RAW_IMU_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
-    type TelemetryConsumer = Consumer<'static, [u8; RAW_IMU_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
+    type TelemetryProducer =
+        Producer<'static, [u8; SENSOR_SNAPSHOT_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
+    type TelemetryConsumer =
+        Consumer<'static, [u8; SENSOR_SNAPSHOT_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
 
     struct TelemetryPump {
         tx: TelemetryTx,
         consumer: TelemetryConsumer,
-        current_frame: Option<[u8; RAW_IMU_FRAME_LEN]>,
+        current_frame: Option<[u8; SENSOR_SNAPSHOT_FRAME_LEN]>,
         frame_index: usize,
     }
 
@@ -74,7 +88,7 @@ mod app {
 
             if self.tx.write_u8(frame[self.frame_index]).is_ok() {
                 self.frame_index += 1;
-                if self.frame_index == RAW_IMU_FRAME_LEN {
+                if self.frame_index == SENSOR_SNAPSHOT_FRAME_LEN {
                     self.current_frame = None;
                     self.frame_index = 0;
                 }
@@ -90,6 +104,10 @@ mod app {
     #[local]
     struct Local {
         imu: Imu,
+        encoder_1: Encoder1,
+        encoder_2: Encoder2,
+        battery_adc: BatteryAdc,
+        battery_adc_pin: BatteryAdcPin,
         sample_timer: SampleTimer,
         telemetry_producer: TelemetryProducer,
         telemetry_pump: TelemetryPump,
@@ -102,15 +120,13 @@ mod app {
         cycle_epoch: u64,
     }
 
-    #[init(local = [telemetry_queue: Queue<[u8; RAW_IMU_FRAME_LEN], 8> = Queue::new()])]
+    #[init(local = [telemetry_queue: Queue<[u8; SENSOR_SNAPSHOT_FRAME_LEN], 8> = Queue::new()])]
     fn init(ctx: init::Context) -> (Shared, Local) {
         let mut dcb = ctx.core.DCB;
         let mut dwt = ctx.core.DWT;
         dcb.enable_trace();
         dwt.enable_cycle_counter();
 
-        // Keep the first executable clock profile on the confirmed internal
-        // oscillator. The board drawing does not specify the HSE frequency.
         let mut flash = ctx.device.FLASH.constrain();
         let mut rcc = ctx.device.RCC.freeze(
             rcc::Config::hsi()
@@ -123,8 +139,6 @@ mod app {
         let mut gpioa = ctx.device.GPIOA.split(&mut rcc);
         let mut gpiob = ctx.device.GPIOB.split(&mut rcc);
 
-        // Schematic wiring is PB8=SDA and PB9=SCL. That is intentionally not
-        // the STM32F103 I2C1 remap pin order, so this path uses software I2C.
         let sda = gpiob
             .pb8
             .into_open_drain_output_with_state(&mut gpiob.crh, PinState::High);
@@ -148,9 +162,21 @@ mod app {
                 })
                 .is_ok();
 
-        // USART1 TX is the schematic net TX on PA9. The onboard CH340 nets are
-        // separate at P2; using CH340 as the host bridge requires external
-        // cross-connection and is not assumed by firmware.
+        // HAL QEI tuples are ordered CH1, CH2. On this PCB those are the
+        // schematic B, A nets respectively; raw count direction is therefore
+        // reported without inventing a robot-positive sign convention.
+        let encoder_1 = Timer::new(ctx.device.TIM2, &mut rcc)
+            .qei((gpioa.pa0, gpioa.pa1), QeiOptions::default());
+        let encoder_2 = Timer::new(ctx.device.TIM4, &mut rcc)
+            .qei((gpiob.pb6, gpiob.pb7), QeiOptions::default());
+
+        // PA5 is the schematic divider node ADC. Divider resistor values are
+        // not present in the reviewed drawing, so firmware exposes raw counts.
+        let battery_adc_pin = gpioa.pa5.into_analog(&mut gpioa.crl);
+        let battery_adc = Adc::new(ctx.device.ADC1, &mut rcc);
+
+        // USART1 TX is PA9 / schematic net TX. The onboard CH340 pair is
+        // separate on P2 and is not assumed to be cross-connected here.
         let uart_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
         let telemetry_tx = ctx.device.USART1.tx(
             uart_tx,
@@ -166,12 +192,16 @@ mod app {
         let telemetry_pump = TelemetryPump::new(telemetry_tx, telemetry_consumer);
         let last_cycle = DWT::cycle_count();
 
-        // No motor PWM, direction, or brake output is configured here. The
-        // first scheduled runtime path is sensing plus observable telemetry.
+        // TIM3 and all motor GPIO remain untouched. This runtime only observes
+        // the plant through IMU, encoders, battery ADC, and telemetry.
         (
             Shared {},
             Local {
                 imu,
+                encoder_1,
+                encoder_2,
+                battery_adc,
+                battery_adc_pin,
                 sample_timer,
                 telemetry_producer,
                 telemetry_pump,
@@ -198,6 +228,10 @@ mod app {
         priority = 2,
         local = [
             imu,
+            encoder_1,
+            encoder_2,
+            battery_adc,
+            battery_adc_pin,
             sample_timer,
             telemetry_producer,
             bus_ready,
@@ -212,7 +246,7 @@ mod app {
     fn sample_tick(ctx: sample_tick::Context) {
         let timestamp_us = capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
 
-        let mut status_bits = 0_u16;
+        let mut status_bits = status::ENCODER_1_VALID | status::ENCODER_2_VALID;
         if *ctx.local.bus_ready {
             status_bits |= status::BUS_READY;
         }
@@ -231,12 +265,25 @@ mod app {
             }
         }
 
-        let frame = RawImuFrame {
+        let encoder_1_count = ctx.local.encoder_1.count();
+        let encoder_2_count = ctx.local.encoder_2.count();
+        let battery_adc_raw = match ctx.local.battery_adc.read(ctx.local.battery_adc_pin) {
+            Ok(value) => {
+                status_bits |= status::BATTERY_ADC_VALID;
+                value
+            }
+            Err(_) => 0,
+        };
+
+        let frame = SensorSnapshotFrame {
             sequence: *ctx.local.sequence,
             timestamp_us,
             accel_raw: sample.accel,
             temperature_raw: sample.temperature,
             gyro_raw: sample.gyro,
+            encoder_1_count,
+            encoder_2_count,
+            battery_adc_raw,
             status: status_bits,
             dropped_frames: *ctx.local.dropped_frames,
         }

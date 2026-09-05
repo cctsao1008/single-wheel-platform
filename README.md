@@ -94,7 +94,9 @@ tools/
 - 64 KiB Flash / 20 KiB SRAM
 - MPU6050 at schematic-selected address `0x68`
 - MPU SDA on PB8 and SCL on PB9, requiring a software-I2C implementation for this board wiring rather than the STM32F1 I2C1 remap
-- TIM3 motor PWM paths, TIM2/TIM4 encoder paths
+- TIM2/TIM4 quadrature encoder inputs for Encoder 1/2; Encoder 3 has no MCU route shown in the reviewed schematic
+- PA5 / ADC1_IN5 raw battery-divider sensing; divider scale remains unconfirmed
+- TIM3 motor PWM paths remain inactive during current passive bring-up
 - USART1 on PA9/PA10 for the main UART; the CH340N pair is exposed separately on P2 rather than hard-wired to USART1
 - SWD development workflow through `probe-rs`
 
@@ -106,18 +108,19 @@ The Rust firmware now has a complete passive sensing/observability slice:
 
 ```text
 HSI 8 MHz
-  -> software I2C on PB8/PB9
-  -> MPU6050 probe + explicit configuration
-  -> TIM1 100 Hz raw acquisition
+  -> MPU6050 over software I2C
+  -> TIM2/TIM4 raw quadrature counts
+  -> ADC1/PA5 raw battery-divider count
+  -> TIM1 100 Hz sensor snapshot
   -> DWT timestamp
-  -> fixed CRC-protected telemetry frame
+  -> CRC-protected telemetry frame
   -> lock-free SPSC frame queue
   -> lower-priority USART1 TXE interrupt pump
   -> PA9 / TX
 ```
 
-No motor PWM, direction, or brake output is configured in this path. The next runtime work builds on this observable base rather than reintroducing a monolithic ISR.
+No motor PWM, direction, or brake output is configured. Encoder direction and battery voltage scaling remain deliberately raw until the corresponding physical conventions are confirmed.
 
 ## Build
 
-Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI also checks formatting, the full Cortex-M workspace, Clippy with warnings denied, host-side telemetry protocol tests, and the final release link.
+Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI checks formatting, the full Cortex-M workspace, Clippy with warnings denied, target/host telemetry tests, and the final release link.

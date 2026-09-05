@@ -20,5 +20,7 @@ jobs:
         run: cargo clippy --workspace --target thumbv7m-none-eabi -- -D warnings
       - name: Telemetry protocol tests
         run: cargo test -p swp-telemetry-protocol --target x86_64-unknown-linux-gnu
+      - name: Host telemetry decoder tests
+        run: python3 -m unittest discover -s tools/telemetry -p 'test_*.py'
       - name: Link release firmware
         run: cargo build -p swp-stm32f103 --release --target thumbv7m-none-eabi
