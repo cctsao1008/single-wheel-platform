@@ -28,6 +28,9 @@ BodyObservation
 EstimatedState
       |
       v
+State-Space Control Law
+      |
+      v
 GeneralizedDemand
       |
       v
@@ -94,6 +97,9 @@ reference-assembly
 
 robot-domain
     reaction wheel, drive wheel, body state, control demand
+
+plant-model
+    generalized coordinates, physical parameters, plant dynamics
 ```
 
 ## Runtime
@@ -169,6 +175,23 @@ body-frame measurement
 estimated robot state
 ```
 
+## Plant Model
+
+The canonical balance plant is represented as a coupled generalized-coordinate system rather than as legacy roll/pitch PID loops.
+
+```text
+q = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
+u = [drive torque, reaction-wheel torque]^T
+```
+
+The nonlinear contract is:
+
+```text
+M(q, p) q_ddot + c(q, q_dot, p) + g(q, p) + d(q_dot, p) = G(q, p) u
+```
+
+Unknown physical parameters remain unknown until measured or identified. Linearization, discretization, controllability, observability, estimator design, and state-feedback synthesis are built from this plant contract.
+
 ## Recording and Replay
 
 `RawObservation` is encoded as a fixed-size CRC-protected `RecordedObservation` and streamed from USART2 through the on-board ECB02S2 BLE module.
@@ -201,6 +224,7 @@ The host checks sequence continuity, CRC validity, and firmware-reported dropped
 ```text
 crates/
   robot-domain/          Robot state and actuator-domain types
+  plant-model/           Physical plant coordinates, parameters, and model contracts
   reference-assembly/    Installed hardware and board-to-role mapping
   plant-observation/     Raw acquisition, timing, and quality
   sensor-calibration/    Sensor scaling and measured calibration
@@ -237,6 +261,7 @@ CI checks formatting, Cortex-M workspace compilation, Clippy, host-side unit tes
 ## Documentation
 
 - [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
+- [`docs/architecture/plant_model.md`](docs/architecture/plant_model.md)
 - [`docs/architecture/body_frame_contract.md`](docs/architecture/body_frame_contract.md)
 - [`docs/architecture/runtime_authority.md`](docs/architecture/runtime_authority.md)
 - [`docs/architecture/calibration_contract.md`](docs/architecture/calibration_contract.md)

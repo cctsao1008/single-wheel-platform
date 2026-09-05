@@ -47,6 +47,9 @@ BodyObservation
 EstimatedState
       |
       v
+State-Space Control Law
+      |
+      v
 GeneralizedDemand
       |
       v
@@ -75,6 +78,9 @@ RawObservation
 ## Semantic ownership
 
 ```text
+plant-model
+    generalized coordinates, physical parameters, nonlinear/linear plant contracts
+
 plant-observation
     raw values, timing, quality, acquisition status
 
@@ -93,6 +99,27 @@ robot-domain
 runtime-state
     operating state, limits, physical-output authority
 ```
+
+## Plant-model boundary
+
+The canonical balance plant is a coupled multi-input system. The current generalized-coordinate contract is:
+
+```text
+q = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
+u = [drive torque, reaction-wheel torque]^T
+```
+
+The nonlinear model is represented as
+
+```text
+M(q, p) q_ddot + c(q, q_dot, p) + g(q, p) + d(q_dot, p) = G(q, p) u
+```
+
+Roll and pitch are not assumed decoupled because legacy firmware used separate loops. Any decoupling must emerge from the model, linearization, scale analysis, or physical correlation.
+
+The reaction-wheel angle is cyclic for the current axisymmetric-wheel model, so the reduced control state retains wheel speed rather than absolute wheel phase. The upright linear model is discretized at the actual inner-loop period before estimator and state-feedback synthesis.
+
+See [`plant_model.md`](plant_model.md).
 
 ## Hardware ownership
 
