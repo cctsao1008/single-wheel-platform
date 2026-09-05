@@ -1,0 +1,13 @@
+[package]
+name = "swp-reference-assembly"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-board-one-v2 = { path = "../board-one-v2" }
+swp-robot-domain = { path = "../robot-domain" }
+
+[lib]
+path = "src/lib.rs"
