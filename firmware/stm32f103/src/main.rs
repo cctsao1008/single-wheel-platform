@@ -288,8 +288,8 @@ mod app {
             validity,
         };
 
-        let frame = SensorSnapshotFrame::from_observation(observation, *ctx.local.dropped_frames)
-            .encode();
+        let frame =
+            SensorSnapshotFrame::from_observation(observation, *ctx.local.dropped_frames).encode();
 
         if ctx.local.telemetry_producer.enqueue(frame).is_ok() {
             rtic::pend(pac::Interrupt::USART1);
