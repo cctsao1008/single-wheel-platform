@@ -11,16 +11,17 @@ mod app {
     use stm32f1xx_hal::{
         adc::Adc,
         gpio::{
-            Analog, OpenDrain, Output, PinState,
+            Analog, Edge, ExtiPin, Floating, Input, OpenDrain, Output, PinState,
             gpioa::PA5,
             gpiob::{PB8, PB9},
+            gpioc::PC13,
         },
         pac,
         prelude::*,
         rcc,
         serial::{Config as SerialConfig, Tx},
         timer::{
-            CounterMs, Event, SysDelay, Timer,
+            SysDelay, Timer,
             pwm_input::{Qei, QeiOptions},
         },
     };
@@ -37,7 +38,6 @@ mod app {
     const CYCLES_PER_US: u64 = CPU_HZ / 1_000_000;
 
     const MPU_ACQUISITION_HZ: u16 = 500;
-    const INNER_PERIOD_MS: u32 = 2;
     const OBSERVATION_DECIMATION: u8 = 5;
     const I2C_HALF_PERIOD_NS: u32 = 1_250;
 
@@ -46,11 +46,11 @@ mod app {
 
     type ImuBus = SoftwareI2c<PB8<Output<OpenDrain>>, PB9<Output<OpenDrain>>, SysDelay>;
     type Imu = Mpu6050<ImuBus>;
+    type ImuInt = PC13<Input<Floating>>;
     type Encoder1 = Qei<pac::TIM2>;
     type Encoder2 = Qei<pac::TIM4>;
     type BatteryAdc = Adc<pac::ADC1>;
     type BatteryAdcPin = PA5<Analog>;
-    type SampleTimer = CounterMs<pac::TIM1>;
     type RecordTx = Tx<pac::USART2>;
     type RecordProducer = Producer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
     type RecordConsumer = Consumer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
@@ -111,11 +111,11 @@ mod app {
     #[local]
     struct Local {
         imu: Imu,
+        imu_int: ImuInt,
         encoder_1: Encoder1,
         encoder_2: Encoder2,
         battery_adc: BatteryAdc,
         battery_adc_pin: BatteryAdcPin,
-        sample_timer: SampleTimer,
         record_producer: RecordProducer,
         record_pump: UartRecordPump,
         bus_ready: bool,
@@ -145,8 +145,10 @@ mod app {
             &mut flash.acr,
         );
 
+        let mut afio = ctx.device.AFIO.constrain(&mut rcc);
         let mut gpioa = ctx.device.GPIOA.split(&mut rcc);
         let mut gpiob = ctx.device.GPIOB.split(&mut rcc);
+        let mut gpioc = ctx.device.GPIOC.split(&mut rcc);
 
         let sda = gpiob
             .pb8
@@ -158,6 +160,10 @@ mod app {
         let mut bus = SoftwareI2c::new(sda, scl, delay, I2C_HALF_PERIOD_NS, 100);
         let bus_ready = bus.recover_bus().is_ok();
 
+        let mut imu_int = gpioc.pc13.into_floating_input(&mut gpioc.crh);
+        imu_int.make_interrupt_source(&mut afio);
+        imu_int.trigger_on_edge(&mut ctx.device.EXTI, Edge::Rising);
+
         let mut imu = Mpu6050::new(bus, board::MPU6050_ADDRESS);
         let imu_present = bus_ready && imu.probe().is_ok();
         let imu_configured = imu_present
@@ -167,9 +173,14 @@ mod app {
                     accel_range: AccelRange::G4,
                     dlpf: Dlpf::Config3,
                     sample_rate_hz: MPU_ACQUISITION_HZ,
-                    data_ready_interrupt: false,
+                    data_ready_interrupt: true,
                 })
                 .is_ok();
+
+        if imu_configured {
+            imu_int.clear_interrupt_pending_bit();
+            imu_int.enable_interrupt(&mut ctx.device.EXTI);
+        }
 
         let encoder_1 = Timer::new(ctx.device.TIM2, &mut rcc)
             .qei((gpioa.pa0, gpioa.pa1), QeiOptions::default());
@@ -186,27 +197,22 @@ mod app {
             &mut rcc,
         );
 
-        let mut sample_timer = ctx.device.TIM1.counter_ms(&mut rcc);
-        sample_timer.start(INNER_PERIOD_MS.millis()).unwrap();
-        sample_timer.listen(Event::Update);
-
         let (record_producer, record_consumer) = ctx.local.record_queue.split();
         let record_pump = UartRecordPump::new(record_tx, record_consumer);
         let last_cycle = DWT::cycle_count();
 
-        // TIM3 and all motor GPIO remain untouched. The 500 Hz task establishes
-        // the acquisition / estimator / inner-balance timing boundary while the
-        // runtime remains observation-only. Canonical records are decimated to
-        // 100 Hz and emitted over USART2 to ECB02S2.
+        // TIM3 and all motor GPIO remain untouched. MPU6050 DATA_RDY on PC13
+        // defines the 500 Hz acquisition / estimator / inner-balance boundary.
+        // Canonical records are decimated to 100 Hz and emitted over USART2.
         (
             Shared {},
             Local {
                 imu,
+                imu_int,
                 encoder_1,
                 encoder_2,
                 battery_adc,
                 battery_adc_pin,
-                sample_timer,
                 record_producer,
                 record_pump,
                 bus_ready,
@@ -229,15 +235,15 @@ mod app {
     }
 
     #[task(
-        binds = TIM1_UP,
+        binds = EXTI15_10,
         priority = 2,
         local = [
             imu,
+            imu_int,
             encoder_1,
             encoder_2,
             battery_adc,
             battery_adc_pin,
-            sample_timer,
             record_producer,
             bus_ready,
             imu_present,
@@ -249,13 +255,10 @@ mod app {
             cycle_epoch
         ]
     )]
-    fn sample_tick(ctx: sample_tick::Context) {
-        // Clear the hardware event at entry so a missed 2 ms deadline remains
-        // visible as a newly pending update instead of being erased at exit.
-        ctx.local.sample_timer.clear_interrupt(Event::Update);
-
+    fn imu_data_ready(ctx: imu_data_ready::Context) {
         let acquisition_started_us =
             capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
+        ctx.local.imu_int.clear_interrupt_pending_bit();
 
         let mut acquisition_status = AcquisitionStatus::NONE;
         if *ctx.local.bus_ready {
@@ -266,34 +269,26 @@ mod app {
         }
         if *ctx.local.imu_configured {
             acquisition_status |= AcquisitionStatus::IMU_CONFIGURED;
+            acquisition_status |= AcquisitionStatus::IMU_DATA_READY_IRQ_ENABLED;
         }
 
-        // MPU acquisition runs every 2 ms. State estimation and roll/pitch
-        // balance computation will execute at this same 500 Hz boundary once
-        // those stages are instantiated. Motor authority remains disabled.
-        let mut sample = RawSample::default();
-        let mut imu_quality = MeasurementQuality::NONE;
-        let mut imu_read_started_at_us = TimestampEvidence::Unknown;
-        let mut imu_read_completed_at_us = TimestampEvidence::Unknown;
-        if *ctx.local.imu_configured {
-            imu_read_started_at_us = TimestampEvidence::Known(capture_timestamp_us(
-                ctx.local.last_cycle,
-                ctx.local.cycle_epoch,
-            ));
-            match ctx.local.imu.read_raw() {
-                Ok(value) => {
-                    sample = value;
-                    imu_quality = MeasurementQuality::AVAILABLE | MeasurementQuality::IO_OK;
-                }
-                Err(_) => {
-                    imu_quality = MeasurementQuality::IO_ERROR;
-                }
-            }
-            imu_read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(
-                ctx.local.last_cycle,
-                ctx.local.cycle_epoch,
-            ));
-        }
+        let imu_read_started_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.last_cycle,
+            ctx.local.cycle_epoch,
+        ));
+        let (sample, imu_quality) = match ctx.local.imu.read_raw() {
+            Ok(value) => (
+                value,
+                MeasurementQuality::AVAILABLE
+                    | MeasurementQuality::IO_OK
+                    | MeasurementQuality::FRESHNESS_VERIFIED,
+            ),
+            Err(_) => (RawSample::default(), MeasurementQuality::IO_ERROR),
+        };
+        let imu_read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.last_cycle,
+            ctx.local.cycle_epoch,
+        ));
 
         *ctx.local.observation_divider += 1;
         if *ctx.local.observation_divider < OBSERVATION_DECIMATION {
@@ -302,8 +297,8 @@ mod app {
         *ctx.local.observation_divider = 0;
 
         // Encoder capture, outer-loop observation, and canonical recording are
-        // currently aligned at 100 Hz. Encoder velocity may later move to an
-        // independent 100-200 Hz task without changing the 500 Hz inner path.
+        // aligned at 100 Hz. The 500 Hz IMU path remains independent of this
+        // recording decimation.
         let encoder_1_count = ctx.local.encoder_1.count();
         let encoder_1_captured_at_us = TimestampEvidence::Known(capture_timestamp_us(
             ctx.local.last_cycle,
@@ -339,8 +334,9 @@ mod app {
             acquisition_started_us,
             acquisition_completed_us,
             imu: RawImuObservation {
-                // The MPU6050 internal sample time is intentionally unknown on
-                // this board because DRDY is not routed to the MCU.
+                // DATA_RDY proves that this register image is fresh. EXTI13
+                // timestamps ISR service, not the MPU6050's internal sample
+                // instant, so source time remains explicitly unknown.
                 source_sample_at_us: TimestampEvidence::Unknown,
                 read_started_at_us: imu_read_started_at_us,
                 read_completed_at_us: imu_read_completed_at_us,
