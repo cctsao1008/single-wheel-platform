@@ -46,7 +46,7 @@ ElectricalOutput
 Physical Actuators
 ```
 
-The estimator is grounded by two explicit models:
+The estimator and controller are grounded by explicit physical models:
 
 ```text
 plant-model
@@ -54,7 +54,16 @@ plant-model
 
 measurement-model
     y = h(x, u, p)
+
+state-estimator
+    x_pred = A_d x_hat + B_d u
+    x_hat  = x_pred + L (y - y0 - C x_pred - D u)
+
+state-feedback
+    u = u_ff - K (x_hat - x_ref)
 ```
+
+Numerical discretization and Riccati synthesis are host-side engineering operations. The STM32 executes fixed-size deterministic matrices; it does not solve matrix exponentials or Riccati equations at runtime.
 
 Observation and control remain independent from transport and user interfaces:
 
@@ -110,7 +119,7 @@ reference-assembly
     installed hardware and channel-to-role mapping
 
 robot-domain
-    reaction wheel, drive wheel, body state, control demand
+    robot state, physical control demand, actuator roles
 
 plant-model
     full robot configuration, reduced balance coordinates,
@@ -118,6 +127,12 @@ plant-model
 
 measurement-model
     physical sensor equation and local observability structure
+
+state-estimator
+    deterministic discrete predictor/corrector execution
+
+state-feedback
+    deterministic LQR/LQI execution
 ```
 
 ## Runtime
@@ -227,6 +242,20 @@ q_b = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
 u_ref = [drive torque, reaction-wheel torque]^T
 ```
 
+The reduced control state is:
+
+```text
+x = [
+    forward displacement,
+    forward velocity,
+    pitch,
+    pitch rate,
+    roll,
+    roll rate,
+    reaction-wheel relative rate,
+]^T
+```
+
 The reduced nonlinear contract is:
 
 ```text
@@ -241,6 +270,58 @@ B(p) u_ref
 The symbolic derivation shows that the nonlinear balance plant is coupled, while its stationary-upright first-order linearization separates into pitch/translation and roll/reaction-wheel momentum blocks. That separation is a derived local property, not an assumption inherited from legacy control topology.
 
 Unknown physical parameters remain unknown until measured or identified.
+
+## Estimation and State-Space Control
+
+`swp-state-estimator` implements the discrete predictor/corrector using the explicit physical measurement model. Required measurement channels, timing validity, non-finite input rejection, and estimate validity are first-class runtime state; the observer does not invent missing measurements.
+
+`swp-state-feedback` implements LQR and optional LQI in physical state and torque units:
+
+```text
+LQR
+    u = u_ff - K (x_hat - x_ref)
+
+LQI
+    z[k+1] = z[k] + Ts C_i (x_hat - x_ref)
+    u = u_ff - K_x (x_hat - x_ref) - K_i z
+```
+
+LQI exposes an explicit integrator `Hold` mode so runtime authority can stop integration when physical output is denied or constrained.
+
+Controller output is a physical torque demand:
+
+```text
+GeneralizedDemand
+    drive-wheel torque [N m]
+    reaction-wheel torque [N m]
+```
+
+The current reference-assembly allocation is numerically identity because one installed actuator owns each of those two plant inputs. The allocation boundary remains explicit so controller semantics never collapse into PCB channel identity or PWM duty.
+
+The reference firmware does **not** instantiate numeric observer/controller gains yet. The synthesis path refuses to fabricate missing masses, inertias, geometry, IMU placement, noise levels, encoder scaling, or actuator torque evidence.
+
+## Control Synthesis
+
+Host-side synthesis lives in `tools/control/`:
+
+```text
+measured / identified parameters
+        |
+        v
+continuous upright A, B
+        |
+        v
+exact zero-order hold @ 500 Hz
+        |
+        +--> A_d, B_d
+        +--> discrete LQR / optional LQI
+        +--> steady-state discrete observer
+        |
+        v
+JSON design artifact + generated Rust matrices
+```
+
+The reference design template intentionally contains `null` for unsupported quantities. Numeric gains become reference-platform facts only after the design input is backed by physical measurement or identification and correlated against the robot.
 
 ## Measurement Model
 
@@ -291,10 +372,12 @@ The host checks sequence continuity, CRC validity, firmware-reported dropped rec
 
 ```text
 crates/
-  robot-domain/          Robot state and actuator-domain types
+  robot-domain/          Robot state and physical actuator-domain types
   plant-model/           Physical plant coordinates, parameters, and dynamics
   measurement-model/     Sensor equation and local observability model
-  reference-assembly/    Installed hardware and board-to-role mapping
+  state-estimator/       Fixed-rate discrete predictor/corrector
+  state-feedback/        LQR/LQI physical state-feedback execution
+  reference-assembly/    Installed hardware and board-to-role allocation
   plant-observation/     Raw acquisition, timing, quality, and health evidence
   sensor-calibration/    Sensor scaling and measured calibration
   frame-transform/       Sensor-frame to body-frame mapping
@@ -309,6 +392,7 @@ firmware/
 
 tools/
   model/                 Symbolic plant derivation and structural analysis
+  control/               Exact ZOH, observer, LQR/LQI synthesis
   recording/             Decode and deterministic replay tools
   wireless/              ECB02S2 BLE capture and live observation
 
@@ -326,13 +410,14 @@ Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target.
 cargo fw
 ```
 
-CI checks formatting, Cortex-M workspace compilation, Clippy, host-side unit tests, protocol/replay tests, Python wireless-tool syntax, and the release firmware link.
+CI checks formatting, Cortex-M workspace compilation, Clippy, plant/measurement/estimator/controller tests, protocol/replay tests, host-tool syntax, and the release firmware link.
 
 ## Documentation
 
 - [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
 - [`docs/architecture/plant_model.md`](docs/architecture/plant_model.md)
 - [`docs/architecture/measurement_model.md`](docs/architecture/measurement_model.md)
+- [`docs/architecture/state_estimation_and_control.md`](docs/architecture/state_estimation_and_control.md)
 - [`docs/architecture/body_frame_contract.md`](docs/architecture/body_frame_contract.md)
 - [`docs/architecture/runtime_authority.md`](docs/architecture/runtime_authority.md)
 - [`docs/architecture/calibration_contract.md`](docs/architecture/calibration_contract.md)
@@ -341,4 +426,5 @@ CI checks formatting, Cortex-M workspace compilation, Clippy, host-side unit tes
 - [`docs/hardware/pin_mapping.md`](docs/hardware/pin_mapping.md)
 - [`docs/commissioning/runtime_profile.md`](docs/commissioning/runtime_profile.md)
 - [`tools/model/README.md`](tools/model/README.md)
+- [`tools/control/README.md`](tools/control/README.md)
 - [`tools/wireless/README.md`](tools/wireless/README.md)
