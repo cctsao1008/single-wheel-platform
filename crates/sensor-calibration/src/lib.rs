@@ -1,8 +1,7 @@
 #![no_std]
 
 use swp_mpu6050::{
-    AccelRange, Config as MpuConfig, GyroRange, accel_raw_to_mps2, gyro_raw_to_rad_per_sec,
-    temperature_raw_to_celsius,
+    Config as MpuConfig, accel_raw_to_mps2, gyro_raw_to_rad_per_sec, temperature_raw_to_celsius,
 };
 use swp_plant_observation::{MeasurementQuality, RawImuObservation, TimestampEvidence};
 
@@ -168,7 +167,7 @@ fn dot(lhs: [f32; 3], rhs: [f32; 3]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use swp_mpu6050::Dlpf;
+    use swp_mpu6050::{AccelRange, Dlpf, GyroRange};
 
     fn config() -> MpuConfig {
         MpuConfig {
