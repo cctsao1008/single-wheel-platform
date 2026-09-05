@@ -79,7 +79,8 @@ RawObservation
 
 ```text
 plant-model
-    generalized coordinates, physical parameters, nonlinear/linear plant contracts
+    full robot configuration, reduced balance coordinates,
+    physical parameters, nonlinear/linear plant contracts
 
 plant-observation
     raw values, timing, quality, acquisition status
@@ -102,22 +103,40 @@ runtime-state
 
 ## Plant-model boundary
 
-The canonical balance plant is a coupled multi-input system. The current generalized-coordinate contract is:
+The physical robot and the balance controller use different model scopes.
+
+The full robot configuration retains planar pose, yaw, body attitude, and motor-relative wheel coordinates:
 
 ```text
-q = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
-u = [drive torque, reaction-wheel torque]^T
+q_full = [world x, world y, yaw, pitch, roll,
+          drive-wheel relative angle, reaction-wheel relative angle]^T
 ```
 
-The nonlinear model is represented as
+The single-wheel ground contact is nonholonomic, so the full configuration does not imply independent generalized velocities.
+
+The current upright / straight-line balance reduction is:
 
 ```text
-M(q, p) q_ddot + c(q, q_dot, p) + g(q, p) + d(q_dot, p) = G(q, p) u
+q_b = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
+u_ref = [drive torque, reaction-wheel torque]^T
 ```
 
-Roll and pitch are not assumed decoupled because legacy firmware used separate loops. Any decoupling must emerge from the model, linearization, scale analysis, or physical correlation.
+with the drive-wheel relative coordinate eliminated by the local pure-rolling relation.
 
-The reaction-wheel angle is cyclic for the current axisymmetric-wheel model, so the reduced control state retains wheel speed rather than absolute wheel phase. The upright linear model is discretized at the actual inner-loop period before estimator and state-feedback synthesis.
+The reduced nonlinear model is represented as
+
+```text
+M(q_b, p) q_b_ddot
++ c(q_b, q_b_dot, p)
++ g(q_b, p)
++ d(q_b_dot, p)
+=
+Q(q_b, q_b_dot, u_ref, p)
+```
+
+Roll and pitch are not assumed decoupled. Any reduction or decoupling must emerge from model structure, operating-region analysis, or physical correlation.
+
+Yaw remains part of the full robot model even though it is not currently part of the reduced balance state. Turning, path following, and finite-speed gyroscopic coupling belong to the wider nonholonomic mobility problem rather than being hidden inside ad-hoc balance terms.
 
 See [`plant_model.md`](plant_model.md).
 
@@ -134,12 +153,12 @@ firmware/stm32f103
     concrete STM32 peripheral ownership and RTIC execution
 ```
 
-The reference assembly is a two-actuator plant:
+The current reference assembly has two populated balance actuators:
 
 ```text
 BLDC_1 / Encoder_1 -> ReactionWheel
 BLDC_2 / Encoder_2 -> DriveWheel
-BLDC_3             -> unused
+BLDC_3             -> unused by the reference assembly
 ```
 
 Board capability, assembly population, and robot semantics remain separate types of information.
