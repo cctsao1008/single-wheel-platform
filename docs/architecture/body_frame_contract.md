@@ -2,7 +2,7 @@
 
 ## Body frame
 
-The robot uses one right-handed body frame:
+The platform uses one right-handed body frame:
 
 ```text
 +X = forward, along the ground-drive direction
@@ -36,7 +36,7 @@ CalibratedImuObservation
 BodyImuObservation
 ```
 
-Sensor calibration and mechanical orientation are separate operations. Calibration corrects bias, scale, and cross-axis error in the sensor frame. `SensorToBodyRotation` maps the calibrated sensor frame into the robot body frame.
+Sensor calibration and mechanical orientation are separate operations. Calibration corrects bias, scale, and cross-axis error in the sensor frame. `SensorToBodyRotation` maps the calibrated sensor frame into the platform body frame.
 
 `swp-frame-transform` accepts only proper 3-D rotations. Scale, shear, non-orthogonal transforms, and handedness reflections are rejected.
 

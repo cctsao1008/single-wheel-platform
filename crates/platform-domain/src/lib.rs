@@ -26,10 +26,10 @@ pub enum StateValidity {
 /// State presented to the control domain.
 ///
 /// The type is intentionally specific to the inspected single-wheel plant
-/// rather than a generic robotics state container. Yaw rate remains observable
+/// rather than a generic platform state container. Yaw rate remains observable
 /// from the IMU even though the verified assembly has no dedicated yaw actuator.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct RobotState {
+pub struct PlatformState {
     pub timestamp: TimestampUs,
     pub roll: AngleRad,
     pub roll_rate: AngularRateRadPerSec,
@@ -53,7 +53,7 @@ pub struct GeneralizedDemand {
     pub pitch: f32,
 }
 
-/// Robot-semantic actuator identity for the currently verified assembly.
+/// Platform-semantic actuator identity for the currently verified assembly.
 ///
 /// PCB motor-channel identity remains in `swp-board-one-v2`; the mapping between
 /// those channels and these roles belongs to the assembly layer.
@@ -89,7 +89,7 @@ impl Default for NormalizedCommand {
     }
 }
 
-/// Robot-semantic actuator request before board-specific electrical mapping.
+/// Platform-semantic actuator request before board-specific electrical mapping.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ActuatorCommand {
     pub command: NormalizedCommand,

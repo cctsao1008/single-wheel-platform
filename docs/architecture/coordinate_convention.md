@@ -1,6 +1,6 @@
 # Coordinate Convention
 
-The robot coordinate system is right-handed:
+The platform coordinate system is right-handed:
 
 ```text
 +X = forward
@@ -16,7 +16,7 @@ pitch = rotation about +Y
 yaw   = rotation about +Z
 ```
 
-Robot coordinates are independent of PCB coordinates, sensor-package coordinates, encoder phase order, and motor electrical polarity.
+Platform coordinates are independent of PCB coordinates, sensor-package coordinates, encoder phase order, and motor electrical polarity.
 
 Mappings into this coordinate system are explicit configuration boundaries:
 

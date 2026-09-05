@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 swp-board-one-v2 = { path = "../board-one-v2" }
-swp-robot-domain = { path = "../robot-domain" }
+swp-platform-domain = { path = "../platform-domain" }
 
 [lib]
 path = "src/lib.rs"

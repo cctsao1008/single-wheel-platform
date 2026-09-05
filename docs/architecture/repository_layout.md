@@ -4,7 +4,7 @@ The repository is a Rust workspace organized by semantic ownership.
 
 ```text
 crates/
-  robot-domain/          Robot state, generalized demand, actuator-domain types
+  platform-domain/       Platform state, generalized demand, actuator-domain types
   reference-assembly/    Installed hardware and board-channel-to-role mapping
   plant-observation/     Raw values, timestamps, quality, acquisition status
   sensor-calibration/    Device scaling and measured sensor-frame calibration
@@ -36,8 +36,8 @@ board-one-v2
 reference-assembly
     installed hardware
 
-robot-domain
-    robot semantics
+platform-domain
+    platform semantics
 ```
 
 ```text

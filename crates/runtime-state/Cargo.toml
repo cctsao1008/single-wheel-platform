@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-swp-robot-domain = { path = "../robot-domain" }
+swp-platform-domain = { path = "../platform-domain" }
 
 [lib]
 path = "src/lib.rs"

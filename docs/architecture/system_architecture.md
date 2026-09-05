@@ -64,10 +64,10 @@ sensor-calibration
     measured sensor-frame correction
 
 frame-transform
-    sensor-frame to robot-body rotation
+    sensor-frame to platform-body rotation
 
-robot-domain
-    robot state, generalized demand, actuator roles
+platform-domain
+    platform state, generalized demand, actuator roles
 
 runtime-state
     operating state, limits, physical-output authority
@@ -94,7 +94,7 @@ BLDC_2 / Encoder_2 -> DriveWheel
 BLDC_3             -> unused
 ```
 
-Board capability, assembly population, and robot semantics remain separate types of information.
+Board capability, assembly population, and platform semantics remain separate types of information.
 
 ## Body frame
 
