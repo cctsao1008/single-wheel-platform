@@ -221,7 +221,8 @@ fn decode_required_offset(base: u64, offset: u32) -> Result<u64, DecodeError> {
     if offset == UNKNOWN_OFFSET_US {
         return Err(DecodeError::Timing);
     }
-    base.checked_add(u64::from(offset)).ok_or(DecodeError::Timing)
+    base.checked_add(u64::from(offset))
+        .ok_or(DecodeError::Timing)
 }
 
 fn decode_evidence(base: u64, offset: u32) -> TimestampEvidence {
