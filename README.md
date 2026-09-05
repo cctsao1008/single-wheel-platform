@@ -2,7 +2,7 @@
 
 A clean re-architecture of the embedded software for a self-balancing single-wheel robot.
 
-The repository is organized around physical truth and semantic transitions rather than inherited firmware structure. Device access, board wiring, acquisition evidence, calibration, robot-domain state, real-time scheduling, estimation, control, and actuation are separate concerns.
+The repository is organized around physical truth and semantic transitions rather than inherited firmware structure. Device access, board wiring, acquisition evidence, device scaling, measured calibration, robot-domain state, real-time scheduling, estimation, control, and actuation are separate concerns.
 
 The current implementation uses **Rust `no_std`**, **embedded-hal 1.0**, **stm32f1xx-hal**, and **RTIC** on the STM32F103 reference target. The earlier C/CMake scaffold is not retained as a compatibility layer.
 
@@ -16,9 +16,15 @@ physical hardware
       v
 RawObservation + timing/quality evidence
       |
+      | device transfer functions
+      v
+ScaledSensorObservation
+      |
+      | measured calibration
       v
 CalibratedObservation
       |
+      | mechanical/frame mapping
       v
 BodyObservation
       |
@@ -38,13 +44,21 @@ Authority / limits
 ElectricalOutput
 ```
 
-A raw ADC count is not a voltage until its transfer function is known. A PCB encoder channel is not a reaction-wheel speed until mechanical mapping, sign, and scale are established. An I2C read that succeeded is not automatically a fresh, exactly timed IMU sample.
+A raw ADC count is not a voltage until its transfer function is known. A datasheet transfer function is not a physical calibration. A PCB encoder channel is not a reaction-wheel speed until mechanical mapping, sign, and scale are established. An I2C read that succeeded is not automatically a fresh, exactly timed IMU sample.
 
 ## Time and measurement quality
 
 The runtime does not collapse sequential hardware reads into one fictional timestamp. `RawObservation` records acquisition start/completion, MPU read start/completion, encoder capture times, ADC read completion, per-measurement quality, and platform acquisition status.
 
 The MPU6050 source-sample timestamp is explicitly **unknown** on the reference board because the actual MPU data-ready interrupt is not routed. Later estimation must use measurement timing evidence rather than assuming that the scheduler period is identical to physical sample time.
+
+## Scaling and calibration
+
+The MPU6050 device crate owns nominal transfer functions for the configured full-scale ranges and temperature conversion. These functions convert register counts into SI units in the native sensor frame.
+
+`swp-sensor-calibration` is a separate semantic layer. It applies measured three-axis affine correction and carries explicit calibration evidence/revision. Mechanical mounting orientation is not encoded in calibration parameters; frame mapping remains a later transition into `BodyObservation`.
+
+The current target firmware intentionally continues to record raw evidence because no verified physical calibration profile has yet been established for the unit. Zero bias and an identity matrix are not treated as a production calibration merely to make the pipeline executable.
 
 ## Recording and deterministic replay
 
@@ -53,7 +67,7 @@ Recording/replay is a first-class data path:
 ```text
 RawObservation
    |\
-   | +------------------> future estimator/control path
+   | +------------------> scaling / calibration / future estimator path
    |
    +--> RecordedObservation --> binary log --> replay
 ```
@@ -66,8 +80,9 @@ RawObservation
 crates/
   robot-domain/          Single-wheel physical/control-domain types
   plant-observation/     Raw evidence, timing, and measurement quality
+  sensor-calibration/    Device scaling boundary and measured IMU correction
   observation-record/   Deterministic binary record/replay contract
-  mpu6050/               Portable embedded-hal MPU6050 driver
+  mpu6050/               Portable driver and nominal transfer functions
   software-i2c/          Portable open-drain embedded-hal I2C
   board-one-v2/          Reference-board wiring facts only
 
@@ -78,7 +93,7 @@ tools/
   recording/             Record decode and deterministic replay source
 
 docs/
-  architecture/          Semantic, timing, replay, and authority contracts
+  architecture/          Semantic, timing, replay, calibration, authority contracts
   hardware/              Schematic review and board mapping
   commissioning/         Bring-up and characterization notes
 ```
@@ -118,6 +133,6 @@ No TIM3 motor PWM, direction, or brake output is configured. Motor activation re
 
 ## Build
 
-Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI enforces formatting, full Cortex-M workspace check, Clippy with warnings denied, observation-record host tests, Python recording decoder tests, and the final release firmware link.
+Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI enforces formatting, full Cortex-M workspace check, Clippy with warnings denied, MPU transfer-function tests, sensor-calibration tests, observation-record host tests, Python recording decoder tests, and the final release firmware link.
 
-See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md), [`docs/architecture/typed_dataflow.md`](docs/architecture/typed_dataflow.md), and [`docs/architecture/observation_time_health_replay.md`](docs/architecture/observation_time_health_replay.md).
+See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md), [`docs/architecture/typed_dataflow.md`](docs/architecture/typed_dataflow.md), [`docs/architecture/calibration_contract.md`](docs/architecture/calibration_contract.md), and [`docs/architecture/observation_time_health_replay.md`](docs/architecture/observation_time_health_replay.md).
