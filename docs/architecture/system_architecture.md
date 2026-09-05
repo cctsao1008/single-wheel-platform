@@ -220,9 +220,9 @@ Roll, pitch, and yaw follow the right-hand rule about +X, +Y, and +Z respectivel
 
 ## Measurement timing and quality
 
-Scheduler time, physical source-sample time, peripheral capture time, readout completion time, and transmission time are distinct.
+Physical source-sample time, DATA_RDY event service time, peripheral capture time, readout completion time, and transmission time are distinct.
 
-The MPU6050 INT pin is physically routed to PC13 / EXTI13. The current runtime does not yet use that interrupt and still configures DATA_RDY disabled, so `source_sample_at_us` remains `Unknown`; I2C read start/completion times remain available. Hardware interrupt capability is not promoted to timing evidence until the runtime actually captures and validates it.
+The MPU6050 INT pin is routed to PC13 / EXTI13 and the current runtime enables DATA_RDY. Successful interrupt-triggered reads are freshness-verified. EXTI task entry is timestamped with DWT, but that timestamp is not the MPU6050 internal sensing instant; `source_sample_at_us` therefore remains `Unknown` and sensor-filter delay remains explicit.
 
 `MeasurementQuality` carries independent availability, I/O, timing, freshness, saturation, staleness, and retry state. An unset flag does not imply the opposite property.
 
@@ -242,7 +242,7 @@ Boot
        |-> Fault
 ```
 
-Only authorized closed-loop states may reach physical outputs. Reaction-wheel speed/headroom is part of actuator authority.
+Only authorized closed-loop states may reach physical outputs. Reaction-wheel speed/headroom is part of actuator authority. Missing DATA_RDY and stale IMU state must become authority-revocation conditions before balancing is enabled.
 
 ## Real-time runtime
 
@@ -251,10 +251,9 @@ The STM32F103 target uses Rust `no_std`, `embedded-hal` 1.0, `stm32f1xx-hal`, an
 The target composition is:
 
 ```text
-TIM1          acquisition scheduling
 DWT           monotonic acquisition timing
 PB8/PB9       software I2C -> MPU6050
-PC13          MPU6050 INT / EXTI13 hardware route, currently unused
+PC13/EXTI13   MPU6050 DATA_RDY -> 500 Hz acquisition task
 TIM2          Encoder_1 QEI
 TIM4          Encoder_2 QEI
 ADC1 / PA5    battery ADC
@@ -264,6 +263,8 @@ PB4/PB5       OLED status interface
 ```
 
 Control/acquisition work does not block on UART, BLE, display rendering, storage, or host traffic.
+
+The canonical IMU path is raw 500 Hz DATA_RDY acquisition. Vendor DMP output is not part of the control architecture.
 
 ## Interface roles
 

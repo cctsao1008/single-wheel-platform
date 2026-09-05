@@ -44,16 +44,16 @@ ECB02 AT_EN          PC15
 ECB02 ROLE           PC14
 OLED SDA             PB4
 OLED SCL             PB5
-SW2                   PB12
-SW4                   PB13
-D2 status LED         PB14
-EN_X                  PA15
-EN_Y                  PB3
+SW2                  PB12
+SW4                  PB13
+D2 status LED        PB14
+EN_X                 PA15
+EN_Y                 PB3
 ```
 
 USART2 is the active wireless recording/observation transport through the on-board ECB02S2 BLE module. USART1 is retained as a wired bench/engineering interface. OLED is an optional local status interface.
 
-The vendor V2.0 source configures SW2/PB12 and SW4/PB13 as pull-up active-low buttons, PB14 as the status LED, and EN_X/EN_Y as pull-up inputs. PB3, PB4, and PA15 overlap JTAG functions, so the vendor runtime switches the STM32F103 debug port to SWD-only before using those GPIOs. A current runtime that instantiates EN_Y, OLED SDA, or EN_X must preserve the same resource constraint.
+The vendor V2.0 source configures SW2/PB12 and SW4/PB13 as pull-up active-low buttons, PB14 as the status LED, and EN_X/EN_Y as pull-up inputs. PB3, PB4, and PA15 overlap JTAG functions, so the vendor runtime switches the STM32F103 debug port to SWD-only before using those GPIOs. A runtime that instantiates EN_Y, OLED SDA, or EN_X must preserve the same resource constraint.
 
 `EN_X` and `EN_Y` are MCU inputs and are distinct from `EN_BLDC_1/2/3`, which are hard-wired high at the motor interfaces.
 
@@ -64,9 +64,9 @@ module protocol       Bluetooth 5.2 BLE
 module UART           115200 8N1
 MCU TX -> module RX   PA2
 MCU RX <- module TX   PA3
-SLEEP                  hard-wired low / awake
-ROLE                   high or floating = Peripheral
-AT_EN                  high or floating = transparent data while connected
+SLEEP                 hard-wired low / awake
+ROLE                  high or floating = Peripheral
+AT_EN                 high or floating = transparent data while connected
 ```
 
 The runtime streams binary `RecordedObservation` bytes through USART2. BLE packet boundaries do not define record boundaries.
@@ -84,7 +84,11 @@ I2C address  0x68
 
 PB8/PB9 do not match the STM32F103 hardware-I2C1 remap polarity, so the platform uses software I2C.
 
-The MPU6050 INT pin is physically routed to PC13 and can carry DATA_RDY or DMP/FIFO interrupt signaling when configured. The vendor V2.0 firmware does not instantiate that interrupt path, and the current Rust runtime also leaves DATA_RDY disabled. The current `source_sample_at_us` therefore remains `Unknown` because the runtime has not yet promoted the available interrupt route into timestamp evidence, not because the board lacks the route.
+The MPU6050 INT pin is physically routed to PC13. The current Rust runtime enables DATA_RDY and uses the rising EXTI13 edge as the raw 500 Hz acquisition trigger. Successful interrupt-triggered reads are freshness-verified.
+
+The interrupt does not provide a hardware timestamp of the MPU6050 internal sampling/filtering instant. `source_sample_at_us` therefore remains `Unknown`; EXTI task-entry and I2C read timing are separate runtime evidence.
+
+The vendor V2.0 firmware does not instantiate PC13/EXTI13, even though the same route is present on the board.
 
 ## Encoder wiring
 

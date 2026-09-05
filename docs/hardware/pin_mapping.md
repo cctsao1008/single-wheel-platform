@@ -51,7 +51,7 @@ The current Rust runtime uses TIM2 QEI for Encoder_1 and TIM4 QEI for Encoder_2.
 
 PB8/PB9 are used through software I2C in both the vendor V2.0 source and the current Rust runtime.
 
-The MPU6050 interrupt route is physically available at PC13. The vendor V2.0 firmware does not configure PC13/EXTI13, and the current Rust runtime also leaves DATA_RDY disabled at present. Hardware capability and instantiated runtime behavior are therefore distinct.
+The vendor V2.0 firmware does not configure PC13/EXTI13. The current Rust runtime does: MPU6050 DATA_RDY is enabled as an active-high push-pull pulse, PC13 is the EXTI13 source, and the rising edge drives the 500 Hz IMU acquisition task. Hardware capability and runtime behavior remain distinct facts; the current runtime now instantiates this capability.
 
 ## Battery ADC
 

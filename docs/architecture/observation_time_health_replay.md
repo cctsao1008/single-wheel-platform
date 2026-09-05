@@ -12,9 +12,9 @@ read_completed_at_us
 acquisition_completed_us
 ```
 
-`source_sample_at_us` is present only when the physical/device sample instant is supported by runtime timing evidence. The MPU6050 INT pin is physically routed to PC13 / EXTI13, but the current runtime does not yet use that route and still configures DATA_RDY disabled. The current MPU6050 `source_sample_at_us` therefore remains `Unknown`.
+MPU6050 acquisition is driven by DATA_RDY through PC13 / EXTI13. `acquisition_started_us` is the DWT timestamp observed at EXTI task entry. A successful DATA_RDY-triggered read proves that a fresh output register image is available, but it does not expose the exact internal sensing/filtering instant. `source_sample_at_us` therefore remains `Unknown`.
 
-Encoder snapshots and ADC readout timing are stored independently.
+I2C read start/completion times, encoder snapshots, and ADC readout timing are stored independently.
 
 ## Measurement quality
 
@@ -31,13 +31,19 @@ STALE
 RETRIED
 ```
 
-An unset flag is not interpreted as proof of its opposite. Acquisition-platform state such as bus readiness, device presence, and device configuration belongs to `AcquisitionStatus`.
+A successful DATA_RDY-triggered MPU read carries `AVAILABLE | IO_OK | FRESHNESS_VERIFIED`. `FRESHNESS_VERIFIED` is not equivalent to an exact source timestamp. An unset flag is not interpreted as proof of its opposite.
+
+`AcquisitionStatus` separately represents platform/runtime state such as bus readiness, device presence, device configuration, and DATA_RDY IRQ enablement.
 
 ## Estimator contract
 
-Estimator time evolution is derived from observation timing evidence. Scheduler period is not substituted for source time unless the estimator contract explicitly permits that approximation.
+Estimator time evolution uses explicit timing evidence. Scheduler period, IRQ service time, source-sample time, and read-completion time are not interchangeable.
 
-Unknown source time remains unknown. A physically available interrupt route becomes timestamp evidence only when the runtime actually configures, captures, and validates that event.
+The 500 Hz MPU rate is the device configuration and acquisition cadence. The estimator may use that timing contract, but it must not fabricate a sensor-internal timestamp from the EXTI ISR timestamp. DLPF and sensor pipeline delay remain part of the measurement phase model.
+
+## Health contract
+
+DATA_RDY is also a liveness signal. Closed-loop authority must not depend indefinitely on the assumption that interrupts continue to arrive. Before actuation is enabled, runtime health must define an independent timeout/watchdog for missing DATA_RDY, stale IMU state, and missed control deadlines.
 
 ## Record contract
 
@@ -52,7 +58,7 @@ RawObservation
 
 The binary record is fixed at 80 bytes. One absolute acquisition-start timestamp is stored; related times are represented as offsets with explicit unknown sentinels.
 
-The record format is a transport-independent recording contract. Runtime semantic types do not depend on wire offsets or UART framing.
+The record format is transport-independent. Runtime semantic types do not depend on wire offsets or UART framing.
 
 ## Replay invariants
 
