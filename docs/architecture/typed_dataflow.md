@@ -11,8 +11,11 @@ physical hardware
 RawObservation
     |  raw values + timing + quality + acquisition status
     v
+ScaledSensorObservation
+    |  device transfer functions assign SI units in sensor frame
+    v
 CalibratedObservation
-    |  sensor scale / bias / electrical transfer functions are known
+    |  measured bias / scale / cross-axis correction is established
     v
 BodyObservation
     |  mounting transform, robot axes, and sign conventions are known
@@ -55,39 +58,61 @@ The 100 Hz RTIC timer defines when acquisition work is requested. It does not de
 
 The estimator must derive time evolution from measurement timestamp evidence. A future source with exact sample timing may set `TIMING_VALID` and a known source timestamp. A source without that evidence remains explicit rather than being assigned the task-entry timestamp.
 
-## Calibration and coordinate mapping are different transitions
+## Device scaling is not calibration
 
-Calibration answers questions such as sensor scale, bias, temperature compensation, encoder scale, and ADC transfer function. Coordinate mapping answers different questions: sensor mounting rotation, robot axes, encoder sign, and which PCB channel corresponds to which physical actuator role.
+The MPU6050 driver owns nominal transfer functions that come from the configured device model: counts per g, counts per degree/second, and the nominal temperature conversion. Applying those functions creates SI-valued data in the MPU sensor frame, but does not establish that the physical device is calibrated.
 
-The intended transition is therefore:
+The explicit transition is:
 
 ```text
-RawObservation
+RawImuObservation
       |
+      | MPU6050 configured transfer function
       v
-SensorCalibration
+ScaledImuObservation
       |
+      | measured affine correction
       v
-CalibratedObservation
+CalibratedImuObservation
+```
+
+`swp-sensor-calibration` models the measured correction as:
+
+```text
+corrected = matrix * (scaled - bias)
+```
+
+and attaches calibration evidence/revision to the resulting observation. An identity matrix used in a unit test does not become a production calibration profile.
+
+## Calibration and coordinate mapping are different transitions
+
+Calibration is still sensor-frame work. Coordinate mapping answers different questions: sensor mounting rotation, robot axes, encoder sign, and which PCB channel corresponds to which physical actuator role.
+
+The system therefore does not allow calibration constants to quietly encode mechanical orientation.
+
+```text
+CalibratedImuObservation
       |
-      v
-Frame / mechanical mapping
-      |
+      | verified mechanical/frame transform
       v
 BodyObservation
 ```
+
+The current reference hardware does not yet provide enough confirmed integration evidence to create this mapping, so it remains a later explicit boundary rather than an assumed axis permutation.
 
 ## Recording is a branch, not the model owner
 
 ```text
 RawObservation
       |\
-      | +--> calibration / estimator / control
+      | +--> scaling / calibration / estimator / control
       |
       +--> RecordedObservation --> storage/transport --> replay
 ```
 
 The record format is deterministic and versioned by `swp-observation-record`. UART merely transports those bytes today. Replay feeds recorded observation evidence back into later processing without depending on host wall-clock timing.
+
+Keeping the recorder at the raw-evidence boundary makes it possible to rerun future scaling, calibration, mapping, and estimation implementations against the exact same captured acquisition stream.
 
 ## PCB identity and robot identity remain separate
 
@@ -96,3 +121,5 @@ The board crate describes only PCB facts such as `BLDC_1`, `BLDC_2`, `BLDC_3`, `
 ## Zero-cost boundary
 
 The semantic types remain `no_std`, statically allocated, and heap-free. Stronger meaning should cost compile-time checking and explicit code paths, not dynamic infrastructure. Record serialization is isolated from the runtime domain types so wire layout does not dictate estimator or controller data structures.
+
+See [`calibration_contract.md`](calibration_contract.md) for the detailed scaling/calibration rules.
