@@ -4,6 +4,7 @@ members = [
     "crates/robot-domain",
     "crates/mpu6050",
     "crates/software-i2c",
+    "crates/telemetry-protocol",
     "crates/board-one-v2",
     "firmware/stm32f103",
 ]
@@ -14,6 +15,7 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 embedded-hal = "1.0.0"
+heapless = "0.8.0"
 cortex-m = { version = "0.7.9", features = ["critical-section-single-core"] }
 panic-halt = "1.0.0"
 rtic = { version = "2.3.1", features = ["thumbv7-backend"] }

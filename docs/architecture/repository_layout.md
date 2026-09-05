@@ -18,6 +18,9 @@ crates/
   software-i2c/
     src/lib.rs          Portable open-drain embedded-hal I2C implementation
 
+  telemetry-protocol/
+    src/lib.rs          Fixed binary target/host telemetry contract
+
   board-one-v2/
     src/lib.rs          Schematic-derived board wiring facts
 
@@ -34,18 +37,21 @@ docs/
   commissioning/
 
 tools/
+  telemetry/            Python capture and decode utilities
 ```
 
 The important boundary is semantic rather than directory depth:
 
 ```text
-robot-domain     knows the single-wheel plant, not STM32
-mpu6050          knows the sensor, not the board or controller
-software-i2c     implements the standard I2C contract, not board wiring
-board-one-v2     knows the reference PCB wiring, not control policy
-firmware         owns STM32 peripherals and composes the above pieces
-stm32f1xx-hal    owns STM32F1 peripheral access
-RTIC             owns the real-time task/resource model
+robot-domain       knows the single-wheel plant, not STM32
+mpu6050            knows the sensor, not the board or controller
+software-i2c       implements the standard I2C contract, not board wiring
+telemetry-protocol defines bytes on the wire, not transport ownership
+board-one-v2       knows the reference PCB wiring, not control policy
+firmware           owns STM32 peripherals and composes the above pieces
+stm32f1xx-hal      owns STM32F1 peripheral access
+RTIC               owns the real-time task/resource model
+Python tools       consume target data without entering target runtime
 ```
 
 New abstractions are added only when they represent a real boundary in this platform. A private `board_*` HAL is not recreated when an `embedded-hal` trait already expresses the required contract.

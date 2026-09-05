@@ -62,6 +62,8 @@ rust-toolchain.toml
 crates/
   robot-domain/          Physical state and actuator-domain types
   mpu6050/               Portable embedded-hal MPU6050 driver
+  software-i2c/          Portable open-drain embedded-hal I2C
+  telemetry-protocol/    Fixed binary target/host telemetry contract
   board-one-v2/          Reference-board wiring and hardware facts
 
 firmware/
@@ -72,7 +74,8 @@ docs/
   hardware/              Schematic review and board mapping
   commissioning/         Bring-up and characterization notes
 
-tools/                   Host-side engineering tools
+tools/
+  telemetry/             Python capture and decode utilities
 ```
 
 ## Design rules
@@ -82,7 +85,7 @@ tools/                   Host-side engineering tools
 - Keep board-specific wiring in the board crate, not in device drivers or control code.
 - Keep robot-domain state and actuator semantics independent of the MCU and HAL.
 - Make coordinate conventions, physical units, timestamps, and actuator authority explicit.
-- Keep blocking telemetry, display work, storage, and maintenance traffic outside the critical control path.
+- Keep telemetry, display work, storage, and maintenance traffic outside the high-priority acquisition/control path.
 - Do not hard-code unconfirmed hardware facts. For example, the reviewed schematic does not label the HSE crystal frequency, and the net named `MPU_INT` is connected to MPU6050 **FSYNC**, while the actual MPU6050 INT pin is not routed.
 
 ## Reference target
@@ -92,12 +95,29 @@ tools/                   Host-side engineering tools
 - MPU6050 at schematic-selected address `0x68`
 - MPU SDA on PB8 and SCL on PB9, requiring a software-I2C implementation for this board wiring rather than the STM32F1 I2C1 remap
 - TIM3 motor PWM paths, TIM2/TIM4 encoder paths
+- USART1 on PA9/PA10 for the main UART; the CH340N pair is exposed separately on P2 rather than hard-wired to USART1
 - SWD development workflow through `probe-rs`
 
 See [`docs/hardware/pin_mapping.md`](docs/hardware/pin_mapping.md) for the reviewed board mapping and [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md) for the software boundaries.
 
-## Build direction
+## Current executable path
 
-Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. The repository pins architecture dependencies in the Cargo workspace; `cargo fw` builds the STM32F103 release target.
+The Rust firmware now has a complete passive sensing/observability slice:
 
-The firmware target currently boots into a safe, inactive RTIC skeleton. Peripheral ownership and bring-up are being added directly in the new architecture rather than by porting the removed C board layer line-for-line.
+```text
+HSI 8 MHz
+  -> software I2C on PB8/PB9
+  -> MPU6050 probe + explicit configuration
+  -> TIM1 100 Hz raw acquisition
+  -> DWT timestamp
+  -> fixed CRC-protected telemetry frame
+  -> lock-free SPSC frame queue
+  -> lower-priority USART1 TXE interrupt pump
+  -> PA9 / TX
+```
+
+No motor PWM, direction, or brake output is configured in this path. The next runtime work builds on this observable base rather than reintroducing a monolithic ISR.
+
+## Build
+
+Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI also checks formatting, the full Cortex-M workspace, Clippy with warnings denied, host-side telemetry protocol tests, and the final release link.

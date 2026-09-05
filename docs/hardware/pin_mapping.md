@@ -26,7 +26,8 @@ This document records the schematic-level mapping of the ONE_V2.0 reference boar
 | MPU6050 INT | No MCU route | MPU6050 pin 12 is marked no-connect | No data-ready IRQ path |
 | Battery ADC | PA5 / ADC1_IN5 | Divider node `ADC` between R2/R4 | Pin mapped; divider values not given in this drawing |
 | Bluetooth TX/RX | PA2 / PA3 | `T_TX` / `T_RX` to ECB02S2 | Schematic-mapped |
-| Main UART TX/RX | PA9 / PA10 | `TX` / `RX`, also on P2 | Schematic-mapped |
+| Main UART TX/RX | PA9 / PA10 | `TX` / `RX`, exposed on P2 pins 1/3 | Schematic-mapped |
+| CH340N UART | Not hard-wired to MCU UART | `CH340_TX` / `CH340_RX`, exposed separately on P2 pins 2/4 | External cross-connection required for bridge use |
 | OLED SDA/SCL | PB4 / PB5 | `OLED_SDA` / `OLED_SCL` | Schematic-mapped |
 | SWDIO/SWCLK | PA13 / PA14 | Nets `SDIO` / `SCLK`, exposed on P2 | Schematic-mapped |
 
@@ -42,8 +43,21 @@ The board labels PB8 as SDA and PB9 as SCL. STM32F103 I2C1 remap assigns PB8=SCL
 
 The schematic also shows that PC13 cannot be used as an MPU6050 data-ready interrupt: the `MPU_INT` net terminates on FSYNC, while the actual INT pin is no-connect.
 
+## UART / CH340 consequence
+
+The MCU USART1 nets `TX` and `RX` and the CH340N nets `CH340_TX` and `CH340_RX` terminate on separate P2 pins. They are not shorted together on the schematic.
+
+Using the onboard CH340 as the USART1 host bridge therefore requires the normal crossed UART relationship outside those nets:
+
+```text
+MCU TX -> CH340_RX
+MCU RX <- CH340_TX
+```
+
+The current telemetry firmware transmits only on MCU PA9 / `TX`; it does not assume that USB-C/CH340 is already electrically connected to that net.
+
 ## Electrical behavior not determined by the schematic
 
 The schematic does not define the brushless motor modules' PWM active level, direction sign, brake polarity, or the robot-positive encoder direction. Those are board/actuator integration properties and must not be inferred from net names alone.
 
-The current STM32F103 motor implementation preserves the established PWM electrical convention for the existing hardware: BLDC_1 and BLDC_2 are driven with active-low PWM command waveforms and BLDC_3 with active-high PWM. Connector waveforms should be checked before first powered commissioning of a newly assembled board.
+The established hardware integration convention is that BLDC_1 and BLDC_2 use active-low PWM command waveforms and BLDC_3 uses active-high PWM. Connector waveforms must still be checked before first powered commissioning of a newly assembled board.
