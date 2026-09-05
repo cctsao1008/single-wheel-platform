@@ -1,6 +1,6 @@
 # Self-Balancing Single-Wheel Platform
 
-A Rust `no_std` embedded control platform for a two-axis self-balancing single-wheel platform.
+A Rust `no_std` embedded control platform for a two-axis self-balancing single-wheel robot.
 
 The repository is structured around explicit physical and semantic boundaries: board wiring, installed hardware, observation, calibration, coordinate mapping, state estimation, control, actuator authority, and electrical output are separate parts of the system.
 
@@ -75,7 +75,7 @@ USART1          wired bench / engineering interface
 OLED            PB4/PB5 optional local status interface
 ```
 
-The platform body frame is right-handed:
+The robot body frame is right-handed:
 
 ```text
 +X = forward
@@ -83,7 +83,7 @@ The platform body frame is right-handed:
 +Z = up
 ```
 
-Board channels and platform roles are intentionally separate concepts:
+Board channels and robot roles are intentionally separate concepts:
 
 ```text
 board-one-v2
@@ -92,7 +92,7 @@ board-one-v2
 reference-assembly
     installed hardware and channel-to-role mapping
 
-platform-domain
+robot-domain
     reaction wheel, drive wheel, body state, control demand
 ```
 
@@ -166,7 +166,7 @@ calibrated sensor value
       !=
 body-frame measurement
       !=
-estimated platform state
+estimated robot state
 ```
 
 ## Recording and Replay
@@ -200,7 +200,7 @@ The host checks sequence continuity, CRC validity, and firmware-reported dropped
 
 ```text
 crates/
-  platform-domain/       Platform state and actuator-domain types
+  robot-domain/          Robot state and actuator-domain types
   reference-assembly/    Installed hardware and board-to-role mapping
   plant-observation/     Raw acquisition, timing, and quality
   sensor-calibration/    Sensor scaling and measured calibration

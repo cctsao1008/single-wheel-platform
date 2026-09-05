@@ -40,7 +40,7 @@ pub struct SerialWiring {
 
 /// Physical brushless connector identity from the schematic.
 ///
-/// This deliberately does not encode platform meaning such as reaction wheel or
+/// This deliberately does not encode robot meaning such as reaction wheel or
 /// drive wheel. Connector identity and actuator role are separate facts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MotorChannel {
@@ -110,7 +110,7 @@ pub const OLED_SDA: Pin = Pin::new(Port::B, 4);
 pub const OLED_SCL: Pin = Pin::new(Port::B, 5);
 
 /// Configuration/authority jumper inputs exposed by the board as EN_X and EN_Y.
-/// Their electrical pin mapping is known; the platform-semantic actuator association
+/// Their electrical pin mapping is known; the robot-semantic actuator association
 /// is intentionally not encoded here because legacy naming and product labels differ.
 pub const EN_X: Pin = Pin::new(Port::A, 15);
 pub const EN_Y: Pin = Pin::new(Port::B, 3);

@@ -6,7 +6,7 @@ use swp_sensor_calibration::{
     CalibrationEvidence, TemperatureCelsius,
 };
 
-/// Canonical platform body frame used by this project.
+/// Canonical robot body frame used by this project.
 ///
 /// The frame is right-handed:
 /// - +X: forward, along the ground-drive direction;

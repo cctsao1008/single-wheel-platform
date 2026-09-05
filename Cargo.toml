@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/platform-domain",
+    "crates/robot-domain",
     "crates/reference-assembly",
     "crates/plant-observation",
     "crates/sensor-calibration",

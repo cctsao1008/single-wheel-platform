@@ -19,13 +19,13 @@ BodyObservation
     |  sensor-to-body transform
     v
 EstimatedState
-    |  estimator output in platform-domain coordinates
+    |  estimator output in robot-domain coordinates
     v
 GeneralizedDemand
     |  control demand in physical axes
     v
 ActuatorAllocation
-    |  platform roles mapped to installed actuator channels
+    |  robot roles mapped to installed actuator channels
     v
 RuntimeAuthority
     |  operating state, health, limits, reaction-wheel headroom
@@ -48,7 +48,7 @@ These are semantic boundaries; crate boundaries exist only where ownership or me
 - `MeasurementQuality`;
 - `AcquisitionStatus`.
 
-Raw observation does not imply simultaneity, freshness, calibration, or platform-frame meaning.
+Raw observation does not imply simultaneity, freshness, calibration, or robot-frame meaning.
 
 ## Sensor semantics
 
@@ -82,7 +82,7 @@ RawObservation
 
 `swp-observation-record` owns the persistent record format. UART does not own observation semantics.
 
-## Board / assembly / platform mapping
+## Board / assembly / robot mapping
 
 ```text
 board-one-v2
@@ -93,7 +93,7 @@ reference-assembly
     BLDC_2 -> DriveWheel
     BLDC_3 -> unused
 
-platform-domain
+robot-domain
     body state, actuator roles, generalized demand
 ```
 

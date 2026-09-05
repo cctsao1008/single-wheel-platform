@@ -2,7 +2,7 @@
 
 ## Operating states
 
-`swp-runtime-state` defines the platform operating-state model:
+`swp-runtime-state` defines the robot operating-state model:
 
 ```text
 Boot

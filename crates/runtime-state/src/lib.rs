@@ -1,6 +1,6 @@
 #![no_std]
 
-use swp_platform_domain::AngularRateRadPerSec;
+use swp_robot_domain::AngularRateRadPerSec;
 
 /// High-level operating state for the reference single-wheel plant.
 ///

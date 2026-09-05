@@ -2,6 +2,27 @@
 
 The platform is organized around semantic transitions and physical ownership.
 
+## Terminology
+
+```text
+platform
+    repository and engineering / test infrastructure
+
+robot
+    complete physical sensing-and-actuation system under control
+
+plant
+    dynamic system seen by estimation and control
+
+board
+    PCB capability and electrical routing
+
+reference-assembly
+    installed hardware and board-channel-to-role mapping
+```
+
+`platform`, `robot`, and `plant` are related but not interchangeable. The repository is a platform; the controlled physical system is a robot; control and estimation operate on its plant dynamics.
+
 ## Core dataflow
 
 ```text
@@ -64,10 +85,10 @@ sensor-calibration
     measured sensor-frame correction
 
 frame-transform
-    sensor-frame to platform-body rotation
+    sensor-frame to robot-body rotation
 
-platform-domain
-    platform state, generalized demand, actuator roles
+robot-domain
+    robot state, generalized demand, actuator roles
 
 runtime-state
     operating state, limits, physical-output authority
@@ -94,7 +115,7 @@ BLDC_2 / Encoder_2 -> DriveWheel
 BLDC_3             -> unused
 ```
 
-Board capability, assembly population, and platform semantics remain separate types of information.
+Board capability, assembly population, and robot semantics remain separate types of information.
 
 ## Body frame
 

@@ -31,7 +31,7 @@ Encoder_2 -> DriveWheel
 Encoder_3 -> unused / no MCU route
 ```
 
-Board connector identity and platform actuator identity are separate definitions. `swp-board-one-v2` owns PCB wiring; `swp-reference-assembly` owns the installed channel-to-role mapping.
+Board connector identity and robot actuator identity are separate definitions. `swp-board-one-v2` owns PCB wiring; `swp-reference-assembly` owns the installed channel-to-role mapping.
 
 ## Interfaces
 
@@ -88,7 +88,7 @@ Encoder_2 B  PB6 / TIM4_CH1
 Encoder_2 A  PB7 / TIM4_CH2
 ```
 
-Encoder values enter the observation model as raw wrapping timer counts. Angular scale and platform-positive sign are configuration parameters rather than board-pin properties.
+Encoder values enter the observation model as raw wrapping timer counts. Angular scale and robot-positive sign are configuration parameters rather than board-pin properties.
 
 ## Battery sensing
 

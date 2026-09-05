@@ -20,7 +20,7 @@
 | BLDC_3 enable | hard-wired 3.3 V | `EN_BLDC_3` |
 | Encoder_3 A/B | no MCU route | BLDC_3 connector only |
 
-Platform-role mapping:
+Robot-role mapping:
 
 ```text
 BLDC_1 / Encoder_1 -> ReactionWheel

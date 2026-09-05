@@ -1,7 +1,7 @@
 #![no_std]
 
 use swp_board_one_v2::{EncoderChannel, MotorChannel};
-use swp_platform_domain::Actuator;
+use swp_robot_domain::Actuator;
 
 /// Physical population state of one PCB motor interface in the inspected unit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,7 +25,7 @@ pub struct EncoderAssociation {
     pub actuator: Actuator,
 }
 
-/// Verified assembly topology for the inspected platform.
+/// Verified assembly topology for the inspected robot.
 ///
 /// Schematic BLDC_1 is the PCB connector silked M2 and is physically traced to
 /// the upper reaction-wheel motor. Schematic BLDC_2 is the PCB connector silked
