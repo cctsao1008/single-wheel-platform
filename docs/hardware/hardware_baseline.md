@@ -4,17 +4,24 @@ Current reference hardware information supports the following platform-level com
 
 - **MCU:** STM32F103C8T6-class controller,
 - **IMU:** MPU6050,
-- **lateral actuator mechanism:** reaction-wheel / flywheel assembly,
-- **longitudinal actuator mechanism:** lower motor / ground-contact drive path pending final mechanical-role confirmation,
-- **motor interfaces:** three PCB brushless connectors (`M1`, `M2`, `M3` / schematic `BLDC_1..3`),
-- **current inspected assembly:** `M1` and `M2` are cabled; `M3` is physically present but unconnected,
-- **feedback:** encoder signals associated with motor / wheel motion,
+- **reaction-wheel actuator:** upper motor driving the large metal flywheel,
+- **ground-drive actuator:** lower Nidec 24H404H-160 driving the ground-contact wheel,
+- **motor interfaces:** three PCB brushless interfaces exist electrically, but only two are populated in the inspected assembly,
+- **verified physical mapping:** PCB `M2` / schematic `BLDC_1` -> reaction wheel; PCB `M1` / schematic `BLDC_2` -> drive wheel; PCB `M3` / schematic `BLDC_3` -> unconnected,
+- **feedback:** Encoder 1 is associated with the reaction-wheel motor path; Encoder 2 with the drive-wheel motor path,
 - **communication:** UART-class interfaces including USB-UART / wireless serial capability,
 - **local UI:** OLED-class display interface,
 - **power:** nominal battery-powered embedded platform with motor and logic rails.
 
-The third motor channel is therefore a **PCB capability**, not an installed actuator in the currently inspected physical plant. The robot-domain model must not infer an actuator merely because a schematic connector exists.
+The third motor channel is therefore a **PCB capability**, not an installed actuator in the currently inspected physical plant. The verified robot-domain actuator set for this unit is exactly:
 
-Exact connector numbering, MCU pin mapping, timer-channel mapping, motor polarity, encoder polarity, and robot-role mapping remain hardware / mechanical integration properties and must be established before controller code depends on them.
+```text
+ReactionWheel
+DriveWheel
+```
 
-See `assembly_observation_2026-09-05.md` for physical observations from the assembled robot.
+The board-level connector names, installed assembly, and robot-domain roles remain separate architectural facts. `swp-board-one-v2` owns schematic/PCB wiring; `swp-reference-assembly` owns the confirmed physical population and role mapping.
+
+Still-unresolved commissioning properties include motor PWM active polarity, direction polarity, encoder sign, encoder mechanical scale, battery-divider scaling, MCU crystal frequency, and the MPU6050 sensor-frame-to-body-frame transform.
+
+See `assembly_observation_2026-09-05.md` for the physical inspection evidence.
