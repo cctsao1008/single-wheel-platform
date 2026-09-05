@@ -26,15 +26,18 @@ mod app {
     };
     use swp_board_one_v2 as board;
     use swp_mpu6050::{AccelRange, Config as MpuConfig, Dlpf, GyroRange, Mpu6050, RawSample};
-    use swp_plant_observation::{ObservationFlags, RawImuObservation, RawObservation};
+    use swp_observation_record::{RAW_OBSERVATION_RECORD_LEN, RecordedObservation};
+    use swp_plant_observation::{
+        AcquisitionStatus, MeasurementQuality, RawBatteryObservation, RawEncoderObservation,
+        RawImuObservation, RawObservation, TimestampEvidence,
+    };
     use swp_software_i2c::SoftwareI2c;
-    use swp_telemetry_protocol::{SENSOR_SNAPSHOT_FRAME_LEN, SensorSnapshotFrame};
 
     const CPU_HZ: u64 = 8_000_000;
     const CYCLES_PER_US: u64 = CPU_HZ / 1_000_000;
     const SAMPLE_PERIOD_MS: u32 = 10;
-    const TELEMETRY_BAUD: u32 = 115_200;
-    const TELEMETRY_QUEUE_STORAGE: usize = 8;
+    const RECORD_BAUD: u32 = 115_200;
+    const RECORD_QUEUE_STORAGE: usize = 8;
 
     type ImuBus = SoftwareI2c<PB8<Output<OpenDrain>>, PB9<Output<OpenDrain>>, SysDelay>;
     type Imu = Mpu6050<ImuBus>;
@@ -43,35 +46,35 @@ mod app {
     type BatteryAdc = Adc<pac::ADC1>;
     type BatteryAdcPin = PA5<Analog>;
     type SampleTimer = CounterMs<pac::TIM1>;
-    type TelemetryTx = Tx<pac::USART1>;
-    type TelemetryProducer =
-        Producer<'static, [u8; SENSOR_SNAPSHOT_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
-    type TelemetryConsumer =
-        Consumer<'static, [u8; SENSOR_SNAPSHOT_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
+    type RecordTx = Tx<pac::USART1>;
+    type RecordProducer =
+        Producer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
+    type RecordConsumer =
+        Consumer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
 
-    struct TelemetryPump {
-        tx: TelemetryTx,
-        consumer: TelemetryConsumer,
-        current_frame: Option<[u8; SENSOR_SNAPSHOT_FRAME_LEN]>,
-        frame_index: usize,
+    struct UartRecordPump {
+        tx: RecordTx,
+        consumer: RecordConsumer,
+        current_record: Option<[u8; RAW_OBSERVATION_RECORD_LEN]>,
+        record_index: usize,
     }
 
-    impl TelemetryPump {
-        fn new(tx: TelemetryTx, consumer: TelemetryConsumer) -> Self {
+    impl UartRecordPump {
+        fn new(tx: RecordTx, consumer: RecordConsumer) -> Self {
             Self {
                 tx,
                 consumer,
-                current_frame: None,
-                frame_index: 0,
+                current_record: None,
+                record_index: 0,
             }
         }
 
         fn on_interrupt(&mut self) {
-            if self.current_frame.is_none() {
-                self.current_frame = self.consumer.dequeue();
-                self.frame_index = 0;
+            if self.current_record.is_none() {
+                self.current_record = self.consumer.dequeue();
+                self.record_index = 0;
 
-                if self.current_frame.is_none() {
+                if self.current_record.is_none() {
                     self.tx.unlisten();
                     return;
                 }
@@ -82,16 +85,16 @@ mod app {
                 return;
             }
 
-            let Some(frame) = self.current_frame.as_ref() else {
+            let Some(record) = self.current_record.as_ref() else {
                 self.tx.unlisten();
                 return;
             };
 
-            if self.tx.write_u8(frame[self.frame_index]).is_ok() {
-                self.frame_index += 1;
-                if self.frame_index == SENSOR_SNAPSHOT_FRAME_LEN {
-                    self.current_frame = None;
-                    self.frame_index = 0;
+            if self.tx.write_u8(record[self.record_index]).is_ok() {
+                self.record_index += 1;
+                if self.record_index == RAW_OBSERVATION_RECORD_LEN {
+                    self.current_record = None;
+                    self.record_index = 0;
                 }
             }
 
@@ -110,18 +113,18 @@ mod app {
         battery_adc: BatteryAdc,
         battery_adc_pin: BatteryAdcPin,
         sample_timer: SampleTimer,
-        telemetry_producer: TelemetryProducer,
-        telemetry_pump: TelemetryPump,
+        record_producer: RecordProducer,
+        record_pump: UartRecordPump,
         bus_ready: bool,
         imu_present: bool,
         imu_configured: bool,
         sequence: u32,
-        dropped_frames: u16,
+        dropped_records: u16,
         last_cycle: u32,
         cycle_epoch: u64,
     }
 
-    #[init(local = [telemetry_queue: Queue<[u8; SENSOR_SNAPSHOT_FRAME_LEN], 8> = Queue::new()])]
+    #[init(local = [record_queue: Queue<[u8; RAW_OBSERVATION_RECORD_LEN], 8> = Queue::new()])]
     fn init(ctx: init::Context) -> (Shared, Local) {
         let mut dcb = ctx.core.DCB;
         let mut dwt = ctx.core.DWT;
@@ -163,25 +166,18 @@ mod app {
                 })
                 .is_ok();
 
-        // HAL QEI tuples are ordered CH1, CH2. On this PCB those are the
-        // schematic B, A nets respectively; raw count direction is therefore
-        // reported without inventing a robot-positive sign convention.
         let encoder_1 = Timer::new(ctx.device.TIM2, &mut rcc)
             .qei((gpioa.pa0, gpioa.pa1), QeiOptions::default());
         let encoder_2 = Timer::new(ctx.device.TIM4, &mut rcc)
             .qei((gpiob.pb6, gpiob.pb7), QeiOptions::default());
 
-        // PA5 is the schematic divider node ADC. Divider resistor values are
-        // not present in the reviewed drawing, so firmware exposes raw counts.
         let battery_adc_pin = gpioa.pa5.into_analog(&mut gpioa.crl);
         let battery_adc = Adc::new(ctx.device.ADC1, &mut rcc);
 
-        // USART1 TX is PA9 / schematic net TX. The onboard CH340 pair is
-        // separate on P2 and is not assumed to be cross-connected here.
         let uart_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-        let telemetry_tx = ctx.device.USART1.tx(
+        let record_tx = ctx.device.USART1.tx(
             uart_tx,
-            SerialConfig::default().baudrate(TELEMETRY_BAUD.bps()),
+            SerialConfig::default().baudrate(RECORD_BAUD.bps()),
             &mut rcc,
         );
 
@@ -189,12 +185,13 @@ mod app {
         sample_timer.start(SAMPLE_PERIOD_MS.millis()).unwrap();
         sample_timer.listen(Event::Update);
 
-        let (telemetry_producer, telemetry_consumer) = ctx.local.telemetry_queue.split();
-        let telemetry_pump = TelemetryPump::new(telemetry_tx, telemetry_consumer);
+        let (record_producer, record_consumer) = ctx.local.record_queue.split();
+        let record_pump = UartRecordPump::new(record_tx, record_consumer);
         let last_cycle = DWT::cycle_count();
 
-        // TIM3 and all motor GPIO remain untouched. This runtime only observes
-        // the plant through IMU, encoders, battery ADC, and telemetry.
+        // TIM3 and all motor GPIO remain untouched. The current executable path
+        // acquires evidence and records it without assigning unverified robot
+        // semantics or energizing an actuator.
         (
             Shared {},
             Local {
@@ -204,13 +201,13 @@ mod app {
                 battery_adc,
                 battery_adc_pin,
                 sample_timer,
-                telemetry_producer,
-                telemetry_pump,
+                record_producer,
+                record_pump,
                 bus_ready,
                 imu_present,
                 imu_configured,
                 sequence: 0,
-                dropped_frames: 0,
+                dropped_records: 0,
                 last_cycle,
                 cycle_epoch: 0,
             },
@@ -234,76 +231,139 @@ mod app {
             battery_adc,
             battery_adc_pin,
             sample_timer,
-            telemetry_producer,
+            record_producer,
             bus_ready,
             imu_present,
             imu_configured,
             sequence,
-            dropped_frames,
+            dropped_records,
             last_cycle,
             cycle_epoch
         ]
     )]
     fn sample_tick(ctx: sample_tick::Context) {
-        let timestamp_us = capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
+        let acquisition_started_us =
+            capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
 
-        let mut validity = ObservationFlags::ENCODER_1_VALID | ObservationFlags::ENCODER_2_VALID;
+        let mut acquisition_status = AcquisitionStatus::NONE;
         if *ctx.local.bus_ready {
-            validity |= ObservationFlags::BUS_READY;
+            acquisition_status |= AcquisitionStatus::BUS_READY;
         }
         if *ctx.local.imu_present {
-            validity |= ObservationFlags::IMU_PRESENT;
+            acquisition_status |= AcquisitionStatus::IMU_PRESENT;
         }
         if *ctx.local.imu_configured {
-            validity |= ObservationFlags::IMU_CONFIGURED;
+            acquisition_status |= AcquisitionStatus::IMU_CONFIGURED;
         }
 
         let mut sample = RawSample::default();
+        let mut imu_quality = MeasurementQuality::NONE;
+        let mut imu_read_started_at_us = TimestampEvidence::Unknown;
+        let mut imu_read_completed_at_us = TimestampEvidence::Unknown;
         if *ctx.local.imu_configured {
-            if let Ok(value) = ctx.local.imu.read_raw() {
-                sample = value;
-                validity |= ObservationFlags::IMU_SAMPLE_VALID;
+            imu_read_started_at_us = TimestampEvidence::Known(capture_timestamp_us(
+                ctx.local.last_cycle,
+                ctx.local.cycle_epoch,
+            ));
+            match ctx.local.imu.read_raw() {
+                Ok(value) => {
+                    sample = value;
+                    imu_quality = MeasurementQuality::AVAILABLE | MeasurementQuality::IO_OK;
+                }
+                Err(_) => {
+                    imu_quality = MeasurementQuality::IO_ERROR;
+                }
             }
+            imu_read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(
+                ctx.local.last_cycle,
+                ctx.local.cycle_epoch,
+            ));
         }
 
-        let encoder_counts = [ctx.local.encoder_1.count(), ctx.local.encoder_2.count()];
-        let battery_adc_raw = match ctx.local.battery_adc.read(ctx.local.battery_adc_pin) {
-            Ok(value) => {
-                validity |= ObservationFlags::BATTERY_ADC_VALID;
-                value
-            }
-            Err(_) => 0,
-        };
+        let encoder_1_count = ctx.local.encoder_1.count();
+        let encoder_1_captured_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.last_cycle,
+            ctx.local.cycle_epoch,
+        ));
+        let encoder_2_count = ctx.local.encoder_2.count();
+        let encoder_2_captured_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.last_cycle,
+            ctx.local.cycle_epoch,
+        ));
+        let encoder_quality = MeasurementQuality::AVAILABLE
+            | MeasurementQuality::IO_OK
+            | MeasurementQuality::TIMING_VALID;
+
+        let (battery_adc_raw, battery_quality) =
+            match ctx.local.battery_adc.read(ctx.local.battery_adc_pin) {
+                Ok(value) => (
+                    value,
+                    MeasurementQuality::AVAILABLE | MeasurementQuality::IO_OK,
+                ),
+                Err(_) => (0, MeasurementQuality::IO_ERROR),
+            };
+        let battery_read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.last_cycle,
+            ctx.local.cycle_epoch,
+        ));
+
+        let acquisition_completed_us =
+            capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
 
         let observation = RawObservation {
             sample_index: *ctx.local.sequence,
-            timestamp_us,
+            acquisition_started_us,
+            acquisition_completed_us,
             imu: RawImuObservation {
+                // The MPU6050 internal sample time is intentionally unknown on
+                // this board because DRDY is not routed to the MCU.
+                source_sample_at_us: TimestampEvidence::Unknown,
+                read_started_at_us: imu_read_started_at_us,
+                read_completed_at_us: imu_read_completed_at_us,
                 accel_raw: sample.accel,
                 temperature_raw: sample.temperature,
                 gyro_raw: sample.gyro,
+                quality: imu_quality,
             },
-            encoder_counts,
-            battery_adc_raw,
-            validity,
+            encoders: [
+                RawEncoderObservation {
+                    captured_at_us: encoder_1_captured_at_us,
+                    count: encoder_1_count,
+                    quality: encoder_quality,
+                },
+                RawEncoderObservation {
+                    captured_at_us: encoder_2_captured_at_us,
+                    count: encoder_2_count,
+                    quality: encoder_quality,
+                },
+            ],
+            battery: RawBatteryObservation {
+                read_completed_at_us: battery_read_completed_at_us,
+                adc_raw: battery_adc_raw,
+                quality: battery_quality,
+            },
+            acquisition_status,
         };
 
-        let frame =
-            SensorSnapshotFrame::from_observation(observation, *ctx.local.dropped_frames).encode();
+        let record = RecordedObservation {
+            observation,
+            dropped_records: *ctx.local.dropped_records,
+        }
+        .encode();
 
-        if ctx.local.telemetry_producer.enqueue(frame).is_ok() {
+        if ctx.local.record_producer.enqueue(record).is_ok() {
             rtic::pend(pac::Interrupt::USART1);
         } else {
-            *ctx.local.dropped_frames = ctx.local.dropped_frames.saturating_add(1);
+            *ctx.local.dropped_records = ctx.local.dropped_records.saturating_add(1);
         }
 
         *ctx.local.sequence = ctx.local.sequence.wrapping_add(1);
         ctx.local.sample_timer.clear_interrupt(Event::Update);
     }
 
-    #[task(binds = USART1, priority = 1, local = [telemetry_pump])]
-    fn telemetry_tx(ctx: telemetry_tx::Context) {
-        ctx.local.telemetry_pump.on_interrupt();
+    #[task(binds = USART1, priority = 1, local = [record_pump])]
+    fn record_tx(ctx: record_tx::Context) {
+        ctx.local.record_pump.on_interrupt();
     }
 
     fn capture_timestamp_us(last_cycle: &mut u32, cycle_epoch: &mut u64) -> u64 {

@@ -14,7 +14,7 @@ rtic.workspace = true
 stm32f1xx-hal.workspace = true
 swp-board-one-v2 = { path = "../../crates/board-one-v2" }
 swp-mpu6050 = { path = "../../crates/mpu6050" }
+swp-observation-record = { path = "../../crates/observation-record" }
 swp-plant-observation = { path = "../../crates/plant-observation" }
 swp-robot-domain = { path = "../../crates/robot-domain" }
 swp-software-i2c = { path = "../../crates/software-i2c" }
-swp-telemetry-protocol = { path = "../../crates/telemetry-protocol" }
