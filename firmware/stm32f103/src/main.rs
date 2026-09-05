@@ -17,9 +17,7 @@ mod app {
         timer::{CounterMs, Event, SysDelay},
     };
     use swp_board_one_v2 as board;
-    use swp_mpu6050::{
-        AccelRange, Config as MpuConfig, Dlpf, GyroRange, Mpu6050, RawSample,
-    };
+    use swp_mpu6050::{AccelRange, Config as MpuConfig, Dlpf, GyroRange, Mpu6050, RawSample};
     use swp_software_i2c::SoftwareI2c;
     use swp_telemetry_protocol::{RAW_IMU_FRAME_LEN, RawImuFrame, status};
 
@@ -33,10 +31,8 @@ mod app {
     type Imu = Mpu6050<ImuBus>;
     type SampleTimer = CounterMs<pac::TIM1>;
     type TelemetryTx = Tx<pac::USART1>;
-    type TelemetryProducer =
-        Producer<'static, [u8; RAW_IMU_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
-    type TelemetryConsumer =
-        Consumer<'static, [u8; RAW_IMU_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
+    type TelemetryProducer = Producer<'static, [u8; RAW_IMU_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
+    type TelemetryConsumer = Consumer<'static, [u8; RAW_IMU_FRAME_LEN], TELEMETRY_QUEUE_STORAGE>;
 
     struct TelemetryPump {
         tx: TelemetryTx,
@@ -155,9 +151,7 @@ mod app {
         // USART1 TX is the schematic net TX on PA9. The onboard CH340 nets are
         // separate at P2; using CH340 as the host bridge requires external
         // cross-connection and is not assumed by firmware.
-        let uart_tx = gpioa
-            .pa9
-            .into_alternate_push_pull(&mut gpioa.crh);
+        let uart_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
         let telemetry_tx = ctx.device.USART1.tx(
             uart_tx,
             SerialConfig::default().baudrate(TELEMETRY_BAUD.bps()),
