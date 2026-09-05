@@ -12,7 +12,7 @@ The reference platform combines three physical actuation paths:
 - **Pitch / longitudinal balance** — ground-contact drive-wheel actuation.
 - **Yaw / spin** — a third actuation path whose control authority and coupling are treated as plant properties to characterize.
 
-State feedback is provided by an MPU6050-class IMU and wheel encoders on the reference hardware.
+State information is derived from an MPU6050-class IMU and wheel encoders on the reference hardware.
 
 ## Architecture
 
