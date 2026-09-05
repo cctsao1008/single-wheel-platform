@@ -46,7 +46,7 @@ mod app {
     type BatteryAdc = Adc<pac::ADC1>;
     type BatteryAdcPin = PA5<Analog>;
     type SampleTimer = CounterMs<pac::TIM1>;
-    type RecordTx = Tx<pac::USART1>;
+    type RecordTx = Tx<pac::USART2>;
     type RecordProducer = Producer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
     type RecordConsumer = Consumer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
 
@@ -172,9 +172,9 @@ mod app {
         let battery_adc_pin = gpioa.pa5.into_analog(&mut gpioa.crl);
         let battery_adc = Adc::new(ctx.device.ADC1, &mut rcc);
 
-        let uart_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-        let record_tx = ctx.device.USART1.tx(
-            uart_tx,
+        let bluetooth_tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
+        let record_tx = ctx.device.USART2.tx(
+            bluetooth_tx,
             SerialConfig::default().baudrate(RECORD_BAUD.bps()),
             &mut rcc,
         );
@@ -187,9 +187,8 @@ mod app {
         let record_pump = UartRecordPump::new(record_tx, record_consumer);
         let last_cycle = DWT::cycle_count();
 
-        // TIM3 and all motor GPIO remain untouched. The current executable path
-        // acquires evidence and records it without assigning unverified robot
-        // semantics or energizing an actuator.
+        // TIM3 and all motor GPIO remain untouched. The runtime only acquires
+        // physical evidence and emits canonical records over USART2 to ECB02S2.
         (
             Shared {},
             Local {
@@ -350,7 +349,7 @@ mod app {
         .encode();
 
         if ctx.local.record_producer.enqueue(record).is_ok() {
-            rtic::pend(pac::Interrupt::USART1);
+            rtic::pend(pac::Interrupt::USART2);
         } else {
             *ctx.local.dropped_records = ctx.local.dropped_records.saturating_add(1);
         }
@@ -359,7 +358,7 @@ mod app {
         ctx.local.sample_timer.clear_interrupt(Event::Update);
     }
 
-    #[task(binds = USART1, priority = 1, local = [record_pump])]
+    #[task(binds = USART2, priority = 1, local = [record_pump])]
     fn record_tx(ctx: record_tx::Context) {
         ctx.local.record_pump.on_interrupt();
     }

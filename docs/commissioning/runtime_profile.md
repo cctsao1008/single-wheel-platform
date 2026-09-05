@@ -33,15 +33,19 @@ Encoder values are raw wrapping timer counts. Battery values are raw ADC convers
 ## Recording transport
 
 ```text
-USART1 TX      PA9
+USART2 TX      PA2
 baud           115200
+module         ECB02S2
+transport      BLE transparent UART
 queue          heapless SPSC
-TX service     USART1 TXE interrupt
+TX service     USART2 TXE interrupt
 ```
 
-The acquisition task owns sampling and record enqueue. USART1 byte transmission runs at lower RTIC priority.
+The acquisition task owns sampling and record enqueue. USART2 byte transmission runs at lower RTIC priority.
 
-Each `RecordedObservation` is 80 bytes and CRC16-CCITT-FALSE protected.
+Each `RecordedObservation` is 80 bytes and CRC16-CCITT-FALSE protected. Sequence number and cumulative dropped-record count remain part of the record contract so the host can detect wireless loss and firmware queue pressure independently.
+
+USART1 remains available as a wired engineering interface but is not the active recording transport in this runtime profile.
 
 ## Actuation state
 

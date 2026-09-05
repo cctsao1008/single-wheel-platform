@@ -143,8 +143,8 @@ PB8/PB9       software I2C -> MPU6050
 TIM2          Encoder_1 QEI
 TIM4          Encoder_2 QEI
 ADC1 / PA5    battery ADC
-USART1        recording transport
-USART2        ECB02S2 commissioning transport
+USART2        ECB02S2 wireless record transport
+USART1        wired engineering interface
 PB4/PB5       OLED status interface
 ```
 
@@ -153,14 +153,16 @@ Control/acquisition work does not block on UART, BLE, display rendering, storage
 ## Interface roles
 
 ```text
-USART1
-    wired recording / engineering transport
-
 USART2 + ECB02S2
-    validated commissioning commands
+    wireless `RecordedObservation` transport for the mobile platform
+
+USART1
+    wired bench / engineering interface
 
 OLED
-    local status
+    optional local status interface
 ```
+
+The host-side BLE observer reassembles the byte stream independently of BLE packet boundaries and preserves the canonical binary records for decode and replay.
 
 Transport and UI components may observe state or submit validated requests; they do not own physical semantics or bypass runtime authority.

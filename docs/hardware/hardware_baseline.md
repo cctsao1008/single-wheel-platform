@@ -46,9 +46,23 @@ EN_X                 PA15
 EN_Y                 PB3
 ```
 
-USART1 is the wired recording/engineering transport. USART2 is the BLE commissioning transport. OLED is the local status interface.
+USART2 is the active wireless recording/observation transport through the on-board ECB02S2 BLE module. USART1 is retained as a wired bench/engineering interface. OLED is an optional local status interface.
 
 `EN_X` and `EN_Y` are MCU inputs and are distinct from `EN_BLDC_1/2/3`, which are hard-wired high at the motor interfaces.
+
+## Bluetooth module
+
+```text
+module protocol       Bluetooth 5.2 BLE
+module UART           115200 8N1
+MCU TX -> module RX   PA2
+MCU RX <- module TX   PA3
+SLEEP                  hard-wired low / awake
+ROLE                   high or floating = Peripheral
+AT_EN                  high or floating = transparent data while connected
+```
+
+The runtime streams binary `RecordedObservation` bytes through USART2. BLE packet boundaries do not define record boundaries.
 
 ## IMU wiring
 
@@ -93,7 +107,7 @@ battery nominal         11.1 V
 battery full            12.6 V
 battery mass            107 g
 reaction-wheel motor    12 V / 10 W / 3000 rpm / 0.085 N·m / 1 A stall
- drive-wheel motor       12 V / 3000 rpm / 0.075 N·m / 1 A stall
+drive-wheel motor       12 V / 3000 rpm / 0.075 N·m / 1 A stall
 encoder specification   100 lines per installed motor
 ```
 
