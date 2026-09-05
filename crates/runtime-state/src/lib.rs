@@ -60,10 +60,7 @@ pub struct ReactionWheelSpeedLimits {
 }
 
 impl ReactionWheelSpeedLimits {
-    pub fn new(
-        warning_abs_rad_per_sec: f32,
-        hard_abs_rad_per_sec: f32,
-    ) -> Option<Self> {
+    pub fn new(warning_abs_rad_per_sec: f32, hard_abs_rad_per_sec: f32) -> Option<Self> {
         if warning_abs_rad_per_sec.is_finite()
             && hard_abs_rad_per_sec.is_finite()
             && warning_abs_rad_per_sec > 0.0

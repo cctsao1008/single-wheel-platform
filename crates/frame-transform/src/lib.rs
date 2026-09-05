@@ -163,12 +163,9 @@ mod tests {
     #[test]
     fn proper_signed_axis_rotation_is_accepted_and_applied() {
         // body +X <- sensor +Y, body +Y <- sensor -X, body +Z <- sensor +Z
-        let rotation = SensorToBodyRotation::new([
-            [0.0, 1.0, 0.0],
-            [-1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ])
-        .unwrap();
+        let rotation =
+            SensorToBodyRotation::new([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+                .unwrap();
 
         assert_eq!(rotation.apply([1.0, 2.0, 3.0]), [2.0, -1.0, 3.0]);
     }
@@ -176,35 +173,23 @@ mod tests {
     #[test]
     fn reflection_is_rejected() {
         assert!(
-            SensorToBodyRotation::new([
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, -1.0],
-            ])
-            .is_none()
+            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0],])
+                .is_none()
         );
     }
 
     #[test]
     fn non_orthonormal_transform_is_rejected() {
         assert!(
-            SensorToBodyRotation::new([
-                [1.0, 0.0, 0.0],
-                [1.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ])
-            .is_none()
+            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 0.0, 1.0],])
+                .is_none()
         );
     }
 
     #[test]
     fn mapping_preserves_timing_quality_and_evidence() {
-        let rotation = SensorToBodyRotation::new([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ])
-        .unwrap();
+        let rotation =
+            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]).unwrap();
         let frame_evidence = FrameEvidence {
             revision: 3,
             basis: FrameEvidenceBasis::PhysicalTiltTest,
@@ -221,12 +206,8 @@ mod tests {
     fn missing_calibration_evidence_blocks_body_semantics() {
         let mut input = calibrated();
         input.calibration_evidence = None;
-        let rotation = SensorToBodyRotation::new([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ])
-        .unwrap();
+        let rotation =
+            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]).unwrap();
 
         assert_eq!(
             map_calibrated_imu_to_body(
