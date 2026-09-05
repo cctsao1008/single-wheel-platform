@@ -8,8 +8,10 @@ use panic_halt as _;
 mod app {
     use cortex_m::peripheral::DWT;
     use heapless::spsc::{Consumer, Producer, Queue};
+    use rtic::Mutex;
     use stm32f1xx_hal::{
         adc::Adc,
+        dma::{Event as DmaEvent, R as DmaRead, Transfer},
         gpio::{
             Analog, Edge, ExtiPin, Floating, Input, OpenDrain, Output, PinState,
             gpioa::PA5,
@@ -19,9 +21,9 @@ mod app {
         pac,
         prelude::*,
         rcc,
-        serial::{Config as SerialConfig, Tx},
+        serial::{Config as SerialConfig, TxDma2},
         timer::{
-            SysDelay, Timer,
+            CounterMs, Event as TimerEvent, SysDelay, Timer,
             pwm_input::{Qei, QeiOptions},
         },
     };
@@ -32,12 +34,18 @@ mod app {
         AcquisitionStatus, MeasurementQuality, RawBatteryObservation, RawEncoderObservation,
         RawImuObservation, RawObservation, TimestampEvidence,
     };
+    use swp_runtime_state::{SensorTimingHealth, SensorTimingLimits, SensorTimingMonitor};
     use swp_software_i2c::SoftwareI2c;
 
     const CPU_HZ: u64 = 72_000_000;
     const CYCLES_PER_US: u64 = CPU_HZ / 1_000_000;
 
     const MPU_ACQUISITION_HZ: u16 = 500;
+    const MPU_EXPECTED_PERIOD_US: u32 = 2_000;
+    const MPU_LATE_AFTER_US: u32 = 3_000;
+    const MPU_TIMEOUT_AFTER_US: u32 = 6_000;
+    const HEALTH_PERIOD_MS: u32 = 1;
+
     const OBSERVATION_DECIMATION: u8 = 5;
     const I2C_HALF_PERIOD_NS: u32 = 1_250;
 
@@ -51,62 +59,73 @@ mod app {
     type Encoder2 = Qei<pac::TIM4>;
     type BatteryAdc = Adc<pac::ADC1>;
     type BatteryAdcPin = PA5<Analog>;
-    type RecordTx = Tx<pac::USART2>;
+    type HealthTimer = CounterMs<pac::TIM1>;
+    type RecordDma = TxDma2;
+    type RecordTransfer =
+        Transfer<DmaRead, &'static mut [u8; RAW_OBSERVATION_RECORD_LEN], RecordDma>;
     type RecordProducer = Producer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
     type RecordConsumer = Consumer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
 
-    struct UartRecordPump {
-        tx: RecordTx,
-        consumer: RecordConsumer,
-        current_record: Option<[u8; RAW_OBSERVATION_RECORD_LEN]>,
-        record_index: usize,
+    enum RecordDmaState {
+        Idle {
+            dma: RecordDma,
+            buffer: &'static mut [u8; RAW_OBSERVATION_RECORD_LEN],
+        },
+        Active(RecordTransfer),
     }
 
-    impl UartRecordPump {
-        fn new(tx: RecordTx, consumer: RecordConsumer) -> Self {
+    struct UartRecordDmaPump {
+        consumer: RecordConsumer,
+        state: Option<RecordDmaState>,
+    }
+
+    impl UartRecordDmaPump {
+        fn new(
+            mut dma: RecordDma,
+            consumer: RecordConsumer,
+            buffer: &'static mut [u8; RAW_OBSERVATION_RECORD_LEN],
+        ) -> Self {
+            dma.channel.listen(DmaEvent::TransferComplete);
             Self {
-                tx,
                 consumer,
-                current_record: None,
-                record_index: 0,
+                state: Some(RecordDmaState::Idle { dma, buffer }),
             }
         }
 
         fn on_interrupt(&mut self) {
-            if self.current_record.is_none() {
-                self.current_record = self.consumer.dequeue();
-                self.record_index = 0;
-
-                if self.current_record.is_none() {
-                    self.tx.unlisten();
-                    return;
-                }
-            }
-
-            if !self.tx.is_tx_empty() {
-                self.tx.listen();
-                return;
-            }
-
-            let Some(record) = self.current_record.as_ref() else {
-                self.tx.unlisten();
+            let Some(state) = self.state.take() else {
                 return;
             };
 
-            if self.tx.write_u8(record[self.record_index]).is_ok() {
-                self.record_index += 1;
-                if self.record_index == RAW_OBSERVATION_RECORD_LEN {
-                    self.current_record = None;
-                    self.record_index = 0;
+            let idle = match state {
+                RecordDmaState::Active(transfer) => {
+                    if !transfer.is_done() {
+                        self.state = Some(RecordDmaState::Active(transfer));
+                        return;
+                    }
+                    let (buffer, dma) = transfer.wait();
+                    RecordDmaState::Idle { dma, buffer }
                 }
-            }
+                idle @ RecordDmaState::Idle { .. } => idle,
+            };
 
-            self.tx.listen();
+            let RecordDmaState::Idle { dma, buffer } = idle else {
+                unreachable!();
+            };
+
+            if let Some(record) = self.consumer.dequeue() {
+                buffer.copy_from_slice(&record);
+                self.state = Some(RecordDmaState::Active(dma.write(buffer)));
+            } else {
+                self.state = Some(RecordDmaState::Idle { dma, buffer });
+            }
         }
     }
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        imu_timing_monitor: SensorTimingMonitor,
+    }
 
     #[local]
     struct Local {
@@ -116,19 +135,25 @@ mod app {
         encoder_2: Encoder2,
         battery_adc: BatteryAdc,
         battery_adc_pin: BatteryAdcPin,
+        health_timer: HealthTimer,
         record_producer: RecordProducer,
-        record_pump: UartRecordPump,
+        record_pump: UartRecordDmaPump,
         bus_ready: bool,
         imu_present: bool,
         imu_configured: bool,
         observation_divider: u8,
         sequence: u32,
         dropped_records: u16,
-        last_cycle: u32,
-        cycle_epoch: u64,
+        imu_last_cycle: u32,
+        imu_cycle_epoch: u64,
+        health_last_cycle: u32,
+        health_cycle_epoch: u64,
     }
 
-    #[init(local = [record_queue: Queue<[u8; RAW_OBSERVATION_RECORD_LEN], 8> = Queue::new()])]
+    #[init(local = [
+        record_queue: Queue<[u8; RAW_OBSERVATION_RECORD_LEN], 8> = Queue::new(),
+        record_dma_buffer: [u8; RAW_OBSERVATION_RECORD_LEN] = [0; RAW_OBSERVATION_RECORD_LEN]
+    ])]
     fn init(mut ctx: init::Context) -> (Shared, Local) {
         let mut dcb = ctx.core.DCB;
         let mut dwt = ctx.core.DWT;
@@ -146,6 +171,7 @@ mod app {
         );
 
         let mut afio = ctx.device.AFIO.constrain(&mut rcc);
+        let dma_channels = ctx.device.DMA1.split(&mut rcc);
         let mut gpioa = ctx.device.GPIOA.split(&mut rcc);
         let mut gpiob = ctx.device.GPIOB.split(&mut rcc);
         let mut gpioc = ctx.device.GPIOC.split(&mut rcc);
@@ -196,16 +222,35 @@ mod app {
             SerialConfig::default().baudrate(RECORD_BAUD.bps()),
             &mut rcc,
         );
+        let record_dma = record_tx.with_dma(dma_channels.7);
+
+        let mut health_timer = ctx.device.TIM1.counter_ms(&mut rcc);
+        health_timer.start(HEALTH_PERIOD_MS.millis()).unwrap();
+        health_timer.listen(TimerEvent::Update);
 
         let (record_producer, record_consumer) = ctx.local.record_queue.split();
-        let record_pump = UartRecordPump::new(record_tx, record_consumer);
-        let last_cycle = DWT::cycle_count();
+        let record_pump = UartRecordDmaPump::new(
+            record_dma,
+            record_consumer,
+            ctx.local.record_dma_buffer,
+        );
+
+        let initial_cycle = DWT::cycle_count();
+        let timing_started_at_us = u64::from(initial_cycle) / CYCLES_PER_US;
+        let timing_limits = SensorTimingLimits::new(
+            MPU_EXPECTED_PERIOD_US,
+            MPU_LATE_AFTER_US,
+            MPU_TIMEOUT_AFTER_US,
+        )
+        .unwrap();
+        let imu_timing_monitor = SensorTimingMonitor::new(timing_limits, timing_started_at_us);
 
         // TIM3 and all motor GPIO remain untouched. MPU6050 DATA_RDY on PC13
         // defines the 500 Hz acquisition / estimator / inner-balance boundary.
-        // Canonical records are decimated to 100 Hz and emitted over USART2.
+        // TIM1 independently supervises that boundary; USART2 recording uses
+        // DMA1 channel 7 so telemetry cannot create a byte-rate interrupt load.
         (
-            Shared {},
+            Shared { imu_timing_monitor },
             Local {
                 imu,
                 imu_int,
@@ -213,6 +258,7 @@ mod app {
                 encoder_2,
                 battery_adc,
                 battery_adc_pin,
+                health_timer,
                 record_producer,
                 record_pump,
                 bus_ready,
@@ -221,8 +267,10 @@ mod app {
                 observation_divider: 0,
                 sequence: 0,
                 dropped_records: 0,
-                last_cycle,
-                cycle_epoch: 0,
+                imu_last_cycle: initial_cycle,
+                imu_cycle_epoch: 0,
+                health_last_cycle: initial_cycle,
+                health_cycle_epoch: 0,
             },
         )
     }
@@ -235,8 +283,26 @@ mod app {
     }
 
     #[task(
+        binds = TIM1_UP,
+        priority = 3,
+        shared = [imu_timing_monitor],
+        local = [health_timer, health_last_cycle, health_cycle_epoch]
+    )]
+    fn timing_health(mut ctx: timing_health::Context) {
+        ctx.local.health_timer.clear_interrupt(TimerEvent::Update);
+        let now_us = capture_timestamp_us(
+            ctx.local.health_last_cycle,
+            ctx.local.health_cycle_epoch,
+        );
+        ctx.shared
+            .imu_timing_monitor
+            .lock(|monitor| monitor.poll(now_us));
+    }
+
+    #[task(
         binds = EXTI15_10,
         priority = 2,
+        shared = [imu_timing_monitor],
         local = [
             imu,
             imu_int,
@@ -251,14 +317,19 @@ mod app {
             observation_divider,
             sequence,
             dropped_records,
-            last_cycle,
-            cycle_epoch
+            imu_last_cycle,
+            imu_cycle_epoch
         ]
     )]
-    fn imu_data_ready(ctx: imu_data_ready::Context) {
+    fn imu_data_ready(mut ctx: imu_data_ready::Context) {
         let acquisition_started_us =
-            capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
+            capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
         ctx.local.imu_int.clear_interrupt_pending_bit();
+
+        let timing_health = ctx
+            .shared
+            .imu_timing_monitor
+            .lock(|monitor| monitor.on_event(acquisition_started_us));
 
         let mut acquisition_status = AcquisitionStatus::NONE;
         if *ctx.local.bus_ready {
@@ -270,13 +341,15 @@ mod app {
         if *ctx.local.imu_configured {
             acquisition_status |= AcquisitionStatus::IMU_CONFIGURED;
             acquisition_status |= AcquisitionStatus::IMU_DATA_READY_IRQ_ENABLED;
+            acquisition_status |= AcquisitionStatus::IMU_DATA_READY_SEEN;
         }
+        acquisition_status |= timing_status(timing_health);
 
         let imu_read_started_at_us = TimestampEvidence::Known(capture_timestamp_us(
-            ctx.local.last_cycle,
-            ctx.local.cycle_epoch,
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
         ));
-        let (sample, imu_quality) = match ctx.local.imu.read_raw() {
+        let (sample, mut imu_quality) = match ctx.local.imu.read_raw() {
             Ok(value) => (
                 value,
                 MeasurementQuality::AVAILABLE
@@ -285,9 +358,14 @@ mod app {
             ),
             Err(_) => (RawSample::default(), MeasurementQuality::IO_ERROR),
         };
+        if timing_health == SensorTimingHealth::Healthy
+            && imu_quality.contains(MeasurementQuality::IO_OK)
+        {
+            imu_quality |= MeasurementQuality::TIMING_VALID;
+        }
         let imu_read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(
-            ctx.local.last_cycle,
-            ctx.local.cycle_epoch,
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
         ));
 
         *ctx.local.observation_divider += 1;
@@ -301,13 +379,13 @@ mod app {
         // recording decimation.
         let encoder_1_count = ctx.local.encoder_1.count();
         let encoder_1_captured_at_us = TimestampEvidence::Known(capture_timestamp_us(
-            ctx.local.last_cycle,
-            ctx.local.cycle_epoch,
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
         ));
         let encoder_2_count = ctx.local.encoder_2.count();
         let encoder_2_captured_at_us = TimestampEvidence::Known(capture_timestamp_us(
-            ctx.local.last_cycle,
-            ctx.local.cycle_epoch,
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
         ));
         let encoder_quality = MeasurementQuality::AVAILABLE
             | MeasurementQuality::IO_OK
@@ -322,12 +400,12 @@ mod app {
                 Err(_) => (0, MeasurementQuality::IO_ERROR),
             };
         let battery_read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(
-            ctx.local.last_cycle,
-            ctx.local.cycle_epoch,
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
         ));
 
         let acquisition_completed_us =
-            capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
+            capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
 
         let observation = RawObservation {
             sample_index: *ctx.local.sequence,
@@ -372,7 +450,7 @@ mod app {
         .encode();
 
         if ctx.local.record_producer.enqueue(record).is_ok() {
-            rtic::pend(pac::Interrupt::USART2);
+            rtic::pend(pac::Interrupt::DMA1_CHANNEL7);
         } else {
             *ctx.local.dropped_records = ctx.local.dropped_records.saturating_add(1);
         }
@@ -380,9 +458,18 @@ mod app {
         *ctx.local.sequence = ctx.local.sequence.wrapping_add(1);
     }
 
-    #[task(binds = USART2, priority = 1, local = [record_pump])]
-    fn record_tx(ctx: record_tx::Context) {
+    #[task(binds = DMA1_CHANNEL7, priority = 1, local = [record_pump])]
+    fn record_tx_dma(ctx: record_tx_dma::Context) {
         ctx.local.record_pump.on_interrupt();
+    }
+
+    fn timing_status(health: SensorTimingHealth) -> AcquisitionStatus {
+        match health {
+            SensorTimingHealth::Startup => AcquisitionStatus::NONE,
+            SensorTimingHealth::Healthy => AcquisitionStatus::IMU_TIMING_HEALTHY,
+            SensorTimingHealth::Late => AcquisitionStatus::IMU_TIMING_LATE,
+            SensorTimingHealth::Timeout => AcquisitionStatus::IMU_TIMING_TIMEOUT,
+        }
     }
 
     fn capture_timestamp_us(last_cycle: &mut u32, cycle_epoch: &mut u64) -> u64 {
