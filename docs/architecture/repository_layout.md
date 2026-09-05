@@ -1,6 +1,6 @@
 # Repository Layout
 
-The repository uses a Rust workspace. The old C/CMake layer split has been retired rather than retained as a compatibility shell.
+The repository uses a Rust workspace. Directory boundaries follow ownership and semantic meaning rather than a traditional BSP/middleware/application split.
 
 ```text
 Cargo.toml
@@ -10,19 +10,19 @@ rust-toolchain.toml
 
 crates/
   robot-domain/
-    src/lib.rs          Single-wheel physical state and actuator-domain types
+    src/lib.rs          Single-wheel physical/control-domain types
 
   plant-observation/
-    src/lib.rs          Raw plant evidence before calibration or coordinate mapping
+    src/lib.rs          Raw plant evidence, timing, and measurement quality
+
+  observation-record/
+    src/lib.rs          Deterministic binary record/replay contract
 
   mpu6050/
     src/lib.rs          Generic embedded-hal device driver
 
   software-i2c/
     src/lib.rs          Portable open-drain embedded-hal I2C implementation
-
-  telemetry-protocol/
-    src/lib.rs          Versioned binary telemetry transport format
 
   board-one-v2/
     src/lib.rs          Schematic-derived PCB wiring facts only
@@ -32,7 +32,7 @@ firmware/
     Cargo.toml
     build.rs
     memory.x
-    src/main.rs         RTIC application / peripheral ownership
+    src/main.rs         RTIC application / concrete peripheral ownership
 
 docs/
   architecture/
@@ -40,23 +40,23 @@ docs/
   commissioning/
 
 tools/
-  telemetry/            Host-side capture decoding and analysis
+  recording/            Canonical record decode and deterministic replay
 ```
 
-The important boundary is semantic rather than directory depth:
+The dependency meanings are:
 
 ```text
-robot-domain       knows the single-wheel plant, not STM32
-plant-observation  carries raw evidence, not calibrated robot meaning
-mpu6050            knows the sensor, not the board or controller
-software-i2c       implements the standard I2C contract, not board wiring
-telemetry-protocol serializes observations, but does not own acquisition
-board-one-v2       knows PCB channels and pins, not robot actuator roles
-firmware           owns STM32 peripherals and composes the above pieces
-stm32f1xx-hal      owns STM32F1 peripheral access
-RTIC               owns the real-time task/resource model
+robot-domain        knows the single-wheel plant, not STM32
+plant-observation   carries raw evidence and uncertainty, not robot interpretation
+observation-record  serializes observation evidence for recording/replay
+mpu6050             knows the sensor, not the board or controller
+software-i2c        implements the standard I2C contract, not board wiring
+board-one-v2        knows PCB channels and pins, not robot actuator roles
+firmware            owns STM32 peripherals and composes runtime acquisition
+stm32f1xx-hal       owns STM32F1 peripheral access
+RTIC                owns real-time task/resource priority and concurrency
 ```
 
-New abstractions are added only when they represent a real change in ownership or semantic meaning. A private `board_*` HAL is not recreated when an ecosystem trait already expresses the required contract, and a PCB channel is not renamed into a robot role until that mapping is physically established.
+UART is not an architectural layer. It is the current transport for `RecordedObservation` bytes. Replacing UART with DMA, USB, SWO, storage, or another transport must not change `RawObservation` semantics or the record/replay contract.
 
-See [`typed_dataflow.md`](typed_dataflow.md) for the runtime information-flow model.
+New abstractions are introduced only for a real change in ownership or physical meaning. Unknown facts remain representable as unknown rather than being filled with historical assumptions.

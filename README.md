@@ -2,125 +2,122 @@
 
 A clean re-architecture of the embedded software for a self-balancing single-wheel robot.
 
-The repository is intentionally organized around the physical system rather than around inherited firmware structure. Device access, board wiring, robot-domain state, real-time scheduling, estimation, control, and actuation are separated so that changes in one area do not leak through the rest of the system.
+The repository is organized around physical truth and semantic transitions rather than inherited firmware structure. Device access, board wiring, acquisition evidence, calibration, robot-domain state, real-time scheduling, estimation, control, and actuation are separate concerns.
 
-The current implementation uses **Rust `no_std`**, **embedded-hal 1.0**, **stm32f1xx-hal**, and **RTIC** on the STM32F103 reference target. The earlier C/CMake scaffold has been removed rather than carried forward as a compatibility layer.
+The current implementation uses **Rust `no_std`**, **embedded-hal 1.0**, **stm32f1xx-hal**, and **RTIC** on the STM32F103 reference target. The earlier C/CMake scaffold is not retained as a compatibility layer.
 
-## Physical system
+## Architectural rule
 
-The reference platform has three actuation paths:
-
-- **Roll / lateral balance** — reaction wheel.
-- **Pitch / longitudinal balance** — ground-contact drive wheel.
-- **Yaw / spin** — third brushless actuator path.
-
-The reference board also contains an MPU6050 and wheel-encoder feedback. Board facts are kept separate from controller conventions; the software does not infer robot meaning from historical names such as `motor1`, `x`, or `y`.
-
-## Architecture
+Data may acquire richer meaning only when the evidence required for that meaning exists.
 
 ```text
-                    RTIC application
-                         |
-        +----------------+----------------+
-        |                |                |
-        v                v                v
- robot-domain        device drivers    board description
-        |                |                |
-        |        embedded-hal traits      |
-        |                |                |
-        +----------------+----------------+
-                         |
-                  stm32f1xx-hal
-                         |
-                    STM32F103C8
-                         |
-                  physical hardware
+physical hardware
+      |
+      v
+RawObservation + timing/quality evidence
+      |
+      v
+CalibratedObservation
+      |
+      v
+BodyObservation
+      |
+      v
+EstimatedState
+      |
+      v
+GeneralizedDemand
+      |
+      v
+ActuatorAllocation
+      |
+      v
+Authority / limits
+      |
+      v
+ElectricalOutput
 ```
 
-At runtime the critical path remains:
+A raw ADC count is not a voltage until its transfer function is known. A PCB encoder channel is not a reaction-wheel speed until mechanical mapping, sign, and scale are established. An I2C read that succeeded is not automatically a fresh, exactly timed IMU sample.
+
+## Time and measurement quality
+
+The runtime does not collapse sequential hardware reads into one fictional timestamp. `RawObservation` records acquisition start/completion, MPU read start/completion, encoder capture times, ADC read completion, per-measurement quality, and platform acquisition status.
+
+The MPU6050 source-sample timestamp is explicitly **unknown** on the reference board because the actual MPU data-ready interrupt is not routed. Later estimation must use measurement timing evidence rather than assuming that the scheduler period is identical to physical sample time.
+
+## Recording and deterministic replay
+
+Recording/replay is a first-class data path:
 
 ```text
-measurement
-   -> coordinate mapping
-   -> state estimation
-   -> state validation
-   -> control policy
-   -> actuator mapping
-   -> authority / limits
-   -> physical output
+RawObservation
+   |\
+   | +------------------> future estimator/control path
+   |
+   +--> RecordedObservation --> binary log --> replay
 ```
 
-RTIC owns concurrency and scheduling. Peripheral ownership is represented by Rust types instead of globally accessible registers or a custom C board API.
+`swp-observation-record` owns the deterministic binary record format. UART is only the current transport; transport is not the owner of acquisition semantics. Host tools can decode the same record stream to CSV or replay it without using host wall-clock timing.
 
 ## Repository layout
 
 ```text
-Cargo.toml
-rust-toolchain.toml
-.cargo/
-
 crates/
-  robot-domain/          Physical state and actuator-domain types
+  robot-domain/          Single-wheel physical/control-domain types
+  plant-observation/     Raw evidence, timing, and measurement quality
+  observation-record/   Deterministic binary record/replay contract
   mpu6050/               Portable embedded-hal MPU6050 driver
   software-i2c/          Portable open-drain embedded-hal I2C
-  telemetry-protocol/    Fixed binary target/host telemetry contract
-  board-one-v2/          Reference-board wiring and hardware facts
+  board-one-v2/          Reference-board wiring facts only
 
 firmware/
-  stm32f103/             no_std RTIC application for STM32F103C8
-
-docs/
-  architecture/          Architecture and timing contracts
-  hardware/              Schematic review and board mapping
-  commissioning/         Bring-up and characterization notes
+  stm32f103/             no_std RTIC runtime and STM32 peripheral ownership
 
 tools/
-  telemetry/             Python capture and decode utilities
+  recording/             Record decode and deterministic replay source
+
+docs/
+  architecture/          Semantic, timing, replay, and authority contracts
+  hardware/              Schematic review and board mapping
+  commissioning/         Bring-up and characterization notes
 ```
 
-## Design rules
+## Board/robot separation
 
-- Use ecosystem-standard hardware traits where a standard contract exists; do not recreate a private HAL for its own sake.
-- Keep device drivers generic over `embedded-hal` and independent of STM32 types.
-- Keep board-specific wiring in the board crate, not in device drivers or control code.
-- Keep robot-domain state and actuator semantics independent of the MCU and HAL.
-- Make coordinate conventions, physical units, timestamps, and actuator authority explicit.
-- Keep telemetry, display work, storage, and maintenance traffic outside the high-priority acquisition/control path.
-- Do not hard-code unconfirmed hardware facts. For example, the reviewed schematic does not label the HSE crystal frequency, and the net named `MPU_INT` is connected to MPU6050 **FSYNC**, while the actual MPU6050 INT pin is not routed.
+The board crate describes PCB identities such as `BLDC_1`, `BLDC_2`, `BLDC_3`, `Encoder_1`, and `Encoder_2`. It does not promote those channels into reaction-wheel, drive-wheel, or spin semantics until the physical harness mapping is established.
 
-## Reference target
+Important reviewed hardware facts include:
 
-- STM32F103C8T6, Cortex-M3
-- 64 KiB Flash / 20 KiB SRAM
-- MPU6050 at schematic-selected address `0x68`
-- MPU SDA on PB8 and SCL on PB9, requiring a software-I2C implementation for this board wiring rather than the STM32F1 I2C1 remap
-- TIM2/TIM4 quadrature encoder inputs for Encoder 1/2; Encoder 3 has no MCU route shown in the reviewed schematic
-- PA5 / ADC1_IN5 raw battery-divider sensing; divider scale remains unconfirmed
-- TIM3 motor PWM paths remain inactive during current passive bring-up
-- USART1 on PA9/PA10 for the main UART; the CH340N pair is exposed separately on P2 rather than hard-wired to USART1
-- SWD development workflow through `probe-rs`
-
-See [`docs/hardware/pin_mapping.md`](docs/hardware/pin_mapping.md) for the reviewed board mapping and [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md) for the software boundaries.
+- STM32F103C8T6 reference MCU.
+- MPU6050 address `0x68`.
+- MPU SDA/SCL are PB8/PB9 as drawn, requiring software I2C for this PCB wiring.
+- PC13 net `MPU_INT` reaches MPU6050 **FSYNC**, while the actual MPU6050 INT pin is not routed.
+- TIM2/TIM4 provide raw quadrature counts for Encoder 1/2; Encoder 3 has no MCU route shown.
+- PA5 / ADC1_IN5 is the raw battery-divider node; divider scaling remains unconfirmed.
+- The reviewed schematic does not label the external crystal frequency.
 
 ## Current executable path
 
-The Rust firmware now has a complete passive sensing/observability slice:
-
 ```text
 HSI 8 MHz
-  -> MPU6050 over software I2C
-  -> TIM2/TIM4 raw quadrature counts
-  -> ADC1/PA5 raw battery-divider count
-  -> TIM1 100 Hz sensor snapshot
-  -> DWT timestamp
-  -> CRC-protected telemetry frame
-  -> lock-free SPSC frame queue
-  -> lower-priority USART1 TXE interrupt pump
-  -> PA9 / TX
+  -> MPU6050 software-I2C acquisition
+  -> TIM2/TIM4 encoder snapshots
+  -> ADC1/PA5 raw battery read
+  -> explicit per-source timing and quality evidence
+  -> RawObservation
+  -> 80-byte CRC-protected RecordedObservation
+  -> lock-free SPSC record queue
+  -> lower-priority USART1 TXE record transport
+  -> host recording / replay tools
 ```
 
-No motor PWM, direction, or brake output is configured. Encoder direction and battery voltage scaling remain deliberately raw until the corresponding physical conventions are confirmed.
+The acquisition task is currently scheduled at 100 Hz. That period is a scheduler intent, not a claim that every physical sensor sample occurred exactly 10 ms apart.
+
+No TIM3 motor PWM, direction, or brake output is configured. Motor activation remains outside the current passive observation cut.
 
 ## Build
 
-Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI checks formatting, the full Cortex-M workspace, Clippy with warnings denied, target/host telemetry tests, and the final release link.
+Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target. `cargo fw` links the STM32F103 release firmware. CI enforces formatting, full Cortex-M workspace check, Clippy with warnings denied, observation-record host tests, Python recording decoder tests, and the final release firmware link.
+
+See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md), [`docs/architecture/typed_dataflow.md`](docs/architecture/typed_dataflow.md), and [`docs/architecture/observation_time_health_replay.md`](docs/architecture/observation_time_health_replay.md).

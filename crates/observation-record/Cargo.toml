@@ -1,5 +1,5 @@
 [package]
-name = "swp-telemetry-protocol"
+name = "swp-observation-record"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true

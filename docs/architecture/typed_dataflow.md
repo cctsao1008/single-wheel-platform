@@ -2,82 +2,97 @@
 
 The firmware is organized around changes in **meaning**, not around traditional embedded folders such as `bsp`, `middleware`, or a monolithic `control.c`.
 
-The core rule is simple:
-
 > Data may move to a richer semantic layer only when the required evidence and configuration exist.
-
-That produces the following dataflow:
 
 ```text
 physical hardware
     |
     v
 RawObservation
-    |  register counts, timer counts, ADC counts, timestamp, validity
+    |  raw values + timing + quality + acquisition status
     v
 CalibratedObservation
-    |  sensor scale / bias / transfer functions are known
+    |  sensor scale / bias / electrical transfer functions are known
     v
 BodyObservation
-    |  sensor mounting and robot coordinate mapping are known
+    |  mounting transform, robot axes, and sign conventions are known
     v
-RobotState
-    |  estimator has produced the state used by control
+EstimatedState
+    |  estimator produces control-domain state using measurement time
     v
-ControlEffort
+GeneralizedDemand
     |  control policy requests physical-axis effort
     v
 ActuatorAllocation
-    |  robot actuator roles are mapped to physical output channels
+    |  robot roles are mapped to physical output channels
     v
 Authority / limits
-    |  safety and actuator constraints approve or reject the request
+    |  health, safety, and actuator constraints authorize output
     v
 ElectricalOutput
 ```
 
-These are semantic stages. They do not have to become one crate each; a crate is introduced only when it creates a real ownership or dependency boundary.
+These are semantic stages, not a requirement that every stage become a crate.
 
-## Raw observation is evidence, not interpretation
+## Raw observation is evidence
 
-`swp-plant-observation::RawObservation` is the first shared runtime object above peripheral drivers. It contains:
+`swp-plant-observation::RawObservation` intentionally does not claim that all sensors were sampled simultaneously. It contains:
 
-- MPU6050 raw acceleration, temperature, and gyro register values;
-- raw TIM2 and TIM4 quadrature counts;
-- raw ADC1_IN5 battery-divider count;
-- monotonic timestamp and sample index;
-- explicit validity/acquisition-health flags.
+- acquisition start and completion time;
+- MPU6050 register-domain values;
+- MPU source-sample timestamp evidence, which is currently unknown;
+- MPU I2C read start/completion times;
+- independent Encoder 1/2 count snapshots and capture times;
+- raw battery ADC value and read-completion time;
+- per-measurement quality flags;
+- acquisition/platform status.
 
-It intentionally does **not** contain volts, radians, radians/second, body axes, or actuator roles. Those meanings require calibration or mechanical mapping that is not yet fully established.
+`AVAILABLE | IO_OK` means a value was acquired cleanly. It does **not** imply freshness, exact source timing, saturation knowledge, or calibrated physical meaning. Those properties must be established independently.
 
-Telemetry is a tap on this dataflow. The UART protocol serializes a `RawObservation`; it is not the owner of acquisition semantics.
+## Time is data, not scheduler folklore
 
-## PCB identity and robot identity are separate
+The 100 Hz RTIC timer defines when acquisition work is requested. It does not define the physical source timestamp of every measurement.
 
-The board crate describes only facts visible at the PCB boundary:
+The estimator must derive time evolution from measurement timestamp evidence. A future source with exact sample timing may set `TIMING_VALID` and a known source timestamp. A source without that evidence remains explicit rather than being assigned the task-entry timestamp.
+
+## Calibration and coordinate mapping are different transitions
+
+Calibration answers questions such as sensor scale, bias, temperature compensation, encoder scale, and ADC transfer function. Coordinate mapping answers different questions: sensor mounting rotation, robot axes, encoder sign, and which PCB channel corresponds to which physical actuator role.
+
+The intended transition is therefore:
 
 ```text
-BLDC_1 / BLDC_2 / BLDC_3
-Encoder_1 / Encoder_2 / Encoder_3
-MPU SDA/SCL
-ADC node
-physical pins and timer channels
+RawObservation
+      |
+      v
+SensorCalibration
+      |
+      v
+CalibratedObservation
+      |
+      v
+Frame / mechanical mapping
+      |
+      v
+BodyObservation
 ```
 
-It does not declare that `BLDC_1` is the reaction wheel or that `BLDC_2` is the drive wheel. That association belongs to an explicit actuator-allocation / robot-configuration layer and will be created only when the physical harness is confirmed.
+## Recording is a branch, not the model owner
 
-This prevents historical variable names, schematic captions, or inherited firmware assumptions from silently becoming architectural truth.
+```text
+RawObservation
+      |\
+      | +--> calibration / estimator / control
+      |
+      +--> RecordedObservation --> storage/transport --> replay
+```
+
+The record format is deterministic and versioned by `swp-observation-record`. UART merely transports those bytes today. Replay feeds recorded observation evidence back into later processing without depending on host wall-clock timing.
+
+## PCB identity and robot identity remain separate
+
+The board crate describes only PCB facts such as `BLDC_1`, `BLDC_2`, `BLDC_3`, `Encoder_1`, `Encoder_2`, pins, timers, and ADC nodes. It does not declare a reaction-wheel or drive-wheel mapping until that association is physically established.
 
 ## Zero-cost boundary
 
-The semantic separation is intended to compile away. The runtime still uses statically allocated `no_std` data, fixed-size frames, RTIC-owned resources, and no heap allocation. Stronger meaning should cost type definitions and compile-time checking, not dynamic infrastructure.
-
-## Current executable cut
-
-The active STM32F103 firmware currently implements only:
-
-```text
-hardware -> RawObservation -> telemetry
-```
-
-Motor outputs remain untouched. The next layer should be calibration and coordinate mapping, followed by state estimation. Control and actuation are attached only after the observation path has explicit units, signs, timing, and validity semantics.
+The semantic types remain `no_std`, statically allocated, and heap-free. Stronger meaning should cost compile-time checking and explicit code paths, not dynamic infrastructure. Record serialization is isolated from the runtime domain types so wire layout does not dictate estimator or controller data structures.

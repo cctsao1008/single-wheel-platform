@@ -2,33 +2,34 @@
 
 ## Purpose
 
-The project is a clean re-architecture of the embedded software around the existing single-wheel physical platform. It is not a preservation exercise for the previous source structure.
+This project re-architects the embedded software around the physical single-wheel plant. It does not preserve the structure or assumptions of previous firmware for compatibility.
 
-The architecture separates four kinds of knowledge:
+The architecture separates five kinds of knowledge:
 
-1. **robot-domain knowledge** — roll, pitch, yaw, wheel states, actuator requests and physical units,
-2. **device knowledge** — register/protocol behavior of devices such as the MPU6050,
-3. **board knowledge** — which MCU pins and timer channels are wired to which physical functions,
-4. **target-runtime knowledge** — STM32F103 peripheral ownership, scheduling, interrupts and execution timing.
+1. **acquisition evidence** — what was measured, when it was observed, and what is known about measurement quality;
+2. **robot-domain knowledge** — roll, pitch, yaw, wheel state, generalized effort, and physical units;
+3. **device knowledge** — register/protocol behavior of devices such as the MPU6050;
+4. **board knowledge** — PCB channels, pins, and timer wiring;
+5. **target-runtime knowledge** — STM32F103 peripheral ownership, scheduling, interrupts, and execution timing.
 
-Rust type ownership and ecosystem hardware traits are used to enforce those boundaries directly instead of recreating a custom C-style HAL.
+Rust types make invalid semantic shortcuts harder while RTIC and the HAL own execution/resource constraints.
 
 ## Dependency structure
 
 ```text
-                    firmware/stm32f103
-                      /      |      \
-                     v       v       v
-          swp-robot-domain  board-one-v2  swp-mpu6050
-                                  |            |
-                                  |       embedded-hal 1.0
-                                  |            |
-                                  +------ stm32f1xx-hal
-                                              |
-                                         STM32F103C8
+                         firmware/stm32f103
+                       /    |       |       \
+                      v     v       v        v
+             board-one-v2  mpu6050  plant-observation  observation-record
+                              |              |              |
+                       embedded-hal 1.0      +--------------+
+                              |
+                        stm32f1xx-hal
+                              |
+                         STM32F103C8
 ```
 
-RTIC is the firmware concurrency model. It owns task priority, shared/local resources and interrupt-driven execution; it does not define robot-domain behavior.
+`robot-domain` remains independent of the MCU/HAL and is consumed only when raw evidence has been promoted into physical robot meaning.
 
 ## Primary runtime path
 
@@ -36,89 +37,89 @@ RTIC is the firmware concurrency model. It owns task priority, shared/local reso
 Physical Sensors / Encoders
           |
           v
-       Drivers
+ Hardware Capture
           |
           v
-  Timestamped Measurements
+ RawObservation
+(raw values + timing + quality)
+          |
+          +---------------------------> Recorder / Replay
           |
           v
- Coordinate Transform
+ Sensor Calibration
           |
           v
-   State Estimation
+ CalibratedObservation
           |
           v
-   State Validation
+ Frame / Mechanical Mapping
           |
           v
-     Control Policy
+ BodyObservation
           |
           v
-   Actuator Mapping
+ State Estimation
           |
           v
- Limits / Authority
+ EstimatedState
           |
           v
- HAL-owned Outputs
+ Control Policy
           |
           v
-  Physical Actuators
+ GeneralizedDemand
+          |
+          v
+ Actuator Allocation
+          |
+          v
+ Authority / Limits
+          |
+          v
+ Electrical Mapping
+          |
+          v
+ Physical Actuators
 ```
 
-Telemetry, display rendering, persistent storage, maintenance commands and log transfer remain outside the timing-critical path.
+Recording, display, maintenance, and host analysis are outside the high-priority control path. Recording may observe the same data, but transport cannot own or mutate its semantics.
 
-## Robot domain
+## Measurement time
 
-`swp-robot-domain` owns state and command types that have physical meaning on this system. It is `no_std` and has no dependency on an MCU, HAL, device driver or scheduler.
+Scheduler time, source-sample time, readout time, and transmit time are different quantities.
 
-The domain is intentionally not generalized into a robotics framework. The state representation remains specific to the single-wheel plant: roll/pitch state, reaction-wheel speed, drive-wheel speed, yaw-rate information, battery state and validity.
+The current reference board cannot observe the MPU6050 data-ready event because the schematic net named `MPU_INT` is wired to FSYNC and the actual INT pin is not routed. Firmware therefore records the MPU source-sample time as unknown while preserving I2C read start/completion times. Encoder snapshots carry their own capture timestamps. Battery ADC preserves read-completion timing without claiming an exact analog sample instant.
+
+The estimator must not use a hard-coded scheduler `dt` as a substitute for measurement timing when better timestamp evidence exists.
+
+## Measurement quality
+
+A single valid/invalid bit is insufficient. `MeasurementQuality` records independent evidence such as availability, successful I/O, known timing, freshness verification, saturation, staleness, or retry history.
+
+Unset flags are not silently interpreted as proof of the opposite property. In particular, a clean MPU I2C transaction does not prove that the returned internal sample is fresh or exactly timestamped.
+
+## Record/replay contract
+
+`swp-observation-record` converts `RawObservation` into a fixed-size, CRC-protected record. The record is intended for deterministic capture and replay across estimator/controller revisions.
+
+The current USART1 TX path is only a transport implementation. A future DMA, storage, USB, or SWO recorder should use the same observation/record semantics rather than creating a second data model.
 
 ## Device drivers
 
-Device drivers are generic over standard `embedded-hal` traits. The MPU6050 driver owns MPU6050 register configuration, range selection, sample-rate configuration, raw acquisition and conversion scales. It does not own sensor mounting orientation, robot coordinates or balancing policy.
-
-This removes the need for a project-specific transport callback layer. The driver accepts any I2C implementation that satisfies `embedded_hal::i2c::I2c`.
+Device drivers are generic over standard `embedded-hal` traits. The MPU6050 driver owns device register behavior, configuration, ranges, and raw transfer. It does not own sensor mounting orientation, robot coordinates, or balancing policy.
 
 ## Board description
 
-`swp-board-one-v2` records reference-board wiring facts independently of the STM32 HAL implementation.
+`swp-board-one-v2` records schematic-derived PCB facts. It describes BLDC and encoder channels rather than assigning robot actuator roles. Unconfirmed motor polarity, brake polarity, ADC scale, external-crystal frequency, and robot-positive direction remain outside board facts.
 
-Important reviewed facts include:
+## STM32F103 runtime
 
-- BLDC1 / lateral: PB1 TIM3_CH4, PB11 direction, encoder on PA1/PA0,
-- BLDC2 / longitudinal: PA6 TIM3_CH1, PA4 direction, encoder on PB7/PB6,
-- BLDC3 / spin: PB0 TIM3_CH3, PB10 direction, PA7 brake,
-- MPU6050 SDA/SCL: PB8/PB9 as drawn by the board schematic,
-- PC13 net `MPU_INT` connects to MPU6050 FSYNC; the actual MPU6050 INT pin is not routed,
-- MPU6050 AD0 is low, selecting address `0x68`,
-- PA5 is the battery ADC node,
-- the reviewed schematic does not label the external crystal frequency.
+`firmware/stm32f103` is the only workspace member allowed to own concrete STM32 peripherals. It currently uses HSI 8 MHz, software I2C for the schematic PB8/PB9 MPU wiring, TIM2/TIM4 QEI, ADC1/PA5, TIM1 acquisition scheduling, DWT timestamping, and lower-priority USART1 record transport.
 
-Electrical behaviors that are not established by the schematic, such as motor-module brake polarity or robot-positive direction, are not promoted into board constants prematurely.
-
-## STM32F103 firmware
-
-`firmware/stm32f103` is the only workspace member allowed to own concrete STM32 peripheral instances. It uses `stm32f1xx-hal` rather than handwritten memory-mapped register definitions.
-
-The current migration baseline intentionally leaves actuators inactive and does not force a 72 MHz clock configuration because the schematic itself does not identify the HSE frequency. Hardware bring-up is added directly through typed HAL ownership after the required board fact is established.
-
-The unusual MPU wiring is handled above the GPIO layer by a software-I2C implementation satisfying `embedded-hal::i2c::I2c`; the MPU6050 driver itself remains unaware of that board constraint.
+TIM3 and all motor GPIO remain untouched during this passive observation phase.
 
 ## Real-time execution
 
-RTIC replaces ad-hoc global peripheral access and monolithic interrupt bodies with explicit local/shared resources and statically prioritized tasks.
+RTIC owns priority and resource concurrency. Acquisition/control work must have bounded execution and must not wait on host I/O. Record transmission is lower priority and queue-backed; record drops are counted and preserved in subsequent records.
 
-A hardware interrupt should perform only the work necessary for deterministic acquisition/control execution or should release work to a lower-priority software task. UART formatting, display rendering, Flash operations and maintenance parsing are not part of the control ISR path.
-
-The control-loop rate is not inherited from the previous firmware. Acquisition rate, estimator rate and controller rate are selected from measured plant, sensor, actuator and WCET requirements.
-
-## Actuator ownership
-
-Controller output and physical output ownership remain separate concepts. A control policy requests effort in robot-domain terms; actuator mapping and authority logic decide whether and how that request reaches a physical motor.
-
-Rust ownership is used to make the physical PWM/timer resource have one software owner. Maintenance, commissioning and automatic control therefore do not receive independent mutable access to the same timer peripheral.
-
-## Extension policy
-
-New control laws, estimators, replay tools and system-identification utilities may be added without changing the board or device-driver contracts. They are capabilities enabled by the architecture, not the project identity.
+Acquisition rate, estimator rate, and controller rate are selected from sensor/plant timing and WCET evidence rather than inherited constants.

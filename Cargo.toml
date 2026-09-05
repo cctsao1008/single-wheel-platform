@@ -5,7 +5,7 @@ members = [
     "crates/plant-observation",
     "crates/mpu6050",
     "crates/software-i2c",
-    "crates/telemetry-protocol",
+    "crates/observation-record",
     "crates/board-one-v2",
     "firmware/stm32f103",
 ]
