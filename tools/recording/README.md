@@ -1,16 +1,11 @@
 # Observation Recording and Replay
 
-The canonical host artifact is the binary `RecordedObservation` stream defined by `swp-observation-record`.
-
-This is deliberately a **record/replay contract**, not a telemetry-domain model. UART is only the current transport used to move records off the STM32F103.
+`swp-observation-record::RecordedObservation` defines the host recording contract.
 
 ```text
-physical acquisition
-      |
-      v
 RawObservation
       |
-      +----> estimator / future runtime stages
+      +----> semantic / control path
       |
       +----> RecordedObservation
                     |
@@ -26,14 +21,23 @@ RawObservation
          CSV           deterministic JSONL
 ```
 
-`decode.py` converts records to CSV while preserving unknown timing as empty fields. `replay.py` emits records in stored order without using host wall-clock time; downstream estimators must use recorded measurement timestamps rather than the speed at which replay executes.
+UART transports record bytes; it does not define the observation model.
 
-The reference-board MPU6050 has no routed data-ready interrupt, so `imu_sample_time_us` is intentionally unknown. The record still preserves I2C read start/completion times, encoder capture times, ADC read completion time, acquisition duration, and per-measurement quality flags.
-
-Examples:
+## Decode
 
 ```bash
 python3 tools/recording/decode.py capture.bin > capture.csv
+```
+
+Unknown timing values are preserved as empty fields.
+
+## Replay
+
+```bash
 python3 tools/recording/replay.py capture.bin > replay.jsonl
 python3 tools/recording/replay.py --strict capture.bin > replay.jsonl
 ```
+
+Replay preserves record order, sequence gaps, timestamps, unknown states, and CRC validation. Host wall-clock speed is not used as measurement time.
+
+The MPU6050 source-sample timestamp is `Unknown`; I2C read timing, encoder capture timing, ADC read timing, acquisition duration, and measurement quality remain available in the record.

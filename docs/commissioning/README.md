@@ -1,17 +1,9 @@
-# Commissioning
+# Commissioning Configuration
 
-Commissioning documents capture practical bring-up and characterization of the physical platform.
+This directory contains physical/runtime configuration results consumed by the platform.
 
-Relevant topics include:
+```text
+runtime_profile.md    active STM32F103 acquisition / transport profile
+```
 
-- coordinate and polarity confirmation,
-- IMU bias / scale / mounting checks,
-- encoder direction and counts-per-revolution,
-- reaction-wheel characterization,
-- drive-wheel characterization,
-- spin-actuator characterization,
-- balance operating envelopes,
-- control-loop timing measurements,
-- system-identification experiments.
-
-These notes complement the architecture; they do not redefine module ownership.
+Commissioning values are configuration data: coordinate transforms, encoder scale/sign, actuator electrical polarity, battery transfer functions, and authority limits enter the runtime through explicit parameters rather than controller-local constants.

@@ -1,6 +1,6 @@
 # Timing Architecture
 
-The control loop is a deterministic real-time path. Its rate is selected from measured sensor, encoder, actuator, computation, and closed-loop requirements rather than copied from another platform.
+The control path is deterministic and bounded.
 
 ## Critical path
 
@@ -10,27 +10,40 @@ timestamp
   -> state estimation
   -> state validation
   -> control computation
-  -> actuator mapping
-  -> output safety
-  -> motor command
+  -> actuator allocation
+  -> runtime authority
+  -> electrical output
 ```
 
-The critical path must avoid:
+The critical path excludes:
 
-- formatted text generation,
-- blocking telemetry,
-- display rendering,
-- Flash erase/write,
-- long protocol parsing,
+- formatted text generation;
+- blocking telemetry;
+- BLE protocol work;
+- display rendering;
+- Flash erase/write;
+- long command parsing;
 - human-scale delays.
 
-Timing documentation should eventually include:
+## Runtime timing
 
-- acquisition rate,
-- estimator rate,
-- controller rate,
-- actuator update rate,
-- worst-case execution time,
-- jitter,
-- timestamp semantics,
-- encoder quantization at the selected period.
+```text
+acquisition schedule  100 Hz
+record transport      lower RTIC priority than acquisition
+measurement time      carried in observation data
+```
+
+Scheduler period does not replace measurement timestamps.
+
+Timing characterization is expressed as runtime parameters and measurements:
+
+```text
+acquisition period
+estimator period
+controller period
+actuator update period
+WCET
+jitter
+measurement latency
+encoder quantization over the selected interval
+```

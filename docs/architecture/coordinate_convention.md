@@ -1,28 +1,30 @@
 # Coordinate Convention
 
-A single coordinate convention is required before controller signs, sensor axes, or motor polarities are treated as stable constants.
-
-Proposed body frame:
+The robot coordinate system is right-handed:
 
 ```text
-+x : forward
-+y : left
-+z : upward
++X = forward
++Y = left
++Z = up
 ```
 
-Rotations follow the right-hand rule:
+Angular coordinates follow the right-hand rule:
 
-- **roll** — rotation about `+x`,
-- **pitch** — rotation about `+y`,
-- **yaw** — rotation about `+z`.
+```text
+roll  = rotation about +X
+pitch = rotation about +Y
+yaw   = rotation about +Z
+```
 
-The final project convention must additionally define:
+Robot coordinates are independent of PCB coordinates, sensor-package coordinates, encoder phase order, and motor electrical polarity.
 
-- positive reaction-wheel rotation,
-- positive drive-wheel rotation,
-- positive spin-actuator rotation,
-- encoder-positive directions,
-- motor-positive command directions,
-- MPU6050 mounting transform.
+Mappings into this coordinate system are explicit configuration boundaries:
 
-These mappings belong in hardware / calibration contracts rather than being scattered through controller equations.
+```text
+sensor frame  -> body frame
+encoder count -> actuator angular position / speed
+actuator role -> board motor channel
+command sign  -> electrical PWM / direction state
+```
+
+No controller equation defines or overrides these mappings.

@@ -1,8 +1,8 @@
 # Body-Frame Contract
 
-## Canonical body frame
+## Body frame
 
-The project uses one explicit right-handed body frame:
+The robot uses one right-handed body frame:
 
 ```text
 +X = forward, along the ground-drive direction
@@ -10,50 +10,38 @@ The project uses one explicit right-handed body frame:
 +Z = up
 ```
 
-This is a robot-domain convention, not a PCB or sensor-package convention.
+Rotations follow the right-hand rule:
 
-## Semantic transition
+```text
+roll  = rotation about +X
+pitch = rotation about +Y
+yaw   = rotation about +Z
+```
 
-IMU data may enter the body frame only after two independent transformations have evidence:
+## Sensor-to-body transition
+
+IMU data enters the body frame only through the explicit sensor-to-body transform:
 
 ```text
 MPU6050 register counts
         |
         v
-sensor-frame SI values
+ScaledImuObservation
         |
-        | measured sensor calibration
         v
 CalibratedImuObservation
         |
-        | evidenced sensor-to-body rotation
+        | SensorToBodyRotation
         v
 BodyImuObservation
 ```
 
-Sensor calibration and mechanical orientation are deliberately separate. Bias/scale/cross-axis correction does not decide which physical direction is robot forward or up.
+Sensor calibration and mechanical orientation are separate operations. Calibration corrects bias, scale, and cross-axis error in the sensor frame. `SensorToBodyRotation` maps the calibrated sensor frame into the robot body frame.
 
-`swp-frame-transform` represents the sensor-to-body mapping as a proper 3-D rotation. Construction rejects scale, shear, non-orthogonal matrices, and handedness reflections. A frame transform also carries explicit evidence and revision metadata.
+`swp-frame-transform` accepts only proper 3-D rotations. Scale, shear, non-orthogonal transforms, and handedness reflections are rejected.
 
-## Current reference-unit evidence
+## Configuration contract
 
-Legacy V2.0 behavior provides useful but incomplete orientation evidence:
+The sensor-to-body rotation is an explicit configuration value with frame evidence and revision metadata. It is never hidden inside estimator equations, controller signs, calibration matrices, or board pin definitions.
 
-- active firmware reads native MPU6050 X/Y/Z channels without an active axis swap;
-- the legacy balancing equations are consistent with sensor +Z being approximately body-up at the upright equilibrium;
-- the legacy X/Y balance loops correlate with the ground-drive and reaction-wheel control paths.
-
-This does **not** yet establish the signs of sensor X/Y relative to canonical body +X forward and +Y left. Legacy comments contain naming drift and are therefore not promoted into a reference transform.
-
-The repository intentionally publishes **no default `SensorToBodyRotation` for the reference assembly** until a physical tilt/rotation test or equivalent measured survey resolves the remaining signs.
-
-## Commissioning test that closes the gap
-
-With motor outputs disabled, record raw/calibrated IMU data while applying two unambiguous motions:
-
-1. positive nose/drive-direction tilt around the lateral axis;
-2. positive left/right tilt around the longitudinal axis.
-
-The observed accelerometer and gyroscope signs establish the remaining axis correspondence. The resulting transform can then be recorded with `FrameEvidenceBasis::PhysicalTiltTest` and a revision number.
-
-The transform is thereafter a configuration/evidence artifact, not a hidden sign convention inside an estimator or controller.
+A reference-unit transform is not defined until the complete physical axis/sign mapping is available. Until then, body-frame promotion is unavailable rather than approximated.

@@ -1,14 +1,8 @@
 # Runtime Authority and Reaction-Wheel Headroom
 
-## Why this is a first-class concern
+## Operating states
 
-The inspected robot is not a generic two-motor platform. Lateral balance uses a reaction wheel. A reaction wheel can only provide sustained corrective torque while it retains angular-momentum headroom.
-
-The supplied product documentation explicitly warns that a sustained disturbance can accelerate the inertia wheel toward maximum speed, after which balancing authority is lost and the unit must be restarted. The software architecture therefore treats reaction-wheel saturation as plant state, not merely as a motor fault.
-
-## Operating-state contract
-
-`swp-runtime-state` defines the semantic operating states independently of RTIC scheduling:
+`swp-runtime-state` defines the robot operating-state model:
 
 ```text
 Boot
@@ -16,35 +10,40 @@ Boot
   -> Standby
   -> CaptureWindow
   -> Balancing
-       |
-       +-> MomentumLimited
-       |
-       +-> Fault
+       |-> MomentumLimited
+       |-> Fault
 ```
 
-The exact transition thresholds remain commissioning policy. The invariant is already fixed:
+Physical actuator output is denied in:
 
 ```text
-Boot / HardwareCheck / Standby / CaptureWindow / Fault
-    -> physical actuation denied
-
-Balancing / MomentumLimited
-    -> closed-loop actuation may be authorized
+Boot
+HardwareCheck
+Standby
+CaptureWindow
+Fault
 ```
 
-A future commissioning mode may add a deliberately constrained bench-test authority, but it must be explicit rather than bypassing the state machine.
+Closed-loop actuator authority exists only in:
 
-## Reaction-wheel authority before inertia is known
+```text
+Balancing
+MomentumLimited
+```
 
-Exact wheel angular momentum is
+Runtime state is independent of RTIC task scheduling and independent of raw GPIO/timer ownership.
+
+## Reaction-wheel authority
+
+Reaction-wheel control authority depends on remaining angular-momentum headroom:
 
 ```text
 H = J * omega
 ```
 
-but the installed wheel inertia `J` is not yet verified. The runtime must not pretend otherwise.
+The runtime represents available headroom with `ReactionWheelSpeedLimits` until a configured inertia model is present.
 
-Wheel speed is nevertheless directly observable after encoder scale is commissioned and is sufficient to expose saturation headroom. `ReactionWheelSpeedLimits` therefore classifies the measured speed as:
+The speed-domain authority classes are:
 
 ```text
 Nominal
@@ -52,12 +51,20 @@ Warning
 Exhausted
 ```
 
-and computes normalized remaining speed headroom to a configured hard limit.
+A hard speed limit defines zero remaining speed headroom. A warning limit defines the transition into constrained authority.
 
-No product-sheet maximum-speed value is hard-coded as a reference-unit truth. Limits enter as configuration evidence and can later be replaced or augmented by a momentum-domain model once wheel inertia is measured.
+## Authorization boundary
 
-## Startup consequence
+Actuator authorization combines:
 
-The supplied operating instructions describe a deliberate capture sequence: power on, wait for initialization, hold the robot close to the equilibrium position, allow automatic control to take over, then release the robot. The re-architecture preserves that physical requirement without preserving the old implementation.
+```text
+operating state
+sensor / state validity
+actuator limits
+reaction-wheel headroom
+fault state
+```
 
-A single `motor_enabled` boolean is therefore insufficient. Startup/capture state, sensor health, actuator authority, and reaction-wheel headroom are separate semantic inputs to physical output authorization.
+Only an authorized actuator demand may reach electrical mapping and physical PWM/direction resources.
+
+A generic `motor_enabled` flag is not an actuator-authority model.

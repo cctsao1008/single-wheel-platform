@@ -1,80 +1,67 @@
 # Observation Time, Measurement Health, and Replay
 
-## Why these are architectural concerns
-
-A balancing controller operates on a physical system, so three kinds of information are inseparable from the measured value itself:
-
-1. **when the physical evidence was obtained**;
-2. **what is known about its quality**;
-3. **whether the same evidence can be replayed deterministically later**.
-
-Treating these as optional diagnostics would allow scheduling and transport assumptions to leak into estimation and control.
-
 ## Time model
 
-The architecture distinguishes:
+The observation model distinguishes:
 
 ```text
 acquisition_started_us
-    task begins acquiring a batch
-
 source_sample_at_us
-    physical/device sample time, only when actually known
-
 read_started_at_us / captured_at_us
-    software/peripheral observation timing
-
 read_completed_at_us
-    transfer/conversion readout completion
-
 acquisition_completed_us
-    complete batch is available to later runtime stages
 ```
 
-The reference MPU6050 currently has `source_sample_at_us = Unknown`. This is intentional: polling a register at time T does not prove the sensor sampled the MEMS element at T.
+`source_sample_at_us` is present only when the physical/device sample instant is known. The MPU6050 source-sample time is `Unknown` because the reference board does not route the device data-ready interrupt.
 
-Encoder counter snapshots are timestamped independently because each timer count is observed at a different CPU instant. ADC read completion is also preserved independently.
+Encoder snapshots and ADC readout timing are stored independently.
 
-## Quality model
+## Measurement quality
 
-`MeasurementQuality` is an evidence bitset rather than a single validity flag:
+`MeasurementQuality` is an independent bitset:
 
 ```text
-AVAILABLE             a value was produced
-IO_OK                 the acquisition operation completed without I/O error
-IO_ERROR              an attempted acquisition reported an I/O error
-TIMING_VALID          source/capture timing is considered usable
-FRESHNESS_VERIFIED    freshness was independently established
-SATURATED             saturation/clipping was detected
-STALE                 staleness was detected
-RETRIED               acquisition required a retry
+AVAILABLE
+IO_OK
+IO_ERROR
+TIMING_VALID
+FRESHNESS_VERIFIED
+SATURATED
+STALE
+RETRIED
 ```
 
-The absence of `FRESHNESS_VERIFIED` means freshness is not established; it does not automatically mean stale. The absence of `SATURATED` means saturation was not flagged; it does not claim that saturation detection was performed.
+An unset flag is not interpreted as proof of its opposite. Acquisition-platform state such as bus readiness, device presence, and device configuration belongs to `AcquisitionStatus`.
 
-Platform facts such as bus readiness, MPU presence, and MPU configuration are represented separately by `AcquisitionStatus`.
+## Estimator contract
 
-## Estimator rule
+Estimator time evolution is derived from observation timing evidence. Scheduler period is not substituted for source time unless the estimator contract explicitly permits that approximation.
 
-The estimator must consume timestamped observations. It may use a scheduler period as a fallback only when the measurement contract explicitly permits that approximation. It must not overwrite unknown source time with task-entry time merely to obtain a convenient `dt`.
+Unknown source time remains unknown.
 
-## Canonical record
+## Record contract
 
-`swp-observation-record::RecordedObservation` is the canonical replayable representation. It stores one `RawObservation`, a dropped-record counter, version/kind metadata, and CRC16-CCITT-FALSE.
+`swp-observation-record::RecordedObservation` is the canonical replay representation:
 
-To keep the live 100 Hz stream practical on the current UART, one absolute acquisition-start timestamp is stored and other times are encoded as offsets. Unknown offsets remain explicit sentinels. The record is currently 80 bytes.
+```text
+RawObservation
++ dropped-record count
++ record version / kind
++ CRC16-CCITT-FALSE
+```
 
-The wire format is a recording contract, not the runtime data model. `RawObservation` may evolve internally without forcing estimator code to manipulate wire offsets.
+The binary record is fixed at 80 bytes. One absolute acquisition-start timestamp is stored; related times are represented as offsets with explicit unknown sentinels.
+
+The record format is a transport-independent recording contract. Runtime semantic types do not depend on wire offsets or UART framing.
 
 ## Replay invariants
 
-A replay implementation must:
+Replay preserves:
 
-- preserve record order and recorded sequence numbers;
-- preserve unknown timestamp/quality states;
-- use recorded timestamps for estimator time evolution;
-- report sequence gaps rather than silently interpolating records;
-- not use host wall-clock speed as measurement time;
-- permit the same record stream to be consumed by different estimator/controller revisions.
+- record order;
+- sequence numbers and gaps;
+- timestamp values and unknown states;
+- measurement-quality state;
+- record corruption detection.
 
-This makes real hardware captures suitable for regression tests and algorithm comparison rather than only for plotting.
+Replay time is recorded measurement time, not host wall-clock execution speed.
