@@ -36,8 +36,151 @@ impl OperatingState {
         }
     }
 
+    /// Closed-loop authority additionally requires a healthy primary sensor clock.
+    pub const fn actuation_authority_with_timing(
+        self,
+        timing: SensorTimingHealth,
+    ) -> ActuationAuthority {
+        if timing.closed_loop_eligible() {
+            self.actuation_authority()
+        } else {
+            ActuationAuthority::Denied
+        }
+    }
+
     pub const fn is_faulted(self) -> bool {
         matches!(self, Self::Fault)
+    }
+}
+
+/// Health of the primary sensor-driven real-time boundary.
+///
+/// This is deliberately independent of the sensor interrupt itself: a separate
+/// MCU timer must be able to declare a late or missing observation even when the
+/// sensor produces no interrupt at all.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SensorTimingHealth {
+    #[default]
+    Startup,
+    Healthy,
+    Late,
+    Timeout,
+}
+
+impl SensorTimingHealth {
+    pub const fn closed_loop_eligible(self) -> bool {
+        matches!(self, Self::Healthy)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SensorTimingLimits {
+    expected_period_us: u32,
+    late_after_us: u32,
+    timeout_after_us: u32,
+}
+
+impl SensorTimingLimits {
+    pub const fn new(
+        expected_period_us: u32,
+        late_after_us: u32,
+        timeout_after_us: u32,
+    ) -> Option<Self> {
+        if expected_period_us == 0
+            || late_after_us < expected_period_us
+            || timeout_after_us <= late_after_us
+        {
+            None
+        } else {
+            Some(Self {
+                expected_period_us,
+                late_after_us,
+                timeout_after_us,
+            })
+        }
+    }
+
+    pub const fn expected_period_us(self) -> u32 {
+        self.expected_period_us
+    }
+
+    pub const fn late_after_us(self) -> u32 {
+        self.late_after_us
+    }
+
+    pub const fn timeout_after_us(self) -> u32 {
+        self.timeout_after_us
+    }
+
+    pub const fn classify_elapsed_us(self, elapsed_us: u64) -> SensorTimingHealth {
+        if elapsed_us >= self.timeout_after_us as u64 {
+            SensorTimingHealth::Timeout
+        } else if elapsed_us >= self.late_after_us as u64 {
+            SensorTimingHealth::Late
+        } else {
+            SensorTimingHealth::Healthy
+        }
+    }
+}
+
+/// Stateful liveness monitor for a sensor-driven acquisition boundary.
+///
+/// `on_event()` is called from the sensor interrupt path. `poll()` is called
+/// from an independent MCU timebase. The latter is what makes loss of the
+/// sensor interrupt itself observable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SensorTimingMonitor {
+    limits: SensorTimingLimits,
+    started_at_us: u64,
+    last_event_at_us: Option<u64>,
+    health: SensorTimingHealth,
+}
+
+impl SensorTimingMonitor {
+    pub const fn new(limits: SensorTimingLimits, started_at_us: u64) -> Self {
+        Self {
+            limits,
+            started_at_us,
+            last_event_at_us: None,
+            health: SensorTimingHealth::Startup,
+        }
+    }
+
+    pub fn on_event(&mut self, event_at_us: u64) -> SensorTimingHealth {
+        self.health = match self.last_event_at_us {
+            Some(previous) => self
+                .limits
+                .classify_elapsed_us(event_at_us.saturating_sub(previous)),
+            None => SensorTimingHealth::Healthy,
+        };
+        self.last_event_at_us = Some(event_at_us);
+        self.health
+    }
+
+    pub fn poll(&mut self, now_us: u64) -> SensorTimingHealth {
+        let reference = self.last_event_at_us.unwrap_or(self.started_at_us);
+        let elapsed = now_us.saturating_sub(reference);
+
+        self.health = if self.last_event_at_us.is_none()
+            && elapsed < self.limits.timeout_after_us as u64
+        {
+            SensorTimingHealth::Startup
+        } else {
+            self.limits.classify_elapsed_us(elapsed)
+        };
+        self.health
+    }
+
+    pub const fn health(self) -> SensorTimingHealth {
+        self.health
+    }
+
+    pub const fn last_event_at_us(self) -> Option<u64> {
+        self.last_event_at_us
+    }
+
+    pub const fn limits(self) -> SensorTimingLimits {
+        self.limits
     }
 }
 
@@ -127,6 +270,56 @@ mod tests {
             OperatingState::MomentumLimited.actuation_authority(),
             ActuationAuthority::ClosedLoop
         );
+    }
+
+    #[test]
+    fn timing_health_gates_closed_loop_authority() {
+        for timing in [
+            SensorTimingHealth::Startup,
+            SensorTimingHealth::Late,
+            SensorTimingHealth::Timeout,
+        ] {
+            assert_eq!(
+                OperatingState::Balancing.actuation_authority_with_timing(timing),
+                ActuationAuthority::Denied
+            );
+        }
+
+        assert_eq!(
+            OperatingState::Balancing
+                .actuation_authority_with_timing(SensorTimingHealth::Healthy),
+            ActuationAuthority::ClosedLoop
+        );
+    }
+
+    #[test]
+    fn timing_limits_reject_invalid_configuration() {
+        assert!(SensorTimingLimits::new(0, 3_000, 6_000).is_none());
+        assert!(SensorTimingLimits::new(2_000, 1_999, 6_000).is_none());
+        assert!(SensorTimingLimits::new(2_000, 3_000, 3_000).is_none());
+    }
+
+    #[test]
+    fn independent_poll_detects_missing_sensor_events() {
+        let limits = SensorTimingLimits::new(2_000, 3_000, 6_000).unwrap();
+        let mut monitor = SensorTimingMonitor::new(limits, 100_000);
+
+        assert_eq!(monitor.poll(102_000), SensorTimingHealth::Startup);
+        assert_eq!(monitor.on_event(102_100), SensorTimingHealth::Healthy);
+        assert_eq!(monitor.poll(104_900), SensorTimingHealth::Healthy);
+        assert_eq!(monitor.poll(105_100), SensorTimingHealth::Late);
+        assert_eq!(monitor.poll(108_100), SensorTimingHealth::Timeout);
+    }
+
+    #[test]
+    fn event_cadence_is_classified_at_the_sensor_boundary() {
+        let limits = SensorTimingLimits::new(2_000, 3_000, 6_000).unwrap();
+        let mut monitor = SensorTimingMonitor::new(limits, 0);
+
+        assert_eq!(monitor.on_event(2_000), SensorTimingHealth::Healthy);
+        assert_eq!(monitor.on_event(4_100), SensorTimingHealth::Healthy);
+        assert_eq!(monitor.on_event(7_100), SensorTimingHealth::Late);
+        assert_eq!(monitor.on_event(13_100), SensorTimingHealth::Timeout);
     }
 
     #[test]
