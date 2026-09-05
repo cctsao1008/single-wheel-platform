@@ -22,6 +22,10 @@ jobs:
         run: cargo test -p swp-plant-model --target x86_64-unknown-linux-gnu
       - name: Measurement model tests
         run: cargo test -p swp-measurement-model --target x86_64-unknown-linux-gnu
+      - name: State estimator tests
+        run: cargo test -p swp-state-estimator --target x86_64-unknown-linux-gnu
+      - name: State feedback tests
+        run: cargo test -p swp-state-feedback --target x86_64-unknown-linux-gnu
       - name: Reference assembly mapping tests
         run: cargo test -p swp-reference-assembly --target x86_64-unknown-linux-gnu
       - name: Sensor transfer and calibration tests
@@ -38,5 +42,7 @@ jobs:
         run: python3 -m unittest discover -s tools/recording -p 'test_*.py'
       - name: Host wireless observer syntax
         run: python3 -m py_compile tools/wireless/observe.py
+      - name: Control synthesis syntax
+        run: python3 -m py_compile tools/control/synthesize_upright.py
       - name: Link release firmware
         run: cargo build -p swp-stm32f103 --release --target thumbv7m-none-eabi

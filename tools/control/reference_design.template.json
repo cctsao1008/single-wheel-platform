@@ -1,0 +1,33 @@
+{
+  "sample_period_s": 0.002,
+  "plant_parameters": {
+    "gravity_m_per_s2": 9.80665,
+    "body_mass_kg": null,
+    "body_com_height_m": null,
+    "body_inertia_roll_kg_m2": null,
+    "body_inertia_pitch_kg_m2": null,
+    "body_inertia_yaw_kg_m2": null,
+    "drive_wheel_mass_kg": null,
+    "drive_wheel_radius_m": null,
+    "drive_wheel_spin_inertia_kg_m2": null,
+    "reaction_wheel_mass_kg": null,
+    "reaction_wheel_com_height_m": null,
+    "reaction_wheel_spin_inertia_kg_m2": null,
+    "reaction_wheel_transverse_inertia_kg_m2": null
+  },
+  "imu_placement_m": {
+    "forward_x_m": null,
+    "left_y_m": null,
+    "up_z_m": null
+  },
+  "lqr": {
+    "state_scale": [null, null, null, null, null, null, null],
+    "input_scale_nm": [null, null]
+  },
+  "observer": {
+    "process_std": [null, null, null, null, null, null, null],
+    "measurement_std": [null, null, null, null, null, null, null, null],
+    "required_measurements": null
+  },
+  "lqi": null
+}

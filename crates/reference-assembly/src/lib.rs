@@ -1,7 +1,8 @@
 #![no_std]
 
 use swp_board_one_v2::{EncoderChannel, MotorChannel};
-use swp_robot_domain::Actuator;
+use swp_plant_model::ReferencePlantInput;
+use swp_robot_domain::{Actuator, GeneralizedDemand};
 
 /// Physical population state of one PCB motor interface in the inspected unit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,9 +17,6 @@ pub struct MotorInstallation {
     pub population: MotorPopulation,
 }
 
-/// Encoder-channel association established by the corresponding installed motor
-/// harness. This does not yet define encoder sign, pulses/revolution, or wheel
-/// angular-speed scaling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EncoderAssociation {
     pub channel: EncoderChannel,
@@ -75,9 +73,23 @@ pub const fn actuator_for_encoder(channel: EncoderChannel) -> Option<Actuator> {
     }
 }
 
+/// Allocate the current two-axis robot demand into the plant input coordinates.
+///
+/// The reference assembly currently has one actuator for each controlled effort,
+/// so the numeric allocation is identity. The function is still an explicit
+/// semantic boundary: controller output uses robot roles while the plant model
+/// consumes its ordered `[drive, reaction]` input vector.
+pub const fn allocate_generalized_demand(demand: GeneralizedDemand) -> ReferencePlantInput {
+    ReferencePlantInput {
+        drive_torque_nm: demand.drive_wheel_torque.0,
+        reaction_wheel_torque_nm: demand.reaction_wheel_torque.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use swp_robot_domain::TorqueNm;
 
     #[test]
     fn reference_unit_has_exactly_two_installed_actuators() {
@@ -99,5 +111,15 @@ mod tests {
             Some(Actuator::DriveWheel)
         );
         assert_eq!(actuator_for_motor(MotorChannel::Bldc3), None);
+    }
+
+    #[test]
+    fn current_two_axis_allocation_preserves_physical_torque_demand() {
+        let input = allocate_generalized_demand(GeneralizedDemand {
+            drive_wheel_torque: TorqueNm(0.25),
+            reaction_wheel_torque: TorqueNm(-0.5),
+        });
+        assert_eq!(input.drive_torque_nm, 0.25);
+        assert_eq!(input.reaction_wheel_torque_nm, -0.5);
     }
 }

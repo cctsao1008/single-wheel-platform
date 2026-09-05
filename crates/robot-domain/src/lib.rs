@@ -12,6 +12,10 @@ pub struct AngularRateRadPerSec(pub f32);
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Volts(pub f32);
 
+/// Torque in newton-metres.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TorqueNm(pub f32);
+
 /// Timestamp in microseconds on the firmware monotonic timebase.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TimestampUs(pub u64);
@@ -42,15 +46,16 @@ pub struct RobotState {
     pub validity: StateValidity,
 }
 
-/// Generalized control demand for the two physically installed actuation axes.
+/// Physical generalized demand produced by the current state-space controller.
 ///
-/// There is intentionally no yaw demand: the inspected reference assembly has
-/// a reaction-wheel actuator and a ground-drive actuator, while the third PCB
-/// motor interface is not populated.
+/// The current upright plant is synthesized directly in the two populated
+/// actuator-effort coordinates. These values are physical torques, never PWM or
+/// normalized duty. Reference-assembly allocation owns the mapping from these
+/// robot-semantic roles to the plant input / board channels.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct GeneralizedDemand {
-    pub roll: f32,
-    pub pitch: f32,
+    pub drive_wheel_torque: TorqueNm,
+    pub reaction_wheel_torque: TorqueNm,
 }
 
 /// Robot-semantic actuator identity for the currently verified assembly.

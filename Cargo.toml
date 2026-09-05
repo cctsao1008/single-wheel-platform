@@ -4,6 +4,8 @@ members = [
     "crates/robot-domain",
     "crates/plant-model",
     "crates/measurement-model",
+    "crates/state-estimator",
+    "crates/state-feedback",
     "crates/reference-assembly",
     "crates/plant-observation",
     "crates/sensor-calibration",
