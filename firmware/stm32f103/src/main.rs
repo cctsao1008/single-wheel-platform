@@ -129,7 +129,7 @@ mod app {
     }
 
     #[init(local = [record_queue: Queue<[u8; RAW_OBSERVATION_RECORD_LEN], 8> = Queue::new()])]
-    fn init(ctx: init::Context) -> (Shared, Local) {
+    fn init(mut ctx: init::Context) -> (Shared, Local) {
         let mut dcb = ctx.core.DCB;
         let mut dwt = ctx.core.DWT;
         dcb.enable_trace();
