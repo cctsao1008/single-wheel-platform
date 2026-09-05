@@ -10,6 +10,7 @@ impl AcquisitionStatus {
     pub const BUS_READY: Self = Self(1 << 0);
     pub const IMU_PRESENT: Self = Self(1 << 1);
     pub const IMU_CONFIGURED: Self = Self(1 << 2);
+    pub const IMU_DATA_READY_IRQ_ENABLED: Self = Self(1 << 3);
 
     pub const fn from_bits(bits: u16) -> Self {
         Self(bits)
@@ -41,9 +42,9 @@ impl BitOrAssign for AcquisitionStatus {
 /// Evidence about the quality of one measurement.
 ///
 /// Flags are deliberately not interpreted as a single valid/invalid boolean.
-/// For example, an MPU read may be available and I/O-clean while freshness and
-/// physical sample time remain unknown because the current runtime has not yet
-/// promoted the available PC13 MPU interrupt route into sample-time evidence.
+/// A DATA_RDY-triggered MPU read can prove that the register image is fresh
+/// while the exact internal sensing instant remains unknown. Freshness and
+/// source-time evidence are therefore independent properties.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MeasurementQuality(u16);
 
@@ -88,9 +89,10 @@ impl BitOrAssign for MeasurementQuality {
 /// Timestamp evidence on the firmware monotonic timebase.
 ///
 /// `Unknown` is a first-class state rather than a fabricated timestamp. The
-/// reference board does route MPU6050 INT to PC13, but the current firmware
-/// still polls the device with DATA_RDY disabled, so the device sample instant
-/// has not yet been established as runtime timing evidence.
+/// MPU6050 DATA_RDY edge is observable through PC13 / EXTI13, but EXTI does not
+/// hardware-capture the sensor's internal sample instant. ISR entry and I2C
+/// read timing can therefore be known while `source_sample_at_us` remains
+/// `Unknown` until a stronger timing contract is established.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TimestampEvidence {
     #[default]
