@@ -16,16 +16,11 @@ pub struct Volts(pub f32);
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TimestampUs(pub u64);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum StateValidity {
+    #[default]
     Invalid,
     Valid,
-}
-
-impl Default for StateValidity {
-    fn default() -> Self {
-        Self::Invalid
-    }
 }
 
 /// State presented to the control domain.
