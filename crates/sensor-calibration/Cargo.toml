@@ -1,0 +1,13 @@
+[package]
+name = "swp-sensor-calibration"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-mpu6050 = { path = "../mpu6050" }
+swp-plant-observation = { path = "../plant-observation" }
+
+[lib]
+path = "src/lib.rs"
