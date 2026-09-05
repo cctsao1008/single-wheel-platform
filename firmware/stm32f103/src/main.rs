@@ -35,7 +35,12 @@ mod app {
 
     const CPU_HZ: u64 = 8_000_000;
     const CYCLES_PER_US: u64 = CPU_HZ / 1_000_000;
-    const SAMPLE_PERIOD_MS: u32 = 10;
+
+    const MPU_ACQUISITION_HZ: u16 = 500;
+    const INNER_PERIOD_MS: u32 = 2;
+    const OBSERVATION_DECIMATION: u8 = 5;
+    const I2C_HALF_PERIOD_NS: u32 = 1_250;
+
     const RECORD_BAUD: u32 = 115_200;
     const RECORD_QUEUE_STORAGE: usize = 8;
 
@@ -116,6 +121,7 @@ mod app {
         bus_ready: bool,
         imu_present: bool,
         imu_configured: bool,
+        observation_divider: u8,
         sequence: u32,
         dropped_records: u16,
         last_cycle: u32,
@@ -148,7 +154,7 @@ mod app {
             .pb9
             .into_open_drain_output_with_state(&mut gpiob.crh, PinState::High);
         let delay = ctx.core.SYST.delay(&rcc.clocks);
-        let mut bus = SoftwareI2c::new(sda, scl, delay, 5_000, 100);
+        let mut bus = SoftwareI2c::new(sda, scl, delay, I2C_HALF_PERIOD_NS, 100);
         let bus_ready = bus.recover_bus().is_ok();
 
         let mut imu = Mpu6050::new(bus, board::MPU6050_ADDRESS);
@@ -159,7 +165,7 @@ mod app {
                     gyro_range: GyroRange::Dps1000,
                     accel_range: AccelRange::G4,
                     dlpf: Dlpf::Config3,
-                    sample_rate_hz: 100,
+                    sample_rate_hz: MPU_ACQUISITION_HZ,
                     data_ready_interrupt: false,
                 })
                 .is_ok();
@@ -180,15 +186,17 @@ mod app {
         );
 
         let mut sample_timer = ctx.device.TIM1.counter_ms(&mut rcc);
-        sample_timer.start(SAMPLE_PERIOD_MS.millis()).unwrap();
+        sample_timer.start(INNER_PERIOD_MS.millis()).unwrap();
         sample_timer.listen(Event::Update);
 
         let (record_producer, record_consumer) = ctx.local.record_queue.split();
         let record_pump = UartRecordPump::new(record_tx, record_consumer);
         let last_cycle = DWT::cycle_count();
 
-        // TIM3 and all motor GPIO remain untouched. The runtime only acquires
-        // physical evidence and emits canonical records over USART2 to ECB02S2.
+        // TIM3 and all motor GPIO remain untouched. The 500 Hz task establishes
+        // the acquisition / estimator / inner-balance timing boundary while the
+        // runtime remains observation-only. Canonical records are decimated to
+        // 100 Hz and emitted over USART2 to ECB02S2.
         (
             Shared {},
             Local {
@@ -203,6 +211,7 @@ mod app {
                 bus_ready,
                 imu_present,
                 imu_configured,
+                observation_divider: 0,
                 sequence: 0,
                 dropped_records: 0,
                 last_cycle,
@@ -232,6 +241,7 @@ mod app {
             bus_ready,
             imu_present,
             imu_configured,
+            observation_divider,
             sequence,
             dropped_records,
             last_cycle,
@@ -239,6 +249,10 @@ mod app {
         ]
     )]
     fn sample_tick(ctx: sample_tick::Context) {
+        // Clear the hardware event at entry so a missed 2 ms deadline remains
+        // visible as a newly pending update instead of being erased at exit.
+        ctx.local.sample_timer.clear_interrupt(Event::Update);
+
         let acquisition_started_us =
             capture_timestamp_us(ctx.local.last_cycle, ctx.local.cycle_epoch);
 
@@ -253,6 +267,9 @@ mod app {
             acquisition_status |= AcquisitionStatus::IMU_CONFIGURED;
         }
 
+        // MPU acquisition runs every 2 ms. State estimation and roll/pitch
+        // balance computation will execute at this same 500 Hz boundary once
+        // those stages are instantiated. Motor authority remains disabled.
         let mut sample = RawSample::default();
         let mut imu_quality = MeasurementQuality::NONE;
         let mut imu_read_started_at_us = TimestampEvidence::Unknown;
@@ -277,6 +294,15 @@ mod app {
             ));
         }
 
+        *ctx.local.observation_divider += 1;
+        if *ctx.local.observation_divider < OBSERVATION_DECIMATION {
+            return;
+        }
+        *ctx.local.observation_divider = 0;
+
+        // Encoder capture, outer-loop observation, and canonical recording are
+        // currently aligned at 100 Hz. Encoder velocity may later move to an
+        // independent 100-200 Hz task without changing the 500 Hz inner path.
         let encoder_1_count = ctx.local.encoder_1.count();
         let encoder_1_captured_at_us = TimestampEvidence::Known(capture_timestamp_us(
             ctx.local.last_cycle,
@@ -355,7 +381,6 @@ mod app {
         }
 
         *ctx.local.sequence = ctx.local.sequence.wrapping_add(1);
-        ctx.local.sample_timer.clear_interrupt(Event::Update);
     }
 
     #[task(binds = USART2, priority = 1, local = [record_pump])]
