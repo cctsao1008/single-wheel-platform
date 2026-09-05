@@ -10,7 +10,10 @@ rust-toolchain.toml
 
 crates/
   robot-domain/
-    src/lib.rs          Single-wheel physical/control-domain types
+    src/lib.rs          Verified single-wheel physical/control-domain types
+
+  reference-assembly/
+    src/lib.rs          Installed population and board-channel-to-robot-role mapping
 
   plant-observation/
     src/lib.rs          Raw plant evidence, timing, and measurement quality
@@ -49,7 +52,8 @@ tools/
 The dependency meanings are:
 
 ```text
-robot-domain        knows the single-wheel plant, not STM32
+robot-domain        knows the verified single-wheel plant semantics, not STM32
+reference-assembly  maps installed board channels to robot actuator roles
 plant-observation   carries raw evidence and uncertainty, not robot interpretation
 sensor-calibration  separates nominal device scaling from measured calibration
 observation-record  serializes observation evidence for recording/replay
@@ -59,6 +63,14 @@ board-one-v2        knows PCB channels and pins, not robot actuator roles
 firmware            owns STM32 peripherals and composes runtime acquisition
 stm32f1xx-hal       owns STM32F1 peripheral access
 RTIC                owns real-time task/resource priority and concurrency
+```
+
+The reference-assembly crate exists because three different forms of truth must not be collapsed:
+
+```text
+board capability    BLDC_1, BLDC_2, BLDC_3 exist electrically
+assembly population BLDC_1 + BLDC_2 installed; BLDC_3 not installed
+robot semantics     BLDC_1 = ReactionWheel; BLDC_2 = DriveWheel
 ```
 
 The sensor-calibration crate deliberately does not own mounting rotation or robot-axis mapping. A value can therefore become SI-valued and physically calibrated while still remaining in the sensor frame.
