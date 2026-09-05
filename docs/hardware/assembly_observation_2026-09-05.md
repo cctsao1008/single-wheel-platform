@@ -10,17 +10,36 @@ The control PCB silkscreen visibly identifies three motor connectors:
 - `M2` — populated / cabled,
 - `M3` — physically present but **not cabled** in the inspected assembly.
 
-The `M3` connector silkscreen includes `BRA` / brake alongside the motor-control signals. This uniquely matches the schematic `BLDC_3` / `CN1` interface, which is the only brushless connector carrying the `Brake` signal. Therefore the inspected PCB establishes:
+The `M3` connector silkscreen includes `BRA` / brake alongside the motor-control signals. This uniquely matches the schematic `BLDC_3` / `CN1` interface, which is the only brushless connector carrying the `Brake` signal.
+
+The remaining two physical connector labels require care because the schematic component designators are not numerically identical to the PCB motor-channel silkscreen:
 
 ```text
-M3 <-> schematic BLDC_3 / CN1
+PCB silk M2  <-> schematic BLDC_1 connector (schematic component M2)
+PCB silk M1  <-> schematic BLDC_2 connector (schematic component CN2)
+PCB silk M3  <-> schematic BLDC_3 connector (schematic component CN1)
 ```
 
-The physical connector numbering is consistent with the schematic channel numbering (`M1`/`BLDC_1`, `M2`/`BLDC_2`, `M3`/`BLDC_3`), but only the M3 identification is currently considered uniquely cross-checked by the brake signal.
+## Verified installed motor routing
 
-## Installed motors
+The assembled unit has two installed motors, and both cable destinations have now been manually confirmed on the physical robot:
 
-Two brushless motors are visibly installed in the current assembly. The M1 cable can be visually followed from the PCB connector near the USB-C edge to the lower motor. The lower motor label is readable as:
+```text
+PCB M2 / schematic BLDC_1
+    -> upper motor
+    -> large metal reaction wheel / flywheel
+    -> robot role: ReactionWheel
+
+PCB M1 / schematic BLDC_2
+    -> lower Nidec 24H404H-160
+    -> ground-contact drive wheel
+    -> robot role: DriveWheel
+
+PCB M3 / schematic BLDC_3
+    -> no motor connected in the inspected unit
+```
+
+The lower motor label is readable as:
 
 ```text
 Nidec
@@ -29,36 +48,51 @@ D6831765B
 LOT. M13910
 ```
 
-A second motor drives the large metal flywheel/reaction-wheel mechanism in the upper part of the assembly.
+This establishes the actuator-role topology of the inspected reference assembly without relying on the legacy X/Y naming or schematic captions alone.
 
-At this observation stage, the final semantic mapping is intentionally not promoted into the robot-domain model until cable routing is physically confirmed:
+## Encoder association
+
+Because the encoder signals are carried on the same BLDC connector interfaces, the verified assembly mapping establishes the following channel association:
 
 ```text
-M1 / BLDC_1 -> lower Nidec motor                 observed cable routing
-M2 / BLDC_2 -> upper flywheel motor              probable; confirm cable trace
-M3 / BLDC_3 -> no motor installed in this unit   observed
+Encoder_1 -> reaction-wheel motor feedback path
+Encoder_2 -> drive-wheel motor feedback path
+Encoder_3 -> no installed actuator / no MCU encoder route shown
 ```
 
-The upper flywheel motor is mechanically identifiable as the reaction-wheel actuator. The lower motor's final robot-domain role (for example ground-contact drive) should be confirmed from the mechanism rather than inferred solely from schematic captions.
+This association does **not** yet establish encoder sign, counts per mechanical revolution, gearbox ratio, or robot-positive angular velocity. Those remain commissioning facts.
 
 ## Architectural consequence
 
-`BLDC_3` remains a real PCB output interface, but it is **not an installed actuator in the currently inspected physical plant**. Firmware must not assume that every schematic motor channel corresponds to an installed actuator.
-
-Keep these concepts separate:
+The physical plant in the inspected unit has exactly two installed actuator roles:
 
 ```text
-PCB capability        = M1 / M2 / M3 interfaces exist
-Assembly population   = M1 + M2 connected, M3 unconnected
-Robot semantics       = assigned only after mechanical/cable confirmation
+ReactionWheel
+DriveWheel
 ```
 
-This distinction should remain explicit in actuator allocation and commissioning logic.
+`BLDC_3` remains a real PCB output capability but is not an installed actuator in this assembly. The architecture therefore keeps three different kinds of truth separate:
+
+```text
+PCB capability
+    BLDC_1 / BLDC_2 / BLDC_3 exist
+
+Assembly population
+    BLDC_1 installed
+    BLDC_2 installed
+    BLDC_3 not installed
+
+Robot semantics
+    BLDC_1 -> ReactionWheel
+    BLDC_2 -> DriveWheel
+```
+
+The Rust workspace records this verified transition in `swp-reference-assembly`; `swp-board-one-v2` remains schematic/PCB-only and does not own robot semantics.
 
 ## Still unresolved from the supplied views
 
-- exact M2 cable destination needs a direct physical trace/continuity confirmation;
-- whether the lower Nidec motor is the ground-contact drive actuator needs mechanical confirmation;
 - MCU top marking is obscured / not readable in these views;
 - external crystal `Y1` marking/frequency is not readable in these views;
-- MPU6050 sensor-axis-to-body-axis orientation still needs a clear board/vehicle orientation reference.
+- MPU6050 sensor-axis-to-body-axis orientation still needs a clear board/vehicle orientation reference;
+- encoder positive direction and mechanical scale are not yet measured;
+- BLDC PWM active polarity / direction polarity still require powered commissioning evidence before output activation.
