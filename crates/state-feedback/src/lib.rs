@@ -70,9 +70,7 @@ pub struct IntegralProjection {
 }
 
 impl IntegralProjection {
-    pub fn new(
-        c_i: [[f32; REDUCED_BALANCE_STATE_COUNT]; INTEGRAL_STATE_COUNT],
-    ) -> Option<Self> {
+    pub fn new(c_i: [[f32; REDUCED_BALANCE_STATE_COUNT]; INTEGRAL_STATE_COUNT]) -> Option<Self> {
         c_i.iter()
             .flatten()
             .all(|value| value.is_finite())
@@ -170,11 +168,10 @@ impl LqiController {
         require_finite_demand(feedforward)?;
 
         if integrator_update == IntegratorUpdate::Integrate {
-            for row in 0..INTEGRAL_STATE_COUNT {
+            for (row, integral) in self.integral_state.iter_mut().enumerate() {
                 let delta = self.sample_period_s * dot(self.projection.c_i[row], error);
-                let next = self.integral_state[row] + delta;
-                self.integral_state[row] =
-                    next.clamp(-self.bounds.max_abs[row], self.bounds.max_abs[row]);
+                let bound = self.bounds.max_abs[row];
+                *integral = (*integral + delta).clamp(-bound, bound);
             }
         }
 
@@ -203,8 +200,10 @@ fn state_error(
     }
 
     let mut error = [0.0; REDUCED_BALANCE_STATE_COUNT];
-    for index in 0..REDUCED_BALANCE_STATE_COUNT {
-        error[index] = state[index] - reference[index];
+    for ((output, state_value), reference_value) in
+        error.iter_mut().zip(state.iter()).zip(reference.iter())
+    {
+        *output = state_value - reference_value;
     }
     Ok(error)
 }
@@ -228,20 +227,14 @@ fn demand_from_values(drive: f32, reaction: f32) -> Result<GeneralizedDemand, Co
     }
 }
 
-fn dot(
-    row: [f32; REDUCED_BALANCE_STATE_COUNT],
-    vector: [f32; REDUCED_BALANCE_STATE_COUNT],
-) -> f32 {
+fn dot(row: [f32; REDUCED_BALANCE_STATE_COUNT], vector: [f32; REDUCED_BALANCE_STATE_COUNT]) -> f32 {
     row.iter()
         .zip(vector.iter())
         .map(|(lhs, rhs)| lhs * rhs)
         .sum()
 }
 
-fn dot_integral(
-    row: [f32; INTEGRAL_STATE_COUNT],
-    vector: [f32; INTEGRAL_STATE_COUNT],
-) -> f32 {
+fn dot_integral(row: [f32; INTEGRAL_STATE_COUNT], vector: [f32; INTEGRAL_STATE_COUNT]) -> f32 {
     row.iter()
         .zip(vector.iter())
         .map(|(lhs, rhs)| lhs * rhs)
