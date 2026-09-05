@@ -203,9 +203,8 @@ impl PlantParameters {
             + self.drive_wheel_mass_kg
             + self.drive_wheel_spin_inertia_kg_m2
                 / (self.drive_wheel_radius_m * self.drive_wheel_radius_m);
-        let j_theta = s
-            + self.body_inertia_pitch_kg_m2
-            + self.reaction_wheel_transverse_inertia_kg_m2;
+        let j_theta =
+            s + self.body_inertia_pitch_kg_m2 + self.reaction_wheel_transverse_inertia_kg_m2;
         let j_phi = s + self.body_inertia_roll_kg_m2;
         let delta_pitch = m_s * j_theta - h * h;
 
@@ -286,9 +285,7 @@ pub fn balance_generalized_forces(
 /// point its first-order Jacobian separates into translation/pitch and
 /// roll/reaction-wheel blocks; the zero cross-axis terms here are therefore a
 /// derived local property rather than an assumed controller topology.
-pub fn linearize_stationary_upright(
-    parameters: PlantParameters,
-) -> Option<ContinuousLinearPlant> {
+pub fn linearize_stationary_upright(parameters: PlantParameters) -> Option<ContinuousLinearPlant> {
     let p = parameters.upright_aggregates()?;
     let h = p.gravitational_first_moment_kg_m;
     let m_s = p.equivalent_translation_mass_kg;
