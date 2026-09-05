@@ -33,6 +33,8 @@ Encoder_3 -> unused / no MCU route
 
 Board connector identity and robot actuator identity are separate definitions. `swp-board-one-v2` owns PCB wiring; `swp-reference-assembly` owns the installed channel-to-role mapping.
 
+The vendor V2.0 control dataflow pairs Encoder_1 with BLDC_1 and Encoder_2 with BLDC_2. Encoder_1 is captured through TIM2 encoder mode. The active vendor implementation captures Encoder_2 with PB6/EXTI6 plus PB7 direction sensing, although a TIM4 QEI implementation also exists in the archive and the current Rust runtime uses TIM4 QEI.
+
 ## Interfaces
 
 ```text
@@ -42,11 +44,16 @@ ECB02 AT_EN          PC15
 ECB02 ROLE           PC14
 OLED SDA             PB4
 OLED SCL             PB5
-EN_X                 PA15
-EN_Y                 PB3
+SW2                   PB12
+SW4                   PB13
+D2 status LED         PB14
+EN_X                  PA15
+EN_Y                  PB3
 ```
 
 USART2 is the active wireless recording/observation transport through the on-board ECB02S2 BLE module. USART1 is retained as a wired bench/engineering interface. OLED is an optional local status interface.
+
+The vendor V2.0 source configures SW2/PB12 and SW4/PB13 as pull-up active-low buttons, PB14 as the status LED, and EN_X/EN_Y as pull-up inputs. PB3, PB4, and PA15 overlap JTAG functions, so the vendor runtime switches the STM32F103 debug port to SWD-only before using those GPIOs. A current runtime that instantiates EN_Y, OLED SDA, or EN_X must preserve the same resource constraint.
 
 `EN_X` and `EN_Y` are MCU inputs and are distinct from `EN_BLDC_1/2/3`, which are hard-wired high at the motor interfaces.
 
@@ -69,22 +76,22 @@ The runtime streams binary `RecordedObservation` bytes through USART2. BLE packe
 ```text
 MPU_SDA      PB8
 MPU_SCL      PB9
-MPU_FSYNC    PC13
-MPU_INT      not routed
+MPU_INT      PC13 / EXTI13
+MPU_FSYNC    hard-wired low / GND
 AD0          low
 I2C address  0x68
 ```
 
 PB8/PB9 do not match the STM32F103 hardware-I2C1 remap polarity, so the platform uses software I2C.
 
-Because MPU6050 INT is not routed, the device source-sample timestamp is not directly observable.
+The MPU6050 INT pin is physically routed to PC13 and can carry DATA_RDY or DMP/FIFO interrupt signaling when configured. The vendor V2.0 firmware does not instantiate that interrupt path, and the current Rust runtime also leaves DATA_RDY disabled. The current `source_sample_at_us` therefore remains `Unknown` because the runtime has not yet promoted the available interrupt route into timestamp evidence, not because the board lacks the route.
 
 ## Encoder wiring
 
 ```text
 Encoder_1 B  PA0 / TIM2_CH1
 Encoder_1 A  PA1 / TIM2_CH2
-Encoder_2 B  PB6 / TIM4_CH1
+Encoder_2 B  PB6 / TIM4_CH1 / EXTI6-capable
 Encoder_2 A  PB7 / TIM4_CH2
 ```
 
@@ -95,6 +102,8 @@ Encoder values enter the observation model as raw wrapping timer counts. Angular
 ```text
 Battery ADC  PA5 / ADC1_IN5
 ```
+
+The vendor implementation configures PA5 as analog and reads ADC channel 5. A stale `Battery_Ch 6` macro also exists in the vendor header; it is not treated as a hardware fact because it conflicts with both the schematic and executable ADC path.
 
 The runtime stores the raw ADC conversion. Voltage conversion is applied only through an explicit divider/ADC transfer function.
 

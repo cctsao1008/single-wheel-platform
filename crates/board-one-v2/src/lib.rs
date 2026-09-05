@@ -78,9 +78,12 @@ pub struct EncoderWiring {
 pub const MCU: &str = "STM32F103C8T6";
 pub const MPU6050_ADDRESS: u8 = 0x68;
 
-/// The schematic label `MPU_INT` is connected to MPU6050 FSYNC, not INT.
-pub const MPU_FSYNC: Pin = Pin::new(Port::C, 13);
-pub const MPU_HAS_DATA_READY_IRQ: bool = false;
+/// The reviewed schematic routes MPU6050 INT to PC13 (`MPU_INT`).
+/// The pin can therefore be used for DATA_RDY or DMP/FIFO interrupt signaling.
+pub const MPU_INT: Pin = Pin::new(Port::C, 13);
+pub const MPU_HAS_DATA_READY_IRQ: bool = true;
+/// MPU6050 FSYNC is tied low on the reference board.
+pub const MPU_FSYNC_HARDWIRED_LOW: bool = true;
 
 /// Reference-board software-I2C wiring. These pins are intentionally named by
 /// the schematic net rather than by STM32 I2C-remap function.
@@ -109,9 +112,14 @@ pub const BLUETOOTH_SLEEP_HARDWIRED_LOW: bool = true;
 pub const OLED_SDA: Pin = Pin::new(Port::B, 4);
 pub const OLED_SCL: Pin = Pin::new(Port::B, 5);
 
+/// Board-local controls and indicator confirmed by schematic and vendor V2.0 source.
+pub const BUTTON_SW2: Pin = Pin::new(Port::B, 12);
+pub const BUTTON_SW4: Pin = Pin::new(Port::B, 13);
+pub const STATUS_LED_D2: Pin = Pin::new(Port::B, 14);
+
 /// Configuration/authority jumper inputs exposed by the board as EN_X and EN_Y.
-/// Their electrical pin mapping is known; the robot-semantic actuator association
-/// is intentionally not encoded here because legacy naming and product labels differ.
+/// The vendor V2.0 source configures both with pull-ups and treats low as asserted.
+/// Robot-semantic actuator association remains outside the board crate.
 pub const EN_X: Pin = Pin::new(Port::A, 15);
 pub const EN_Y: Pin = Pin::new(Port::B, 3);
 

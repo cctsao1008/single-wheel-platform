@@ -42,7 +42,8 @@ impl BitOrAssign for AcquisitionStatus {
 ///
 /// Flags are deliberately not interpreted as a single valid/invalid boolean.
 /// For example, an MPU read may be available and I/O-clean while freshness and
-/// physical sample time remain unknown because the board does not route DRDY.
+/// physical sample time remain unknown because the current runtime has not yet
+/// promoted the available PC13 MPU interrupt route into sample-time evidence.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MeasurementQuality(u16);
 
@@ -86,9 +87,10 @@ impl BitOrAssign for MeasurementQuality {
 
 /// Timestamp evidence on the firmware monotonic timebase.
 ///
-/// `Unknown` is a first-class state rather than a fabricated timestamp. This
-/// matters for the MPU6050 on the reference board: its internal sample time is
-/// not observable because the actual data-ready interrupt is not routed.
+/// `Unknown` is a first-class state rather than a fabricated timestamp. The
+/// reference board does route MPU6050 INT to PC13, but the current firmware
+/// still polls the device with DATA_RDY disabled, so the device sample instant
+/// has not yet been established as runtime timing evidence.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TimestampEvidence {
     #[default]

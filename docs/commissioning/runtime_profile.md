@@ -18,26 +18,27 @@ DWT cycle counting is the firmware monotonic timebase.
 ## Acquisition
 
 ```text
-scheduler            TIM1
-inner acquisition    500 Hz / 2 ms
-MPU6050 bus          software I2C on PB8/PB9
-I2C target           400 kHz nominal bit timing
-MPU6050 address      0x68
-gyro range           +/-1000 dps
-accelerometer range  +/-4 g
-DLPF                 CONFIG=3
-MPU6050 sample rate  500 Hz
-data-ready IRQ       disabled
-Encoder_1            TIM2 QEI
-Encoder_2            TIM4 QEI
-battery              ADC1 / PA5 raw conversion
+scheduler              TIM1
+inner acquisition      500 Hz / 2 ms
+MPU6050 bus            software I2C on PB8/PB9
+I2C target             400 kHz nominal bit timing
+MPU6050 address        0x68
+gyro range             +/-1000 dps
+accelerometer range    +/-4 g
+DLPF                   CONFIG=3
+MPU6050 sample rate    500 Hz
+MPU INT route          PC13 / EXTI13 available in hardware
+data-ready IRQ         disabled in current runtime
+Encoder_1              TIM2 QEI
+Encoder_2              TIM4 QEI
+battery                ADC1 / PA5 raw conversion
 ```
 
 With DLPF CONFIG=3, the MPU6050 measurement path is intentionally bandwidth-limited before the 500 Hz acquisition boundary. The resulting sensor-filter delay remains part of the measured control-path latency and must be included in later timing characterization.
 
-The MPU6050 source-sample timestamp is `Unknown`; I2C read start/completion timestamps are recorded.
+The MPU6050 source-sample timestamp is currently `Unknown`; I2C read start/completion timestamps are recorded. This is a runtime limitation, not a board limitation: MPU6050 INT is routed to PC13, but the current firmware still polls from the TIM1 boundary and configures `data_ready_interrupt: false`.
 
-The 500 Hz TIM1 boundary is the target timing boundary for MPU acquisition, state estimation, and the roll/pitch inner balance loops. The current firmware instantiates only acquisition at this rate; estimator and motor-control stages remain disabled.
+The 500 Hz TIM1 boundary is the current target timing boundary for MPU acquisition, state estimation, and the roll/pitch inner balance loops. The current firmware instantiates only acquisition at this rate; estimator and motor-control stages remain disabled.
 
 Encoder capture is currently performed at the 100 Hz canonical observation boundary. The architecture permits a separate 100-200 Hz encoder-velocity task when velocity estimation is instantiated.
 
@@ -81,6 +82,8 @@ OLED                    10-20 Hz
 ```
 
 Only the acquisition, recording, and USART2/BLE transport portions are instantiated in the current observation-only firmware.
+
+The available PC13 interrupt route permits a later interrupt-driven MPU acquisition path or DMP/FIFO path. Such a change must be measured and adopted as a new runtime timing contract rather than assumed equivalent to the present 500 Hz polling path.
 
 ## Actuation state
 

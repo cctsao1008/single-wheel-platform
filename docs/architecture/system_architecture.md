@@ -222,7 +222,7 @@ Roll, pitch, and yaw follow the right-hand rule about +X, +Y, and +Z respectivel
 
 Scheduler time, physical source-sample time, peripheral capture time, readout completion time, and transmission time are distinct.
 
-The MPU6050 source-sample timestamp is `Unknown` because the reference board does not route the device data-ready interrupt. I2C read start/completion times remain available.
+The MPU6050 INT pin is physically routed to PC13 / EXTI13. The current runtime does not yet use that interrupt and still configures DATA_RDY disabled, so `source_sample_at_us` remains `Unknown`; I2C read start/completion times remain available. Hardware interrupt capability is not promoted to timing evidence until the runtime actually captures and validates it.
 
 `MeasurementQuality` carries independent availability, I/O, timing, freshness, saturation, staleness, and retry state. An unset flag does not imply the opposite property.
 
@@ -254,6 +254,7 @@ The target composition is:
 TIM1          acquisition scheduling
 DWT           monotonic acquisition timing
 PB8/PB9       software I2C -> MPU6050
+PC13          MPU6050 INT / EXTI13 hardware route, currently unused
 TIM2          Encoder_1 QEI
 TIM4          Encoder_2 QEI
 ADC1 / PA5    battery ADC
