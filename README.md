@@ -1,53 +1,83 @@
 # Self-Balancing Single-Wheel Platform
 
-Embedded control and system-identification platform for a self-balancing single-wheel robot, covering state estimation, balance control, actuation, and safety.
+A re-architected embedded control platform for a self-balancing single-wheel robot, with clear separation of sensing, estimation, control, actuation, and hardware-specific implementation.
 
-The project separates **physical I/O**, **state estimation**, **control computation**, and **actuator authority** so that controller and estimator research can evolve without coupling directly to MCU-specific code.
+The project reorganizes the existing platform into explicit software boundaries so that control and estimation logic can evolve without being coupled directly to MCU-specific code. Modeling, system identification, and advanced control are supported as future capabilities, but the primary goal is the platform architecture itself.
 
-## System view
+## Physical system
+
+The reference platform combines three physical actuation paths:
+
+- **Roll / lateral balance** — reaction-wheel actuation.
+- **Pitch / longitudinal balance** — ground-contact drive-wheel actuation.
+- **Yaw / spin** — a third actuation path whose control authority and coupling are treated as plant properties to characterize.
+
+State feedback is provided by an MPU6050-class IMU and wheel encoders on the reference hardware.
+
+## Architecture
 
 ```text
-Sensors / Encoders / ADC
+Physical Sensors / Encoders
           |
           v
   Sensor Acquisition
           |
           v
+ Coordinate Transform
+          |
+          v
    State Estimation
           |
           v
- State Validation
+  Control Policy
           |
-          v
-  Control Pipeline
-   /      |      \
- Roll   Pitch    Yaw
-   \      |      /
           v
    Actuator Mapper
           |
           v
-    Output Safety
+ Safety / Authority
           |
           v
-   Motor Authority
+   Platform I/O
           |
           v
-     Board I/O
-          |
-          v
-  Physical Actuators
+ Physical Actuators
 ```
 
-## Physical control concept
+Non-critical services such as telemetry, storage, user interfaces, configuration, and maintenance traffic remain outside the critical control path.
 
-- **Roll / lateral balance** — reaction-wheel actuation.
-- **Pitch / longitudinal balance** — ground-contact drive-wheel actuation.
-- **Yaw / spin** — independent spin-actuator path.
-- **Attitude sensing** — MPU6050-class inertial sensing on the reference platform.
-- **Wheel feedback** — encoder-based speed / motion feedback.
+## Design goals
 
-The current control baseline is compatible with an attitude **PD** plus wheel-speed **PI** decomposition while keeping the architecture open to state-space control, LQR/LQI, observers, Kalman filtering, coupling compensation, and system-identification work.
+- Separate device drivers from MCU- and board-specific implementation.
+- Keep control and estimation logic independent of hardware registers and SDK headers.
+- Make coordinate conventions, units, timing, and actuator directions explicit.
+- Keep the control path deterministic and free from blocking non-critical work.
+- Represent controller output as requested physical effort rather than direct motor access.
+- Allow estimation and control methods to be replaced without restructuring the platform.
+- Keep the architecture tied to the physical single-wheel system rather than growing into a generic robotics framework.
+
+## Control perspective
+
+The architecture does not assume a particular control law.
+
+A controller consumes an estimated robot state and produces an actuator request through a defined interface. Linear state feedback, model-based methods, robust control, constrained control, or nonlinear methods can therefore be introduced without changing the hardware-facing layers.
+
+Reaction-wheel momentum, actuator speed, torque, saturation, sensing delay, and real-time execution limits are treated as physical constraints of the platform rather than hidden implementation details.
+
+## Reference platform
+
+The current reference hardware is based on:
+
+- STM32F103C8T6-class MCU
+- MPU6050-class inertial sensing
+- reaction-wheel actuator
+- ground-contact drive-wheel actuator
+- additional spin actuator
+- encoder feedback
+- battery and analog monitoring
+- UART / serial communication and local display interfaces
+
+Exact board mappings, polarities, timer assignments, and coordinate transforms are maintained in the platform and hardware documentation.
 
 ## Repository layout
 
@@ -55,16 +85,16 @@ The current control baseline is compatible with an attitude **PD** plus wheel-sp
 app/                 System orchestration and services
 control/             Platform-independent estimation and control
   estimation/        State-estimation algorithms
-  controllers/       Roll / pitch / yaw and future controllers
-  safety/            State and output safety
+  controllers/       Control-policy implementations
+  safety/            State and output protection
 
 drivers/             Device-level drivers independent of robot policy
 platform/
-  api/                Shared board contracts
+  api/                Board and platform contracts
   stm32f103/          STM32F103 reference-platform implementation
 telemetry/            Runtime telemetry and trace infrastructure
 tests/                Host-side control and interface tests
-tools/                Analysis, replay, plotting, and system-ID tools
+tools/                Analysis, replay, plotting, and system tools
 docs/
   architecture/       System, control, timing, and interface architecture
   hardware/           Hardware baseline and mapping
@@ -78,10 +108,10 @@ docs/
 3. Coordinate conventions and physical units are explicit contracts.
 4. Controller output is a requested control effort, not direct motor access.
 5. Telemetry, storage, UI, and maintenance traffic remain outside the critical control path.
-6. The control-loop rate is a measured system property, not a fixed assumption inherited from another platform.
+6. The control-loop rate is a measured system property, not a fixed assumption inherited from another implementation.
 
-See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md) for the target architecture.
+See [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md) for the detailed architecture.
 
 ## Status
 
-The repository currently defines the target architecture and interface boundaries for the platform. Hardware mapping and control parameters are promoted to confirmed project facts only after they are tied to the actual reference hardware.
+The repository currently establishes the platform architecture, interface boundaries, and reference-hardware structure. Device integration, hardware mapping, runtime scheduling, and control implementations are being built on top of these boundaries.
