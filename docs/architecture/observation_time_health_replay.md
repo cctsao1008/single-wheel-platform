@@ -31,9 +31,22 @@ STALE
 RETRIED
 ```
 
-A successful DATA_RDY-triggered MPU read carries `AVAILABLE | IO_OK | FRESHNESS_VERIFIED`. `FRESHNESS_VERIFIED` is not equivalent to an exact source timestamp. An unset flag is not interpreted as proof of its opposite.
+A successful DATA_RDY-triggered MPU read carries `AVAILABLE | IO_OK | FRESHNESS_VERIFIED`. `TIMING_VALID` is added only when the primary sensor cadence has reached the `Healthy` timing state. `FRESHNESS_VERIFIED` is not equivalent to an exact source timestamp. An unset flag is not interpreted as proof of its opposite.
 
-`AcquisitionStatus` separately represents platform/runtime state such as bus readiness, device presence, device configuration, and DATA_RDY IRQ enablement.
+`AcquisitionStatus` separately represents platform/runtime state:
+
+```text
+BUS_READY
+IMU_PRESENT
+IMU_CONFIGURED
+IMU_DATA_READY_IRQ_ENABLED
+IMU_DATA_READY_SEEN
+IMU_TIMING_HEALTHY
+IMU_TIMING_LATE
+IMU_TIMING_TIMEOUT
+```
+
+The timing bits describe the primary acquisition clock at the observation boundary; they do not replace per-measurement quality flags.
 
 ## Estimator contract
 
@@ -43,7 +56,25 @@ The 500 Hz MPU rate is the device configuration and acquisition cadence. The est
 
 ## Health contract
 
-DATA_RDY is also a liveness signal. Closed-loop authority must not depend indefinitely on the assumption that interrupts continue to arrive. Before actuation is enabled, runtime health must define an independent timeout/watchdog for missing DATA_RDY, stale IMU state, and missed control deadlines.
+DATA_RDY drives acquisition but does not supervise itself. TIM1 provides an independent 1 kHz liveness boundary and polls `SensorTimingMonitor` even when no MPU interrupt occurs.
+
+The current timing policy is:
+
+```text
+nominal DATA_RDY period   2 ms
+late                     >= 3 ms
+hard timeout             >= 6 ms
+```
+
+One complete inter-event interval is required before timing becomes `Healthy`. `Startup`, `Late`, and `Timeout` are not eligible for closed-loop authority. This makes a missing sensor interrupt observable to runtime authority instead of allowing the control path to stop silently.
+
+The late/timeout values are runtime safety policy relative to the configured 500 Hz acquisition period. They are not asserted as MPU6050 physical specifications.
+
+## Transport scheduling
+
+Recording is downstream of observation and does not define control timing. USART2 TX uses DMA1 channel 7. A queued 80-byte record generates one DMA completion boundary instead of one TXE service interrupt per byte.
+
+DMA changes MCU service cost, not transport capacity. UART baud rate, BLE buffering, sequence continuity, queue pressure, and dropped-record evidence remain independent constraints.
 
 ## Record contract
 
@@ -56,9 +87,9 @@ RawObservation
 + CRC16-CCITT-FALSE
 ```
 
-The binary record is fixed at 80 bytes. One absolute acquisition-start timestamp is stored; related times are represented as offsets with explicit unknown sentinels.
+The binary record is fixed at 80 bytes. One absolute acquisition-start timestamp is stored; related times are represented as offsets with explicit unknown sentinels. Timing-health state is carried inside the existing `AcquisitionStatus` field, so the wire record does not change size or version.
 
-The record format is transport-independent. Runtime semantic types do not depend on wire offsets or UART framing.
+The record format is transport-independent. Runtime semantic types do not depend on wire offsets, DMA boundaries, UART framing, or BLE packet framing.
 
 ## Replay invariants
 
@@ -68,6 +99,7 @@ Replay preserves:
 - sequence numbers and gaps;
 - timestamp values and unknown states;
 - measurement-quality state;
+- acquisition/timing-health status;
 - record corruption detection.
 
 Replay time is recorded measurement time, not host wall-clock execution speed.
