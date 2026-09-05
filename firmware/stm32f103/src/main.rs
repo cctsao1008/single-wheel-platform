@@ -47,10 +47,8 @@ mod app {
     type BatteryAdcPin = PA5<Analog>;
     type SampleTimer = CounterMs<pac::TIM1>;
     type RecordTx = Tx<pac::USART1>;
-    type RecordProducer =
-        Producer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
-    type RecordConsumer =
-        Consumer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
+    type RecordProducer = Producer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
+    type RecordConsumer = Consumer<'static, [u8; RAW_OBSERVATION_RECORD_LEN], RECORD_QUEUE_STORAGE>;
 
     struct UartRecordPump {
         tx: RecordTx,
