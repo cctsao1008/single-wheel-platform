@@ -61,14 +61,18 @@ Observation and control remain independent from transport and user interfaces:
 ```text
 RawObservation
       |
-      v
-RecordedObservation
+      +----> semantic / control path
       |
-      v
-USART2 / ECB02S2 / BLE
-      |
-      v
-Host recording / observation / replay
+      +----> RecordedObservation
+                   |
+                   v
+             USART2 TX DMA
+                   |
+                   v
+             ECB02S2 / BLE
+                   |
+                   v
+        Host recording / replay
 ```
 
 The control path does not depend on BLE, OLED, host tools, or storage.
@@ -127,7 +131,24 @@ stm32f1xx-hal
 RTIC 2.x
 ```
 
-RTIC owns interrupt priority and static peripheral/resource ownership. High-priority acquisition and control work is isolated from lower-priority recording and interface traffic.
+The primary acquisition boundary is MPU6050 DATA_RDY at 500 Hz through PC13 / EXTI13. TIM1 independently supervises that sensor clock at 1 kHz so missing DATA_RDY cannot silently stop the future control path.
+
+```text
+MPU6050 DATA_RDY       500 Hz acquisition / estimator boundary
+TIM1                   1 kHz independent timing-health boundary
+USART2 TX / DMA1 CH7   100 Hz RecordedObservation transport
+```
+
+Primary sensor timing is represented as:
+
+```text
+Startup
+Healthy
+Late
+Timeout
+```
+
+Only `Healthy` timing is eligible for closed-loop physical output. This timing condition is part of runtime authority rather than being hidden inside the IMU driver.
 
 The operating-state model is:
 
@@ -160,8 +181,10 @@ Sensor acquisition preserves timing and measurement quality instead of collapsin
 ```text
 IMU
   raw accel / gyro / temperature
+  DATA_RDY freshness evidence
   source-time evidence
   read start / completion time
+  timing health
   measurement quality
 
 Encoders
@@ -188,6 +211,8 @@ body-frame measurement
       !=
 estimated robot state
 ```
+
+`DATA_RDY` proves that a fresh MPU output image exists; it does not expose the exact internal MEMS sample instant. `source_sample_at_us` therefore remains explicitly unknown while IRQ service and I2C read timing are recorded.
 
 ## Plant Model
 
@@ -237,7 +262,7 @@ The ideal upright model is structurally observable from encoder/gyro information
 
 ## Recording and Replay
 
-`RawObservation` is encoded as a fixed-size CRC-protected `RecordedObservation` and streamed from USART2 through the on-board ECB02S2 BLE module.
+`RawObservation` is encoded as a fixed-size CRC-protected `RecordedObservation` and streamed from USART2 through the on-board ECB02S2 BLE module. USART2 TX uses DMA1 channel 7; DMA removes byte-rate CPU service without changing the UART/BLE bandwidth contract.
 
 ```text
 RawObservation
@@ -246,7 +271,7 @@ RawObservation
 RecordedObservation
       |
       v
-USART2
+USART2 TX DMA
       |
       v
 ECB02S2 BLE
@@ -255,12 +280,12 @@ ECB02S2 BLE
 Python wireless observer
       |
       +----> raw binary capture
-      +----> live decode
+      +----> live timing-health / signal view
       +----> CSV
       +----> deterministic replay
 ```
 
-The host checks sequence continuity, CRC validity, and firmware-reported dropped records. BLE packet boundaries do not define record boundaries.
+The host checks sequence continuity, CRC validity, firmware-reported dropped records, and primary IMU timing-health state. BLE packet boundaries and DMA transfer boundaries do not define record boundaries.
 
 ## Repository Structure
 
@@ -270,10 +295,10 @@ crates/
   plant-model/           Physical plant coordinates, parameters, and dynamics
   measurement-model/     Sensor equation and local observability model
   reference-assembly/    Installed hardware and board-to-role mapping
-  plant-observation/     Raw acquisition, timing, and quality
+  plant-observation/     Raw acquisition, timing, quality, and health evidence
   sensor-calibration/    Sensor scaling and measured calibration
   frame-transform/       Sensor-frame to body-frame mapping
-  runtime-state/         Operating state and actuator authority
+  runtime-state/         Operating state, timing health, and actuator authority
   observation-record/    Binary recording / replay contract
   mpu6050/               MPU6050 device driver
   software-i2c/          embedded-hal software I2C
