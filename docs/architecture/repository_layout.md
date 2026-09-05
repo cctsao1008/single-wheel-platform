@@ -15,11 +15,14 @@ crates/
   plant-observation/
     src/lib.rs          Raw plant evidence, timing, and measurement quality
 
+  sensor-calibration/
+    src/lib.rs          SI scaling boundary and measured sensor-frame correction
+
   observation-record/
     src/lib.rs          Deterministic binary record/replay contract
 
   mpu6050/
-    src/lib.rs          Generic embedded-hal device driver
+    src/lib.rs          Generic embedded-hal driver and nominal transfer functions
 
   software-i2c/
     src/lib.rs          Portable open-drain embedded-hal I2C implementation
@@ -48,14 +51,17 @@ The dependency meanings are:
 ```text
 robot-domain        knows the single-wheel plant, not STM32
 plant-observation   carries raw evidence and uncertainty, not robot interpretation
+sensor-calibration  separates nominal device scaling from measured calibration
 observation-record  serializes observation evidence for recording/replay
-mpu6050             knows the sensor, not the board or controller
+mpu6050             owns sensor protocol and datasheet transfer functions
 software-i2c        implements the standard I2C contract, not board wiring
 board-one-v2        knows PCB channels and pins, not robot actuator roles
 firmware            owns STM32 peripherals and composes runtime acquisition
 stm32f1xx-hal       owns STM32F1 peripheral access
 RTIC                owns real-time task/resource priority and concurrency
 ```
+
+The sensor-calibration crate deliberately does not own mounting rotation or robot-axis mapping. A value can therefore become SI-valued and physically calibrated while still remaining in the sensor frame.
 
 UART is not an architectural layer. It is the current transport for `RecordedObservation` bytes. Replacing UART with DMA, USB, SWO, storage, or another transport must not change `RawObservation` semantics or the record/replay contract.
 
