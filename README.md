@@ -197,10 +197,12 @@ M(q_b, p) q_b_ddot
 + g(q_b, p)
 + d(q_b_dot, p)
 =
-Q(q_b, q_b_dot, u_ref, p)
+B(p) u_ref
 ```
 
-Yaw and mobility remain part of the wider plant description even though they are not currently promoted into the reduced balance state. Unknown physical parameters remain unknown until measured or identified.
+The symbolic derivation shows that the nonlinear balance plant is coupled, while its stationary-upright first-order linearization separates into pitch/translation and roll/reaction-wheel momentum blocks. That separation is a derived local property, not an assumption inherited from legacy control topology.
+
+Unknown physical parameters remain unknown until measured or identified.
 
 ## Recording and Replay
 
@@ -249,6 +251,7 @@ firmware/
   stm32f103/             STM32F103 RTIC target runtime
 
 tools/
+  model/                 Symbolic plant derivation and structural analysis
   recording/             Decode and deterministic replay tools
   wireless/              ECB02S2 BLE capture and live observation
 
@@ -279,4 +282,5 @@ CI checks formatting, Cortex-M workspace compilation, Clippy, host-side unit tes
 - [`docs/hardware/hardware_baseline.md`](docs/hardware/hardware_baseline.md)
 - [`docs/hardware/pin_mapping.md`](docs/hardware/pin_mapping.md)
 - [`docs/commissioning/runtime_profile.md`](docs/commissioning/runtime_profile.md)
+- [`tools/model/README.md`](tools/model/README.md)
 - [`tools/wireless/README.md`](tools/wireless/README.md)
