@@ -127,12 +127,14 @@ impl SensorTimingLimits {
 ///
 /// `on_event()` is called from the sensor interrupt path. `poll()` is called
 /// from an independent MCU timebase. The latter is what makes loss of the
-/// sensor interrupt itself observable.
+/// sensor interrupt itself observable. One complete inter-event interval is
+/// required before the monitor may report `Healthy`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SensorTimingMonitor {
     limits: SensorTimingLimits,
     started_at_us: u64,
     last_event_at_us: Option<u64>,
+    cadence_verified: bool,
     health: SensorTimingHealth,
 }
 
@@ -142,16 +144,19 @@ impl SensorTimingMonitor {
             limits,
             started_at_us,
             last_event_at_us: None,
+            cadence_verified: false,
             health: SensorTimingHealth::Startup,
         }
     }
 
     pub fn on_event(&mut self, event_at_us: u64) -> SensorTimingHealth {
         self.health = match self.last_event_at_us {
-            Some(previous) => self
-                .limits
-                .classify_elapsed_us(event_at_us.saturating_sub(previous)),
-            None => SensorTimingHealth::Healthy,
+            Some(previous) => {
+                self.cadence_verified = true;
+                self.limits
+                    .classify_elapsed_us(event_at_us.saturating_sub(previous))
+            }
+            None => SensorTimingHealth::Startup,
         };
         self.last_event_at_us = Some(event_at_us);
         self.health
@@ -161,9 +166,7 @@ impl SensorTimingMonitor {
         let reference = self.last_event_at_us.unwrap_or(self.started_at_us);
         let elapsed = now_us.saturating_sub(reference);
 
-        self.health = if self.last_event_at_us.is_none()
-            && elapsed < self.limits.timeout_after_us as u64
-        {
+        self.health = if !self.cadence_verified && elapsed < self.limits.timeout_after_us as u64 {
             SensorTimingHealth::Startup
         } else {
             self.limits.classify_elapsed_us(elapsed)
@@ -177,6 +180,10 @@ impl SensorTimingMonitor {
 
     pub const fn last_event_at_us(self) -> Option<u64> {
         self.last_event_at_us
+    }
+
+    pub const fn cadence_verified(self) -> bool {
+        self.cadence_verified
     }
 
     pub const fn limits(self) -> SensorTimingLimits {
@@ -305,9 +312,8 @@ mod tests {
         let mut monitor = SensorTimingMonitor::new(limits, 100_000);
 
         assert_eq!(monitor.poll(102_000), SensorTimingHealth::Startup);
-        assert_eq!(monitor.on_event(102_100), SensorTimingHealth::Healthy);
-        assert_eq!(monitor.poll(104_900), SensorTimingHealth::Healthy);
-        assert_eq!(monitor.poll(105_100), SensorTimingHealth::Late);
+        assert_eq!(monitor.on_event(102_100), SensorTimingHealth::Startup);
+        assert_eq!(monitor.poll(104_900), SensorTimingHealth::Startup);
         assert_eq!(monitor.poll(108_100), SensorTimingHealth::Timeout);
     }
 
@@ -316,8 +322,10 @@ mod tests {
         let limits = SensorTimingLimits::new(2_000, 3_000, 6_000).unwrap();
         let mut monitor = SensorTimingMonitor::new(limits, 0);
 
-        assert_eq!(monitor.on_event(2_000), SensorTimingHealth::Healthy);
+        assert_eq!(monitor.on_event(2_000), SensorTimingHealth::Startup);
+        assert!(!monitor.cadence_verified());
         assert_eq!(monitor.on_event(4_100), SensorTimingHealth::Healthy);
+        assert!(monitor.cadence_verified());
         assert_eq!(monitor.on_event(7_100), SensorTimingHealth::Late);
         assert_eq!(monitor.on_event(13_100), SensorTimingHealth::Timeout);
     }
