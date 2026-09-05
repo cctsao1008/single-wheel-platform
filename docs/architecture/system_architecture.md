@@ -65,7 +65,7 @@ ElectricalOutput
 Physical Actuators
 ```
 
-The estimator is bounded by explicit plant and measurement models:
+The estimator and controller are bounded by explicit plant and measurement models:
 
 ```text
 plant-model
@@ -73,6 +73,13 @@ plant-model
 
 measurement-model
     y = h(x, u, p)
+
+state-estimator
+    x_pred = A_d x_hat + B_d u
+    x_hat  = x_pred + L (y - y0 - C x_pred - D u)
+
+state-feedback
+    u = u_ff - K (x_hat - x_ref)
 ```
 
 Recording is a branch from the raw-observation boundary:
@@ -96,6 +103,17 @@ measurement-model
     physical sensor equation, IMU lever-arm semantics,
     encoder kinematics, local observability structure
 
+state-estimator
+    discrete predictor/corrector execution, measurement masks,
+    estimate validity
+
+state-feedback
+    physical-state LQR/LQI execution and integrator state
+
+tools/control
+    exact ZOH discretization, Riccati synthesis,
+    generated numeric design matrices
+
 plant-observation
     raw values, timing, quality, acquisition status
 
@@ -109,7 +127,10 @@ frame-transform
     sensor-frame to robot-body rotation
 
 robot-domain
-    robot state, generalized demand, actuator roles
+    robot state, physical control demand, actuator roles
+
+reference-assembly
+    installed actuator roles and demand-to-plant-input allocation
 
 runtime-state
     operating state, sensor timing health, limits,
@@ -186,6 +207,56 @@ Encoder scale/sign and IMU placement remain physical evidence requirements. Unti
 
 See [`measurement_model.md`](measurement_model.md).
 
+## Estimation and control boundary
+
+The current reduced controller state is
+
+```text
+x = [
+    forward displacement,
+    forward velocity,
+    pitch,
+    pitch rate,
+    roll,
+    roll rate,
+    reaction-wheel relative rate,
+]^T
+```
+
+The real-time observer uses the exact discrete plant generated for the configured sample period:
+
+```text
+x_pred[k] = A_d x_hat[k-1] + B_d u[k-1]
+
+innovation[k]
+    = y[k] - y_0 - C x_pred[k] - D u[k]
+
+x_hat[k] = x_pred[k] + L innovation[k]
+```
+
+Prediction input and measurement-feedthrough input remain separate arguments because they refer to different physical intervals.
+
+The state-feedback boundary is
+
+```text
+u[k] = u_ff[k] - K (x_hat[k] - x_ref[k])
+```
+
+with optional LQI integral state when tracking requires it. LQI integration can be explicitly held when runtime authority denies or constrains actuation.
+
+`GeneralizedDemand` is expressed in physical torque units for the two populated plant inputs:
+
+```text
+drive-wheel torque
+reaction-wheel torque
+```
+
+It is not PWM, duty, timer compare, or motor-driver polarity. The current reference assembly maps those two semantic efforts one-to-one into the plant input vector, while board/electrical mapping remains downstream.
+
+Numeric `A_d`, `B_d`, `L`, `K`, and optional LQI matrices are synthesized on the host from evidenced physical parameters. The STM32 executes those matrices deterministically and does not solve matrix exponentials or Riccati equations at runtime.
+
+See [`state_estimation_and_control.md`](state_estimation_and_control.md).
+
 ## Hardware ownership
 
 ```text
@@ -229,6 +300,8 @@ DATA_RDY drives the 500 Hz acquisition boundary, while TIM1 independently superv
 
 `MeasurementQuality` carries independent availability, I/O, timing, freshness, saturation, staleness, and retry state. `AcquisitionStatus` exposes DATA_RDY presence and timing-health state. A mathematically valid sensor model does not make stale or mistimed data valid.
 
+The state estimator accepts explicit timing validity and required-measurement availability. Invalid timing, missing required channels, non-finite input, or numerical failure invalidates the estimate instead of fabricating continuity.
+
 ## Runtime authority
 
 The operating-state model is:
@@ -245,7 +318,9 @@ Boot
 
 Only authorized closed-loop states may reach physical outputs. Reaction-wheel speed/headroom and primary sensor timing are independent authority constraints. `Balancing` or `MomentumLimited` may receive closed-loop authority only when primary sensor timing is `Healthy`; `Startup`, `Late`, and `Timeout` deny physical output authority.
 
-The current firmware remains observation-only, so this timing gate is established before motor output exists rather than added after balancing is enabled.
+Estimated-state validity is also a required physical-output condition before control is instantiated in firmware. The estimator core already exposes `Valid` / `Invalid`; physical actuation remains disabled until runtime composition connects that validity into the authority boundary together with measured actuator limits.
+
+The current firmware remains observation-only, so these contracts are established before motor output exists rather than added after balancing is enabled.
 
 ## Real-time runtime
 
@@ -280,6 +355,8 @@ Control/acquisition work does not block on UART, BLE, display rendering, storage
 DMA is used where the hardware request topology creates a real reduction in CPU service work. MPU acquisition remains software I2C because the board routes PB8/PB9 opposite the STM32F103 I2C1-remap SCL/SDA assignment. DMA is not treated as a goal independent of hardware semantics.
 
 The canonical IMU path is raw 500 Hz DATA_RDY acquisition. Vendor DMP output is not part of the control architecture.
+
+The `state-estimator` and `state-feedback` crates are implemented, but numeric reference-platform gains are not instantiated in firmware until the parameter/calibration/actuator evidence required by synthesis is available.
 
 ## Interface roles
 
