@@ -6,9 +6,7 @@ use core::convert::Infallible;
 use embedded_hal::{
     delay::DelayNs,
     digital::{InputPin, OutputPin},
-    i2c::{
-        ErrorKind, ErrorType, I2c, NoAcknowledgeSource, Operation, SevenBitAddress,
-    },
+    i2c::{ErrorKind, ErrorType, I2c, NoAcknowledgeSource, Operation, SevenBitAddress},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
