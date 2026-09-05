@@ -61,9 +61,7 @@ pub struct ObserverGain {
 }
 
 impl ObserverGain {
-    pub fn new(
-        l: [[f32; UPRIGHT_MEASUREMENT_COUNT]; REDUCED_BALANCE_STATE_COUNT],
-    ) -> Option<Self> {
+    pub fn new(l: [[f32; UPRIGHT_MEASUREMENT_COUNT]; REDUCED_BALANCE_STATE_COUNT]) -> Option<Self> {
         l.iter()
             .flatten()
             .all(|value| value.is_finite())
@@ -86,8 +84,7 @@ impl ObserverDesign {
         gain: ObserverGain,
         required_measurements: MeasurementMask,
     ) -> Option<Self> {
-        let sample_period_valid =
-            plant.sample_period_s.is_finite() && plant.sample_period_s > 0.0;
+        let sample_period_valid = plant.sample_period_s.is_finite() && plant.sample_period_s > 0.0;
         let plant_finite = plant.a_d.iter().flatten().all(|value| value.is_finite())
             && plant.b_d.iter().flatten().all(|value| value.is_finite());
         let measurement_finite = measurement
@@ -97,8 +94,8 @@ impl ObserverDesign {
             .chain(measurement.d.iter().flatten())
             .all(|value| value.is_finite());
         let mask_bits = required_measurements.bits();
-        let mask_valid = mask_bits != 0
-            && mask_bits & !((1_u16 << UPRIGHT_MEASUREMENT_COUNT) - 1) == 0;
+        let mask_valid =
+            mask_bits != 0 && mask_bits & !((1_u16 << UPRIGHT_MEASUREMENT_COUNT) - 1) == 0;
 
         (sample_period_valid && plant_finite && measurement_finite && mask_valid).then_some(Self {
             plant,
@@ -134,14 +131,11 @@ pub struct LinearObserver {
 impl LinearObserver {
     pub fn new(design: ObserverDesign, initial_state: ReducedBalanceState) -> Option<Self> {
         let state = initial_state.as_vector();
-        state
-            .iter()
-            .all(|value| value.is_finite())
-            .then_some(Self {
-                design,
-                state,
-                validity: StateValidity::Invalid,
-            })
+        state.iter().all(|value| value.is_finite()).then_some(Self {
+            design,
+            state,
+            validity: StateValidity::Invalid,
+        })
     }
 
     pub const fn design(&self) -> ObserverDesign {
@@ -194,7 +188,7 @@ impl LinearObserver {
             return Err(EstimateError::NonFiniteInput);
         }
 
-        for index in 0..UPRIGHT_MEASUREMENT_COUNT {
+        for (index, value) in measurement.values.iter().enumerate() {
             if !self.design.required_measurements.contains(index) {
                 continue;
             }
@@ -202,7 +196,7 @@ impl LinearObserver {
                 self.validity = StateValidity::Invalid;
                 return Err(EstimateError::MissingRequiredMeasurement(index));
             }
-            if !measurement.values[index].is_finite() {
+            if !value.is_finite() {
                 self.validity = StateValidity::Invalid;
                 return Err(EstimateError::NonFiniteMeasurement(index));
             }
@@ -219,9 +213,9 @@ impl LinearObserver {
             .measurement
             .predict(predicted, measurement_input);
         let mut innovation = [0.0; UPRIGHT_MEASUREMENT_COUNT];
-        for index in 0..UPRIGHT_MEASUREMENT_COUNT {
+        for (index, output) in innovation.iter_mut().enumerate() {
             if self.design.required_measurements.contains(index) {
-                innovation[index] = measurement.values[index] - predicted_measurement[index];
+                *output = measurement.values[index] - predicted_measurement[index];
             }
         }
 
@@ -253,10 +247,7 @@ fn dot_state(
         .sum()
 }
 
-fn dot_input(
-    row: [f32; REFERENCE_INPUT_COUNT],
-    vector: [f32; REFERENCE_INPUT_COUNT],
-) -> f32 {
+fn dot_input(row: [f32; REFERENCE_INPUT_COUNT], vector: [f32; REFERENCE_INPUT_COUNT]) -> f32 {
     row.iter()
         .zip(vector.iter())
         .map(|(lhs, rhs)| lhs * rhs)
@@ -293,8 +284,8 @@ mod tests {
 
     fn direct_measurement_model() -> UprightMeasurementModel {
         let mut c = [[0.0; REDUCED_BALANCE_STATE_COUNT]; UPRIGHT_MEASUREMENT_COUNT];
-        for index in 0..REDUCED_BALANCE_STATE_COUNT {
-            c[index][index] = 1.0;
+        for (index, row) in c.iter_mut().take(REDUCED_BALANCE_STATE_COUNT).enumerate() {
+            row[index] = 1.0;
         }
         UprightMeasurementModel {
             nominal: [0.0; UPRIGHT_MEASUREMENT_COUNT],
@@ -306,8 +297,8 @@ mod tests {
     fn design() -> ObserverDesign {
         let mut l = [[0.0; UPRIGHT_MEASUREMENT_COUNT]; REDUCED_BALANCE_STATE_COUNT];
         let mut required = MeasurementMask::NONE;
-        for index in 0..REDUCED_BALANCE_STATE_COUNT {
-            l[index][index] = 1.0;
+        for (index, row) in l.iter_mut().enumerate() {
+            row[index] = 1.0;
             required = required.with(index);
         }
         ObserverDesign::new(
@@ -338,7 +329,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(estimate.validity, StateValidity::Valid);
-        assert_eq!(estimate.state.as_vector(), [1.0, 2.0, 0.3, 4.0, -0.5, 6.0, 7.0]);
+        assert_eq!(
+            estimate.state.as_vector(),
+            [1.0, 2.0, 0.3, 4.0, -0.5, 6.0, 7.0]
+        );
     }
 
     #[test]
@@ -347,7 +341,11 @@ mod tests {
         let result = observer.step(
             ReferencePlantInput::default(),
             ReferencePlantInput::default(),
-            EstimatorMeasurement::new([0.0; UPRIGHT_MEASUREMENT_COUNT], MeasurementMask::NONE, true),
+            EstimatorMeasurement::new(
+                [0.0; UPRIGHT_MEASUREMENT_COUNT],
+                MeasurementMask::NONE,
+                true,
+            ),
         );
 
         assert_eq!(result, Err(EstimateError::MissingRequiredMeasurement(0)));
