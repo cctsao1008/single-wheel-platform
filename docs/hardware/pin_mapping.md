@@ -31,11 +31,27 @@ This document records the schematic-level mapping of the ONE_V2.0 reference boar
 | OLED SDA/SCL | PB4 / PB5 | `OLED_SDA` / `OLED_SCL` | Schematic-mapped |
 | SWDIO/SWCLK | PA13 / PA14 | Nets `SDIO` / `SCLK`, exposed on P2 | Schematic-mapped |
 
+## Physical PCB connector observation — 2026-09-05
+
+Inspection of the assembled board shows silkscreen motor connectors `M1`, `M2`, and `M3`.
+
+`M3` is uniquely identifiable as schematic `BLDC_3 / CN1` because its PCB silkscreen includes `BRA` / brake, matching the only schematic motor interface that exposes the `Brake` signal. In the inspected robot, `M3` is **not cabled to a motor**.
+
+Observed population:
+
+```text
+M1  populated / cabled
+M2  populated / cabled
+M3  unpopulated in this assembly
+```
+
+The M1 harness can be visually traced to the lower Nidec motor (`24H404H-160`). The exact M2 destination and final robot-domain role mapping remain pending direct physical trace confirmation. See `assembly_observation_2026-09-05.md`.
+
 ## Motor connector power
 
 Each brushless connector provides `12V_P`, GND, and 3.3 V logic/encoder supply. The three `EN_BLDC_*` lines are not driven by the MCU; each is tied to 3.3 V directly on the schematic.
 
-The spin connector additionally exposes `Brake`. The schematic establishes only the PA7-to-Brake connection; it does not establish the brake input's active polarity.
+The third connector additionally exposes `Brake`. The schematic establishes only the PA7-to-Brake connection; it does not establish the brake input's active polarity.
 
 ## MPU6050 bus consequence
 
