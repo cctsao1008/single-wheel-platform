@@ -3,10 +3,15 @@
 ## Clock
 
 ```text
-SYSCLK   HSI 8 MHz
-PCLK1    8 MHz
-PCLK2    8 MHz
+HSE      8 MHz crystal
+SYSCLK   72 MHz
+HCLK     72 MHz
+PCLK1    36 MHz
+PCLK2    72 MHz
+ADCCLK   12 MHz
 ```
+
+The external 8 MHz crystal is multiplied to the STM32F103C8T6 maximum 72 MHz system clock. APB1 remains within its 36 MHz limit; TIM2/TIM4 receive the doubled APB1 timer clock. ADC1 runs at 12 MHz, below the 14 MHz device limit.
 
 DWT cycle counting is the firmware monotonic timebase.
 
@@ -27,6 +32,8 @@ Encoder_1            TIM2 QEI
 Encoder_2            TIM4 QEI
 battery              ADC1 / PA5 raw conversion
 ```
+
+With DLPF CONFIG=3, the MPU6050 measurement path is intentionally bandwidth-limited before the 500 Hz acquisition boundary. The resulting sensor-filter delay remains part of the measured control-path latency and must be included in later timing characterization.
 
 The MPU6050 source-sample timestamp is `Unknown`; I2C read start/completion timestamps are recorded.
 
@@ -51,7 +58,11 @@ TX service            USART2 TXE interrupt
 
 The 500 Hz acquisition task decimates by five for canonical `RecordedObservation` generation. USART2 byte transmission runs at lower RTIC priority.
 
-Each `RecordedObservation` is 80 bytes and CRC16-CCITT-FALSE protected. Sequence number and cumulative dropped-record count remain part of the record contract so the host can detect wireless loss and firmware queue pressure independently.
+Each `RecordedObservation` is 80 bytes and CRC16-CCITT-FALSE protected. At 100 Hz this is 8000 payload bytes/s. USART2 115200 8N1 provides 11520 byte/s line capacity, so the record stream occupies about 69% of the UART line before BLE-side buffering and scheduling effects.
+
+ECB02S2 is treated as a byte-stream transport. Its configured MTU and sustained BLE notification pacing must be measured on the assembled platform; BLE packet boundaries are not record boundaries.
+
+Sequence number and cumulative dropped-record count remain part of the record contract so the host can detect wireless loss and firmware queue pressure independently.
 
 USART1 remains available as a wired engineering interface but is not the active recording transport in this runtime profile.
 
