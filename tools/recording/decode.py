@@ -20,6 +20,15 @@ CRC_OFFSET = RECORD_LEN - 2
 UNKNOWN_OFFSET_US = 0xFFFFFFFF
 UNKNOWN_SAMPLE_OFFSET_US = -0x80000000
 
+ACQ_BUS_READY = 1 << 0
+ACQ_IMU_PRESENT = 1 << 1
+ACQ_IMU_CONFIGURED = 1 << 2
+ACQ_IMU_DATA_READY_IRQ_ENABLED = 1 << 3
+ACQ_IMU_DATA_READY_SEEN = 1 << 4
+ACQ_IMU_TIMING_HEALTHY = 1 << 5
+ACQ_IMU_TIMING_LATE = 1 << 6
+ACQ_IMU_TIMING_TIMEOUT = 1 << 7
+
 
 def crc16_ccitt_false(data: bytes) -> int:
     crc = 0xFFFF
@@ -58,6 +67,20 @@ def _decode_sample_offset(base: int, offset: int) -> int | None:
     return None if offset == UNKNOWN_SAMPLE_OFFSET_US else base + offset
 
 
+def _flag(bits: int, mask: int) -> int:
+    return 1 if bits & mask else 0
+
+
+def imu_timing_label(status: int) -> str:
+    if status & ACQ_IMU_TIMING_TIMEOUT:
+        return "TIMEOUT"
+    if status & ACQ_IMU_TIMING_LATE:
+        return "LATE"
+    if status & ACQ_IMU_TIMING_HEALTHY:
+        return "OK"
+    return "STARTUP"
+
+
 def decode_record(record: bytes) -> dict[str, int | None] | None:
     if len(record) != RECORD_LEN:
         return None
@@ -77,6 +100,7 @@ def decode_record(record: bytes) -> dict[str, int | None] | None:
     acquisition_duration_us = _u32(record, 18)
     if acquisition_duration_us == UNKNOWN_OFFSET_US:
         return None
+    acquisition_status = _u16(record, 74)
 
     return {
         "sequence": _u32(record, 6),
@@ -103,7 +127,11 @@ def decode_record(record: bytes) -> dict[str, int | None] | None:
         "battery_read_completed_us": _decode_offset(base, _u32(record, 66)),
         "battery_adc_raw": _u16(record, 70),
         "battery_quality": _u16(record, 72),
-        "acquisition_status": _u16(record, 74),
+        "acquisition_status": acquisition_status,
+        "imu_data_ready_seen": _flag(acquisition_status, ACQ_IMU_DATA_READY_SEEN),
+        "imu_timing_healthy": _flag(acquisition_status, ACQ_IMU_TIMING_HEALTHY),
+        "imu_timing_late": _flag(acquisition_status, ACQ_IMU_TIMING_LATE),
+        "imu_timing_timeout": _flag(acquisition_status, ACQ_IMU_TIMING_TIMEOUT),
         "dropped_records": _u16(record, 76),
         "crc": crc,
     }
@@ -185,6 +213,10 @@ def main() -> int:
         "battery_adc_raw",
         "battery_quality",
         "acquisition_status",
+        "imu_data_ready_seen",
+        "imu_timing_healthy",
+        "imu_timing_late",
+        "imu_timing_timeout",
         "dropped_records",
         "crc",
     ]
