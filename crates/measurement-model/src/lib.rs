@@ -113,18 +113,26 @@ pub fn linearize_stationary_upright_measurement(
     nominal[ACCEL_Z] = g;
 
     // Body-frame specific force at the IMU point.
-    for state_index in 0..REDUCED_BALANCE_STATE_COUNT {
-        c[ACCEL_X][state_index] = plant.a[1][state_index] + z_i * plant.a[3][state_index];
-        c[ACCEL_Y][state_index] = -z_i * plant.a[5][state_index];
-        c[ACCEL_Z][state_index] = -x_i * plant.a[3][state_index] + y_i * plant.a[5][state_index];
+    for (state_index, output) in c[ACCEL_X].iter_mut().enumerate() {
+        *output = plant.a[1][state_index] + z_i * plant.a[3][state_index];
+    }
+    for (state_index, output) in c[ACCEL_Y].iter_mut().enumerate() {
+        *output = -z_i * plant.a[5][state_index];
+    }
+    for (state_index, output) in c[ACCEL_Z].iter_mut().enumerate() {
+        *output = -x_i * plant.a[3][state_index] + y_i * plant.a[5][state_index];
     }
     c[ACCEL_X][2] -= g;
     c[ACCEL_Y][4] += g;
 
-    for input_index in 0..REFERENCE_INPUT_COUNT {
-        d[ACCEL_X][input_index] = plant.b[1][input_index] + z_i * plant.b[3][input_index];
-        d[ACCEL_Y][input_index] = -z_i * plant.b[5][input_index];
-        d[ACCEL_Z][input_index] = -x_i * plant.b[3][input_index] + y_i * plant.b[5][input_index];
+    for (input_index, output) in d[ACCEL_X].iter_mut().enumerate() {
+        *output = plant.b[1][input_index] + z_i * plant.b[3][input_index];
+    }
+    for (input_index, output) in d[ACCEL_Y].iter_mut().enumerate() {
+        *output = -z_i * plant.b[5][input_index];
+    }
+    for (input_index, output) in d[ACCEL_Z].iter_mut().enumerate() {
+        *output = -x_i * plant.b[3][input_index] + y_i * plant.b[5][input_index];
     }
 
     // Body angular rate for R = R_y(theta) R_x(phi).  At upright the first-order
