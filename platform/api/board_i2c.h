@@ -7,7 +7,9 @@
 
 typedef enum
 {
-    BOARD_I2C_BUS_1 = 0
+    /* Logical board bus for the on-board MPU6050. This name does not imply
+       use of the STM32 I2C1 peripheral. */
+    BOARD_I2C_BUS_IMU = 0
 } board_i2c_bus_t;
 
 bool board_i2c_init(board_i2c_bus_t bus);

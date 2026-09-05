@@ -31,7 +31,6 @@ target_include_directories(swp_mpu6050 PUBLIC
 add_library(swp_platform_stm32f103 STATIC
     platform/stm32f103/board_time_stm32f103.c
     platform/stm32f103/board_i2c_stm32f103.c
-    platform/stm32f103/board_gpio_irq_stm32f103.c
     platform/stm32f103/board_motor_stm32f103.c
     platform/stm32f103/board_encoder_stm32f103.c
 )

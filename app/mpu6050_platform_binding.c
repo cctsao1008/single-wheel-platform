@@ -12,7 +12,7 @@ static bool transport_read(void *context,
                            size_t length)
 {
     (void)context;
-    return board_i2c_read_reg(BOARD_I2C_BUS_1,
+    return board_i2c_read_reg(BOARD_I2C_BUS_IMU,
                               address_7bit,
                               reg,
                               data,
@@ -26,7 +26,7 @@ static bool transport_write(void *context,
                             size_t length)
 {
     (void)context;
-    return board_i2c_write_reg(BOARD_I2C_BUS_1,
+    return board_i2c_write_reg(BOARD_I2C_BUS_IMU,
                                address_7bit,
                                reg,
                                data,
@@ -58,7 +58,7 @@ bool swp_mpu6050_make_transport(mpu6050_transport_t *transport)
     if (transport == NULL)
         return false;
 
-    if (!board_time_init() || !board_i2c_init(BOARD_I2C_BUS_1))
+    if (!board_time_init() || !board_i2c_init(BOARD_I2C_BUS_IMU))
         return false;
 
     transport->read_reg = transport_read;

@@ -125,13 +125,16 @@ static bool i2c_read_byte(uint8_t *value, bool acknowledge)
 
 bool board_i2c_init(board_i2c_bus_t bus)
 {
-    if (bus != BOARD_I2C_BUS_1)
+    if (bus != BOARD_I2C_BUS_IMU)
         return false;
 
     STM32_RCC->APB2ENR |= STM32_RCC_APB2_IOPBEN;
     (void)board_time_init();
 
-    /* PB8=SDA, PB9=SCL. Open-drain output, 2 MHz, external pull-ups. */
+    /* The PCB routes MPU_SDA to PB8 and MPU_SCL to PB9. This is intentionally
+       implemented as software I2C: STM32F103 I2C1 remap expects PB8=SCL and
+       PB9=SDA, the opposite signal assignment. External 4.7 kOhm pull-ups are
+       present on the board. */
     stm32_gpio_write(STM32_GPIOB, I2C_SDA_PIN, 1);
     stm32_gpio_write(STM32_GPIOB, I2C_SCL_PIN, 1);
     stm32_gpio_config_nibble(STM32_GPIOB, I2C_SDA_PIN, 0x6u);
@@ -151,7 +154,7 @@ bool board_i2c_write_reg(board_i2c_bus_t bus,
     size_t i;
     bool ok = false;
 
-    if ((bus != BOARD_I2C_BUS_1) || (address_7bit > 0x7Fu) ||
+    if ((bus != BOARD_I2C_BUS_IMU) || (address_7bit > 0x7Fu) ||
         ((length != 0u) && (data == NULL)))
         return false;
 
@@ -186,7 +189,7 @@ bool board_i2c_read_reg(board_i2c_bus_t bus,
     size_t i;
     bool ok = false;
 
-    if ((bus != BOARD_I2C_BUS_1) || (address_7bit > 0x7Fu) ||
+    if ((bus != BOARD_I2C_BUS_IMU) || (address_7bit > 0x7Fu) ||
         (data == NULL) || (length == 0u))
         return false;
 
