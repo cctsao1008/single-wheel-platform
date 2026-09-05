@@ -72,9 +72,9 @@ log transfer / offline analysis
 
 ### Platform API
 
-Defines the hardware services required by portable code, such as bus transactions, timestamps, GPIO interrupt delivery, encoder access, ADC access, serial transport, and motor output.
+Defines board-level hardware services such as I2C transactions, timestamps, GPIO interrupt delivery, encoder access, ADC access, serial transport, storage, and motor output.
 
-The API describes behavior and units; it does not expose STM32 register details.
+The API describes behavior and units; it does not expose STM32 register details and it does not depend on `control/` or device-specific types.
 
 ### Platform implementation
 
@@ -92,7 +92,9 @@ The API describes behavior and units; it does not expose STM32 register details.
 
 `drivers/` owns device-specific protocol and register behavior without robot control policy.
 
-For example, an IMU driver may own sensor configuration, register conversion, FIFO handling, self-test, and calibration primitives while obtaining I2C, time, and interrupt services through the platform contracts.
+The reference MPU6050 driver owns sensor register configuration, full-scale settings, DLPF selection, sample-rate configuration, raw-data conversion primitives, and device probing. It receives bus, delay, and timestamp functions through injected transport callbacks.
+
+The application binds those callbacks to `platform/api/` services. This keeps the driver portable while also keeping `platform/api/` free of MPU6050-specific types.
 
 A device driver must not depend on `platform/stm32f103/` directly.
 
@@ -136,9 +138,10 @@ Owns which software path may command each physical actuator. Automatic control, 
 
 ### Application layer
 
-`app/` owns system orchestration:
+`app/` owns system orchestration and is the binding point between portable modules and the selected platform:
 
 - startup sequencing,
+- driver transport binding,
 - module initialization,
 - runtime mode selection,
 - control-loop scheduling,
@@ -153,23 +156,25 @@ The intended compile-time dependency direction is:
 
 ```text
 app/ ---------------------> control/
-  |                            |
-  |                            +--> no platform-specific dependency
   |
   +------------------------> drivers/
-  |                            |
-  |                            +--> platform/api/
   |
   +------------------------> platform/api/
 
 platform/stm32f103/ -------> platform/api/
+
+control/  -----------------> no platform-specific dependency
+drivers/  -----------------> no MCU-specific dependency
+platform/api/ -------------> no control/device-specific dependency
 ```
+
+The application supplies platform services to portable device drivers through explicit bindings rather than by making device drivers include STM32 implementation headers.
 
 Additional rules:
 
 - `control/` must build without STM32 headers or MCU register definitions.
-- `drivers/` may use platform contracts but must not include STM32-specific implementation headers.
-- `platform/api/` must not depend on `control/` types.
+- `drivers/` must build without STM32-specific implementation headers.
+- `platform/api/` must not depend on `control/` or device-driver types.
 - `platform/stm32f103/` implements hardware contracts; it does not own balancing policy.
 - `app/` is the integration point between portable control logic, device drivers, and the selected platform implementation.
 
