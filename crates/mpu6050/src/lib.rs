@@ -9,6 +9,7 @@ const REG_SMPLRT_DIV: u8 = 0x19;
 const REG_CONFIG: u8 = 0x1a;
 const REG_GYRO_CONFIG: u8 = 0x1b;
 const REG_ACCEL_CONFIG: u8 = 0x1c;
+const REG_INT_PIN_CFG: u8 = 0x37;
 const REG_INT_ENABLE: u8 = 0x38;
 const REG_ACCEL_XOUT_H: u8 = 0x3b;
 const REG_PWR_MGMT_1: u8 = 0x6b;
@@ -16,6 +17,8 @@ const REG_WHO_AM_I: u8 = 0x75;
 
 const WHO_AM_I_VALUE: u8 = 0x68;
 const CLOCK_PLL_X_GYRO: u8 = 0x01;
+const INT_PIN_ACTIVE_HIGH_PUSH_PULL_PULSE: u8 = 0x00;
+const DATA_READY_INTERRUPT_ENABLE: u8 = 0x01;
 const DEG_TO_RAD: f32 = core::f32::consts::PI / 180.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,8 +125,9 @@ where
 
     /// Wakes the device and programs the explicit operating configuration.
     ///
-    /// This function does not introduce a hidden startup delay. The application
-    /// owns sequencing and decides when the first sample is considered usable.
+    /// DATA_RDY uses the MPU6050's active-high, push-pull, pulse output when
+    /// enabled. The application owns the MCU-side EXTI configuration and any
+    /// startup-readiness policy.
     pub fn configure(&mut self, config: Config) -> Result<(), Error<I2C::Error>> {
         let base_rate_hz: u32 = if config.dlpf == Dlpf::Config0 {
             8_000
@@ -149,10 +153,11 @@ where
         self.write_u8(REG_GYRO_CONFIG, (config.gyro_range as u8) << 3)?;
         self.write_u8(REG_ACCEL_CONFIG, (config.accel_range as u8) << 3)?;
         self.write_u8(REG_SMPLRT_DIV, (divider_plus_one - 1) as u8)?;
+        self.write_u8(REG_INT_PIN_CFG, INT_PIN_ACTIVE_HIGH_PUSH_PULL_PULSE)?;
         self.write_u8(
             REG_INT_ENABLE,
             if config.data_ready_interrupt {
-                0x01
+                DATA_READY_INTERRUPT_ENABLE
             } else {
                 0x00
             },
