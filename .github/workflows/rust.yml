@@ -42,7 +42,9 @@ jobs:
         run: python3 -m unittest discover -s tools/recording -p 'test_*.py'
       - name: Host wireless observer syntax
         run: python3 -m py_compile tools/wireless/observe.py
-      - name: Control synthesis syntax
-        run: python3 -m py_compile tools/control/synthesize_upright.py
+      - name: Install control synthesis dependencies
+        run: python3 -m pip install -r tools/control/requirements.txt
+      - name: Control synthesis tests
+        run: python3 -m unittest discover -s tools/control -p 'test_*.py'
       - name: Link release firmware
         run: cargo build -p swp-stm32f103 --release --target thumbv7m-none-eabi
