@@ -30,6 +30,14 @@ pub enum TimerChannel {
     Tim4Ch2,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SerialWiring {
+    /// MCU transmit pin.
+    pub tx_pin: Pin,
+    /// MCU receive pin.
+    pub rx_pin: Pin,
+}
+
 /// Physical brushless connector identity from the schematic.
 ///
 /// This deliberately does not encode robot meaning such as reaction wheel or
@@ -78,6 +86,37 @@ pub const MPU_HAS_DATA_READY_IRQ: bool = false;
 /// the schematic net rather than by STM32 I2C-remap function.
 pub const MPU_SDA: Pin = Pin::new(Port::B, 8);
 pub const MPU_SCL: Pin = Pin::new(Port::B, 9);
+
+/// MCU USART1 wiring. The MCU nets and CH340 nets terminate on separate P2 pins;
+/// the schematic does not hard-wire the USB-UART bridge to this serial port.
+pub const MAIN_UART: SerialWiring = SerialWiring {
+    tx_pin: Pin::new(Port::A, 9),
+    rx_pin: Pin::new(Port::A, 10),
+};
+pub const MAIN_UART_TO_CH340_HARDWIRED: bool = false;
+
+/// MCU USART2 wiring to the on-board ECB02S2 Bluetooth serial module.
+pub const BLUETOOTH_UART: SerialWiring = SerialWiring {
+    tx_pin: Pin::new(Port::A, 2),
+    rx_pin: Pin::new(Port::A, 3),
+};
+pub const BLUETOOTH_AT_ENABLE: Pin = Pin::new(Port::C, 15);
+pub const BLUETOOTH_ROLE: Pin = Pin::new(Port::C, 14);
+/// The reviewed schematic ties the ECB02 sleep input low, keeping the module awake.
+pub const BLUETOOTH_SLEEP_HARDWIRED_LOW: bool = true;
+
+/// OLED two-wire interface as routed by the reference board.
+pub const OLED_SDA: Pin = Pin::new(Port::B, 4);
+pub const OLED_SCL: Pin = Pin::new(Port::B, 5);
+
+/// Configuration/authority jumper inputs exposed by the board as EN_X and EN_Y.
+/// Their electrical pin mapping is known; the robot-semantic actuator association
+/// is intentionally not encoded here because legacy naming and product labels differ.
+pub const EN_X: Pin = Pin::new(Port::A, 15);
+pub const EN_Y: Pin = Pin::new(Port::B, 3);
+
+pub const SWDIO: Pin = Pin::new(Port::A, 13);
+pub const SWCLK: Pin = Pin::new(Port::A, 14);
 
 /// Schematic connector BLDC_1 (captioned side/lateral brushless interface).
 pub const BLDC_1: MotorWiring = MotorWiring {

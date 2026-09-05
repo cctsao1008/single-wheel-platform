@@ -5,6 +5,8 @@ members = [
     "crates/reference-assembly",
     "crates/plant-observation",
     "crates/sensor-calibration",
+    "crates/frame-transform",
+    "crates/runtime-state",
     "crates/mpu6050",
     "crates/software-i2c",
     "crates/observation-record",

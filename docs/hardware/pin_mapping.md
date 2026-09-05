@@ -25,10 +25,15 @@ This document records the schematic-level mapping of the ONE_V2.0 reference boar
 | Net `MPU_INT` | PC13 | **Connected to MPU6050 FSYNC pin 11** | Net name is misleading |
 | MPU6050 INT | No MCU route | MPU6050 pin 12 is marked no-connect | No data-ready IRQ path |
 | Battery ADC | PA5 / ADC1_IN5 | Divider node `ADC` between R2/R4 | Pin mapped; divider values not given in this drawing |
-| Bluetooth TX/RX | PA2 / PA3 | `T_TX` / `T_RX` to ECB02S2 | Schematic-mapped |
-| Main UART TX/RX | PA9 / PA10 | `TX` / `RX`, exposed on P2 pins 1/3 | Schematic-mapped |
+| Bluetooth UART TX/RX | PA2 / PA3 | MCU `T_TX` / `T_RX` to ECB02S2 RXD/TXD | Schematic-mapped |
+| Bluetooth AT enable | PC15 | `EN_AT` to ECB02S2 `AT_EN` | Schematic-mapped |
+| Bluetooth role select | PC14 | `ROLE` to ECB02S2 `ROLE` | Schematic-mapped |
+| Bluetooth sleep | Not MCU-controlled | ECB02S2 sleep input tied low | Module held awake |
+| Main UART TX/RX | PA9 / PA10 | `TX` / `RX`, exposed on P2 pins 3/1 | Schematic-mapped |
 | CH340N UART | Not hard-wired to MCU UART | `CH340_TX` / `CH340_RX`, exposed separately on P2 pins 2/4 | External cross-connection required for bridge use |
-| OLED SDA/SCL | PB4 / PB5 | `OLED_SDA` / `OLED_SCL` | Schematic-mapped |
+| OLED SDA/SCL | PB4 / PB5 | `OLED_SDA` / `OLED_SCL`; legacy software uses two-wire SSD130x-style traffic | Schematic + source evidence |
+| EN_X jumper input | PA15 | Board silk `ENX` | Pin mapped; actuator semantics not yet promoted |
+| EN_Y jumper input | PB3 | Board silk `ENY` | Pin mapped; actuator semantics not yet promoted |
 | SWDIO/SWCLK | PA13 / PA14 | Nets `SDIO` / `SCLK`, exposed on P2 | Schematic-mapped |
 
 ## Verified connector / actuator topology — 2026-09-05
@@ -59,9 +64,11 @@ Encoder_3 -> no installed actuator and no MCU route shown
 
 Encoder polarity, counts per mechanical revolution, and any gearing ratio remain unverified.
 
-## Motor connector power
+## Motor connector power versus EN_X / EN_Y
 
 Each brushless connector provides `12V_P`, GND, and 3.3 V logic/encoder supply. The three `EN_BLDC_*` lines are not driven by the MCU; each is tied to 3.3 V directly on the schematic.
+
+`EN_X` (PA15) and `EN_Y` (PB3) are different signals. Legacy firmware configures them as pulled-up inputs and uses their jumper state to gate which motor-control path is permitted. Product material labels them as motor-enable jumpers. Because legacy X/Y naming and product physical-role labels are not perfectly consistent, the board crate records the pins but does not assign them directly to `ReactionWheel` or `DriveWheel` yet.
 
 The BLDC_3 / PCB M3 interface additionally exposes `Brake`. The schematic establishes only the PA7-to-Brake connection; it does not establish the brake input's active polarity. The inspected assembly has no motor connected to M3.
 
@@ -71,6 +78,20 @@ The board labels PB8 as SDA and PB9 as SCL. STM32F103 I2C1 remap assigns PB8=SCL
 
 The schematic also shows that PC13 cannot be used as an MPU6050 data-ready interrupt: the `MPU_INT` net terminates on FSYNC, while the actual INT pin is no-connect.
 
+## Bluetooth consequence
+
+The on-board ECB02S2 is a UART-transparent BLE module. From the MCU perspective:
+
+```text
+PA2 / USART2_TX -> ECB02 RXD
+PA3 / USART2_RX <- ECB02 TXD
+PC15            -> ECB02 AT_EN
+PC14            -> ECB02 ROLE
+SLEEP           -> GND (awake)
+```
+
+The module documentation gives 115200 baud as the default UART setting and describes peripheral/slave operation for a phone acting as BLE central. Those are device-configuration facts, not pin-map constants in `swp-board-one-v2`.
+
 ## UART / CH340 consequence
 
 The MCU USART1 nets `TX` and `RX` and the CH340N nets `CH340_TX` and `CH340_RX` terminate on separate P2 pins. They are not shorted together on the schematic.
@@ -78,11 +99,19 @@ The MCU USART1 nets `TX` and `RX` and the CH340N nets `CH340_TX` and `CH340_RX` 
 Using the onboard CH340 as the USART1 host bridge therefore requires the normal crossed UART relationship outside those nets:
 
 ```text
-MCU TX -> CH340_RX
-MCU RX <- CH340_TX
+P2 pin 3 / MCU TX -> P2 pin 4 / CH340_RX
+P2 pin 1 / MCU RX <- P2 pin 2 / CH340_TX
 ```
 
 The current recording firmware transmits only on MCU PA9 / `TX`; it does not assume that USB-C/CH340 is already electrically connected to that net.
+
+## OLED consequence
+
+The board exposes only the two-wire OLED data/clock path on PB4/PB5. Legacy firmware uses PB4 as SDA and PB5 as SCL and sends the SSD130x-family write address corresponding to 7-bit address `0x3C`.
+
+PB4 is also an STM32F103 JTAG pin (`JNTRST`) after reset. Firmware that uses PB4 for OLED traffic must release the full JTAG function while preserving SWD access as required by the target HAL/runtime configuration.
+
+The supplied OLED source set is revision-mixed: product material mentions 0.96 inch while the inspected assembly carries a larger module and a separate 2.42-inch SSD1309 module schematic is available. Display size/driver revision is therefore kept outside the board pin facts until the installed module is identified directly.
 
 ## Electrical behavior not yet physically verified
 
