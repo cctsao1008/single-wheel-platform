@@ -8,7 +8,6 @@ use panic_halt as _;
 mod app {
     use cortex_m::peripheral::DWT;
     use heapless::spsc::{Consumer, Producer, Queue};
-    use rtic::Mutex;
     use stm32f1xx_hal::{
         adc::Adc,
         dma::{Event as DmaEvent, R as DmaRead, Transfer},
