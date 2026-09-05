@@ -293,8 +293,7 @@ mod tests {
         }
 
         assert_eq!(
-            OperatingState::Balancing
-                .actuation_authority_with_timing(SensorTimingHealth::Healthy),
+            OperatingState::Balancing.actuation_authority_with_timing(SensorTimingHealth::Healthy),
             ActuationAuthority::ClosedLoop
         );
     }
