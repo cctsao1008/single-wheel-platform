@@ -29,7 +29,7 @@ mod app {
     }
 
     #[init]
-    fn init(mut ctx: init::Context) -> (Shared, Local, init::Monotonics) {
+    fn init(mut ctx: init::Context) -> (Shared, Local) {
         // Use the known internal 8 MHz oscillator for first-board bring-up.
         // The external crystal frequency is not yet a confirmed schematic fact.
         let mut flash = ctx.device.FLASH.constrain();
@@ -67,7 +67,6 @@ mod app {
                 _imu: imu,
                 imu_present,
             },
-            init::Monotonics(),
         )
     }
 
