@@ -190,9 +190,11 @@ def status_line(
     decoder: StreamDecoder,
     frame_times: deque[float],
 ) -> str:
+    timing = record_decode.imu_timing_label(int(row["acquisition_status"]))
     return (
         f"seq={int(row['sequence']):10d} "
         f"rate={frame_rate(frame_times):6.2f}Hz "
+        f"timing={timing:7s} "
         f"gaps={stats.sequence_gaps:5d} "
         f"crc={decoder.crc_errors:4d} "
         f"drops={stats.device_drops:5d} "
