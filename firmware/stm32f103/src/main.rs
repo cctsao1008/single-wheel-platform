@@ -7,7 +7,7 @@ use panic_halt as _;
 #[rtic::app(device = stm32f1xx_hal::pac)]
 mod app {
     use stm32f1xx_hal::{
-        gpio::{gpiob::PB8, gpiob::PB9, OpenDrain, Output, PinState},
+        gpio::{OpenDrain, Output, PinState, gpiob::PB8, gpiob::PB9},
         prelude::*,
         rcc,
         timer::SysDelay,
