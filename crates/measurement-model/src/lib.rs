@@ -114,21 +114,17 @@ pub fn linearize_stationary_upright_measurement(
 
     // Body-frame specific force at the IMU point.
     for state_index in 0..REDUCED_BALANCE_STATE_COUNT {
-        c[ACCEL_X][state_index] =
-            plant.a[1][state_index] + z_i * plant.a[3][state_index];
+        c[ACCEL_X][state_index] = plant.a[1][state_index] + z_i * plant.a[3][state_index];
         c[ACCEL_Y][state_index] = -z_i * plant.a[5][state_index];
-        c[ACCEL_Z][state_index] =
-            -x_i * plant.a[3][state_index] + y_i * plant.a[5][state_index];
+        c[ACCEL_Z][state_index] = -x_i * plant.a[3][state_index] + y_i * plant.a[5][state_index];
     }
     c[ACCEL_X][2] -= g;
     c[ACCEL_Y][4] += g;
 
     for input_index in 0..REFERENCE_INPUT_COUNT {
-        d[ACCEL_X][input_index] =
-            plant.b[1][input_index] + z_i * plant.b[3][input_index];
+        d[ACCEL_X][input_index] = plant.b[1][input_index] + z_i * plant.b[3][input_index];
         d[ACCEL_Y][input_index] = -z_i * plant.b[5][input_index];
-        d[ACCEL_Z][input_index] =
-            -x_i * plant.b[3][input_index] + y_i * plant.b[5][input_index];
+        d[ACCEL_Z][input_index] = -x_i * plant.b[3][input_index] + y_i * plant.b[5][input_index];
     }
 
     // Body angular rate for R = R_y(theta) R_x(phi).  At upright the first-order
@@ -222,11 +218,8 @@ mod tests {
 
     #[test]
     fn stationary_upright_specific_force_is_positive_body_z_gravity() {
-        let model = linearize_stationary_upright_measurement(
-            parameters(),
-            ImuPlacement::default(),
-        )
-        .unwrap();
+        let model = linearize_stationary_upright_measurement(parameters(), ImuPlacement::default())
+            .unwrap();
         let y = model.predict(
             [0.0; REDUCED_BALANCE_STATE_COUNT],
             [0.0; REFERENCE_INPUT_COUNT],
@@ -239,11 +232,8 @@ mod tests {
 
     #[test]
     fn gyro_and_encoder_rows_follow_physical_coordinate_contract() {
-        let model = linearize_stationary_upright_measurement(
-            parameters(),
-            ImuPlacement::default(),
-        )
-        .unwrap();
+        let model = linearize_stationary_upright_measurement(parameters(), ImuPlacement::default())
+            .unwrap();
         let state = [1.0, 2.0, 0.25, 3.0, -0.5, 4.0, 5.0];
         let y = model.predict(state, [0.0, 0.0]);
 
@@ -265,10 +255,7 @@ mod tests {
             },
         )
         .unwrap();
-        let y = model.predict(
-            [0.0; REDUCED_BALANCE_STATE_COUNT],
-            [0.2, 0.1],
-        );
+        let y = model.predict([0.0; REDUCED_BALANCE_STATE_COUNT], [0.2, 0.1]);
 
         assert!(y[ACCEL_X].abs() > 1.0e-6);
         assert!(y[ACCEL_Y].abs() > 1.0e-6);
