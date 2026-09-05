@@ -24,7 +24,7 @@ CaptureWindow
 Fault
 ```
 
-Closed-loop actuator authority exists only in:
+Closed-loop actuator authority is possible only in:
 
 ```text
 Balancing
@@ -32,6 +32,31 @@ MomentumLimited
 ```
 
 Runtime state is independent of RTIC task scheduling and independent of raw GPIO/timer ownership.
+
+## Primary sensor timing authority
+
+The primary balance observation clock is the MPU6050 DATA_RDY stream. Its timing health is a separate authority condition:
+
+```text
+Startup
+Healthy
+Late
+Timeout
+```
+
+Only `Healthy` is eligible for closed-loop actuation. `Startup`, `Late`, and `Timeout` deny physical output authority even when the operating state is `Balancing` or `MomentumLimited`.
+
+Timing health is supervised by an MCU timebase independent of DATA_RDY. A missing sensor interrupt must therefore revoke authority instead of silently stopping the control path.
+
+The current runtime timing policy is:
+
+```text
+nominal DATA_RDY period   2 ms
+late                     >= 3 ms
+hard timeout             >= 6 ms
+```
+
+One complete inter-event interval is required before timing becomes `Healthy`. These thresholds are runtime safety policy, not MPU6050 device specifications.
 
 ## Reaction-wheel authority
 
@@ -59,7 +84,9 @@ Actuator authorization combines:
 
 ```text
 operating state
-sensor / state validity
+primary sensor timing health
+measurement / estimated-state validity
+control deadline validity
 actuator limits
 reaction-wheel headroom
 fault state
