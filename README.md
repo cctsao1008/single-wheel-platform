@@ -1,6 +1,6 @@
 # Self-Balancing Single-Wheel Platform
 
-A Rust `no_std` embedded control platform for a two-axis self-balancing single-wheel robot.
+A Rust `no_std` embedded control platform for a self-balancing single-wheel robot.
 
 The repository is structured around explicit physical and semantic boundaries: board wiring, installed hardware, observation, calibration, coordinate mapping, state estimation, control, actuator authority, and electrical output are separate parts of the system.
 
@@ -99,7 +99,8 @@ robot-domain
     reaction wheel, drive wheel, body state, control demand
 
 plant-model
-    generalized coordinates, physical parameters, plant dynamics
+    full robot configuration, reduced balance coordinates,
+    physical parameters, and plant dynamics
 ```
 
 ## Runtime
@@ -177,20 +178,29 @@ estimated robot state
 
 ## Plant Model
 
-The canonical balance plant is represented as a coupled generalized-coordinate system rather than as legacy roll/pitch PID loops.
+The physical robot and the balance controller use different model scopes.
+
+The full robot configuration retains planar pose, yaw, body attitude, and the motor-relative wheel coordinates. The single-wheel ground contact is nonholonomic, so those coordinates are subject to rolling/contact constraints.
+
+The current upright / straight-line balance reduction is:
 
 ```text
-q = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
-u = [drive torque, reaction-wheel torque]^T
+q_b = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
+u_ref = [drive torque, reaction-wheel torque]^T
 ```
 
-The nonlinear contract is:
+The reduced nonlinear contract is:
 
 ```text
-M(q, p) q_ddot + c(q, q_dot, p) + g(q, p) + d(q_dot, p) = G(q, p) u
+M(q_b, p) q_b_ddot
++ c(q_b, q_b_dot, p)
++ g(q_b, p)
++ d(q_b_dot, p)
+=
+Q(q_b, q_b_dot, u_ref, p)
 ```
 
-Unknown physical parameters remain unknown until measured or identified. Linearization, discretization, controllability, observability, estimator design, and state-feedback synthesis are built from this plant contract.
+Yaw and mobility remain part of the wider plant description even though they are not currently promoted into the reduced balance state. Unknown physical parameters remain unknown until measured or identified.
 
 ## Recording and Replay
 
