@@ -14,5 +14,8 @@ swp-runtime-state = { path = "../runtime-state" }
 swp-state-estimator = { path = "../state-estimator" }
 swp-state-feedback = { path = "../state-feedback" }
 
+[dev-dependencies]
+swp-ekf = { path = "../ekf" }
+
 [lib]
 path = "src/lib.rs"
