@@ -3,8 +3,7 @@
 use swp_dsp_kernel::dot_f32;
 use swp_measurement_model::{UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel};
 use swp_plant_model::{
-    DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT, ReducedBalanceState,
-    ReferencePlantInput,
+    DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, ReducedBalanceState, ReferencePlantInput,
 };
 use swp_robot_domain::StateValidity;
 
@@ -254,6 +253,7 @@ fn state_from_vector(value: [f32; REDUCED_BALANCE_STATE_COUNT]) -> ReducedBalanc
 #[cfg(test)]
 mod tests {
     use super::*;
+    use swp_plant_model::REFERENCE_INPUT_COUNT;
 
     fn identity_plant() -> DiscreteLinearPlant {
         let mut a_d = [[0.0; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT];
