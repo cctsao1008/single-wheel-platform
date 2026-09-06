@@ -105,9 +105,8 @@ mod app {
             StateFeedbackGain::new(k).expect("synthetic state feedback gain"),
         ));
 
-        let actuator_parameters =
-            ActuatorParameters::new(1.0, 0.05, 0.001, 0.002, 0.1)
-                .expect("synthetic actuator parameters");
+        let actuator_parameters = ActuatorParameters::new(1.0, 0.05, 0.001, 0.002, 0.1)
+            .expect("synthetic actuator parameters");
         let actuator =
             StaticActuatorModel::new(actuator_parameters).expect("synthetic actuator model");
         let actuators = ActuatorPairModel {
