@@ -1,5 +1,6 @@
 #![no_std]
 
+use swp_dsp_kernel::dot_f32;
 use swp_mpu6050::{
     Config as MpuConfig, accel_raw_to_mps2, gyro_raw_to_rad_per_sec, temperature_raw_to_celsius,
 };
@@ -67,9 +68,9 @@ impl AffineCalibration3 {
         ];
 
         [
-            dot(self.matrix[0], centered),
-            dot(self.matrix[1], centered),
-            dot(self.matrix[2], centered),
+            dot_f32(&self.matrix[0], &centered),
+            dot_f32(&self.matrix[1], &centered),
+            dot_f32(&self.matrix[2], &centered),
         ]
     }
 }
@@ -158,10 +159,6 @@ fn require_usable_input(quality: MeasurementQuality) -> Result<(), CalibrationEr
         return Err(CalibrationError::InputUnavailable);
     }
     Ok(())
-}
-
-fn dot(lhs: [f32; 3], rhs: [f32; 3]) -> f32 {
-    lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2]
 }
 
 #[cfg(test)]
