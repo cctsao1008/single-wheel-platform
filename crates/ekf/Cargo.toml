@@ -1,0 +1,16 @@
+[package]
+name = "swp-ekf"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-dsp-kernel = { path = "../dsp-kernel" }
+swp-measurement-model = { path = "../measurement-model" }
+swp-plant-model = { path = "../plant-model" }
+swp-robot-domain = { path = "../robot-domain" }
+swp-state-estimator = { path = "../state-estimator" }
+
+[lib]
+path = "src/lib.rs"
