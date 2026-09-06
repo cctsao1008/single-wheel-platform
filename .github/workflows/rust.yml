@@ -32,6 +32,8 @@ jobs:
         run: cargo test -p swp-estimator-input --target x86_64-unknown-linux-gnu
       - name: State feedback tests
         run: cargo test -p swp-state-feedback --target x86_64-unknown-linux-gnu
+      - name: Velocity loop tests
+        run: cargo test -p swp-velocity-loop --target x86_64-unknown-linux-gnu
       - name: Control runtime tests
         run: cargo test -p swp-control-runtime --target x86_64-unknown-linux-gnu
       - name: Actuator model tests
@@ -50,8 +52,12 @@ jobs:
         run: cargo test -p swp-frame-transform --target x86_64-unknown-linux-gnu
       - name: Runtime authority tests
         run: cargo test -p swp-runtime-state --target x86_64-unknown-linux-gnu
+      - name: Runtime supervisor tests
+        run: cargo test -p swp-runtime-supervisor --target x86_64-unknown-linux-gnu
       - name: Observation record tests
         run: cargo test -p swp-observation-record --target x86_64-unknown-linux-gnu
+      - name: Runtime observation record tests
+        run: cargo test -p swp-runtime-observation-record --target x86_64-unknown-linux-gnu
       - name: Host recording decoder tests
         run: python3 -m unittest discover -s tools/recording -p 'test_*.py'
       - name: Host wireless observer syntax
@@ -70,3 +76,5 @@ jobs:
         run: cargo build -p swp-live-shadow-stm32f103 --release --target thumbv7m-none-eabi
       - name: Link non-actuating control shadow runtime
         run: cargo build -p swp-control-shadow-stm32f103 --release --target thumbv7m-none-eabi
+      - name: Link canonical non-actuating runtime shadow
+        run: cargo build -p swp-runtime-shadow-stm32f103 --release --target thumbv7m-none-eabi

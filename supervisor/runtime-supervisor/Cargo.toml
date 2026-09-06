@@ -1,0 +1,13 @@
+[package]
+name = "swp-runtime-supervisor"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-robot-domain = { path = "../../plant/robot-domain" }
+swp-runtime-state = { path = "../runtime-state" }
+
+[lib]
+path = "src/lib.rs"

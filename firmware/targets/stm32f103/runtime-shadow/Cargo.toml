@@ -1,0 +1,30 @@
+[package]
+name = "swp-runtime-shadow-stm32f103"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+cortex-m.workspace = true
+panic-halt.workspace = true
+rtic.workspace = true
+stm32f1xx-hal.workspace = true
+swp-actuation-interface = { path = "../../../interfaces/actuation" }
+swp-actuator-model = { path = "../../../../plant/actuator-model" }
+swp-board-one-v2 = { path = "../../../boards/one-v2" }
+swp-measurement-model = { path = "../../../../plant/measurement-model" }
+swp-mpu6050 = { path = "../../../sensors/mpu6050" }
+swp-one-v2-pwm-dir = { path = "../../../actuators/one-v2-pwm-dir" }
+swp-plant-model = { path = "../../../../plant/plant-model" }
+swp-plant-observation = { path = "../../../../plant/plant-observation" }
+swp-robot-domain = { path = "../../../../plant/robot-domain" }
+swp-runtime-observation-record = { path = "../../../../infrastructure/runtime-observation-record" }
+swp-runtime-state = { path = "../../../../supervisor/runtime-state" }
+swp-runtime-supervisor = { path = "../../../../supervisor/runtime-supervisor" }
+swp-sensor-calibration = { path = "../../../adapters/sensor-calibration" }
+swp-software-i2c = { path = "../../../buses/software-i2c" }
+swp-state-estimator = { path = "../../../../supervisor/state-estimator" }
+swp-state-feedback = { path = "../../../../control/state-feedback" }
+swp-velocity-loop = { path = "../../../../control/velocity-loop" }
