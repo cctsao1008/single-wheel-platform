@@ -1,6 +1,7 @@
 #![no_std]
 
-use swp_robot_domain::AngularRateRadPerSec;
+use swp_actuator_model::ActuatorPairCommand;
+use swp_robot_domain::{AngularRateRadPerSec, StateValidity};
 
 /// High-level operating state for the reference single-wheel plant.
 ///
@@ -253,9 +254,179 @@ impl ReactionWheelSpeedLimits {
     }
 }
 
+/// Bitwise explanation of why an actuator request was denied or constrained.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AuthorityReasons(u16);
+
+impl AuthorityReasons {
+    pub const NONE: Self = Self(0);
+    pub const OPERATING_STATE: Self = Self(1 << 0);
+    pub const SENSOR_TIMING: Self = Self(1 << 1);
+    pub const ESTIMATE_INVALID: Self = Self(1 << 2);
+    pub const REACTION_WHEEL_WARNING: Self = Self(1 << 3);
+    pub const REACTION_WHEEL_EXHAUSTED: Self = Self(1 << 4);
+    pub const DRIVE_SATURATED: Self = Self(1 << 5);
+    pub const REACTION_SATURATED: Self = Self(1 << 6);
+
+    pub const fn bits(self) -> u16 {
+        self.0
+    }
+
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    const fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+/// Independent evidence consumed by the physical-output authority gate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthorityContext {
+    pub operating_state: OperatingState,
+    pub timing: SensorTimingHealth,
+    pub estimate_validity: StateValidity,
+    pub reaction_wheel_authority: ReactionWheelAuthority,
+}
+
+/// Result of applying runtime authority to one bounded actuator request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthorityDecision {
+    pub authority: ActuationAuthority,
+    pub reasons: AuthorityReasons,
+    pub constrained: bool,
+    pub hold_integrator: bool,
+}
+
+impl AuthorityDecision {
+    pub const fn closed_loop_authorized(self) -> bool {
+        matches!(self.authority, ActuationAuthority::ClosedLoop)
+    }
+}
+
+/// Type-level proof that a bounded actuator request passed runtime authority.
+///
+/// There is intentionally no public constructor. Board-specific electrical-output
+/// code should accept this token rather than raw normalized commands.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AuthorizedActuation {
+    commands: ActuatorPairCommand,
+}
+
+impl AuthorizedActuation {
+    pub const fn commands(self) -> ActuatorPairCommand {
+        self.commands
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AuthorityOutcome {
+    decision: AuthorityDecision,
+    authorized: Option<AuthorizedActuation>,
+}
+
+impl AuthorityOutcome {
+    pub const fn decision(self) -> AuthorityDecision {
+        self.decision
+    }
+
+    pub const fn authorized(self) -> Option<AuthorizedActuation> {
+        self.authorized
+    }
+}
+
+/// The only semantic promotion boundary from bounded actuator command to a
+/// physical-output-authorized command.
+pub struct RuntimeAuthority;
+
+impl RuntimeAuthority {
+    pub fn evaluate(context: AuthorityContext, commands: ActuatorPairCommand) -> AuthorityOutcome {
+        let mut reasons = AuthorityReasons::NONE;
+        let mut denied = false;
+        let mut constrained = false;
+
+        if context.operating_state.actuation_authority() == ActuationAuthority::Denied {
+            reasons = reasons.with(AuthorityReasons::OPERATING_STATE);
+            denied = true;
+        }
+        if !context.timing.closed_loop_eligible() {
+            reasons = reasons.with(AuthorityReasons::SENSOR_TIMING);
+            denied = true;
+        }
+        if context.estimate_validity != StateValidity::Valid {
+            reasons = reasons.with(AuthorityReasons::ESTIMATE_INVALID);
+            denied = true;
+        }
+
+        match context.reaction_wheel_authority {
+            ReactionWheelAuthority::Nominal => {}
+            ReactionWheelAuthority::Warning => {
+                reasons = reasons.with(AuthorityReasons::REACTION_WHEEL_WARNING);
+                constrained = true;
+            }
+            ReactionWheelAuthority::Exhausted => {
+                reasons = reasons.with(AuthorityReasons::REACTION_WHEEL_EXHAUSTED);
+                denied = true;
+            }
+        }
+
+        if commands.drive.saturated {
+            reasons = reasons.with(AuthorityReasons::DRIVE_SATURATED);
+            constrained = true;
+        }
+        if commands.reaction.saturated {
+            reasons = reasons.with(AuthorityReasons::REACTION_SATURATED);
+            constrained = true;
+        }
+
+        let decision = AuthorityDecision {
+            authority: if denied {
+                ActuationAuthority::Denied
+            } else {
+                ActuationAuthority::ClosedLoop
+            },
+            reasons,
+            constrained,
+            hold_integrator: denied || constrained,
+        };
+
+        AuthorityOutcome {
+            decision,
+            authorized: (!denied).then_some(AuthorizedActuation { commands }),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use swp_actuator_model::BoundedActuatorCommand;
+    use swp_robot_domain::{NormalizedCommand, TorqueNm};
+
+    fn command(value: f32, saturated: bool) -> BoundedActuatorCommand {
+        BoundedActuatorCommand {
+            command: NormalizedCommand::new(value).unwrap(),
+            saturated,
+            predicted_torque_nm: TorqueNm(0.0),
+        }
+    }
+
+    fn commands(drive_saturated: bool, reaction_saturated: bool) -> ActuatorPairCommand {
+        ActuatorPairCommand {
+            drive: command(0.25, drive_saturated),
+            reaction: command(-0.25, reaction_saturated),
+        }
+    }
+
+    fn healthy_context() -> AuthorityContext {
+        AuthorityContext {
+            operating_state: OperatingState::Balancing,
+            timing: SensorTimingHealth::Healthy,
+            estimate_validity: StateValidity::Valid,
+            reaction_wheel_authority: ReactionWheelAuthority::Nominal,
+        }
+    }
 
     #[test]
     fn actuation_is_denied_outside_closed_loop_states() {
@@ -365,5 +536,76 @@ mod tests {
         assert_eq!(limits.headroom_fraction(AngularRateRadPerSec(0.0)), 1.0);
         assert!((limits.headroom_fraction(AngularRateRadPerSec(50.0)) - 0.5).abs() < 1.0e-6);
         assert_eq!(limits.headroom_fraction(AngularRateRadPerSec(120.0)), 0.0);
+    }
+
+    #[test]
+    fn healthy_runtime_promotes_bounded_commands_to_authorized_token() {
+        let outcome = RuntimeAuthority::evaluate(healthy_context(), commands(false, false));
+        assert_eq!(outcome.decision().authority, ActuationAuthority::ClosedLoop);
+        assert_eq!(outcome.decision().reasons, AuthorityReasons::NONE);
+        assert!(!outcome.decision().hold_integrator);
+        assert!(outcome.authorized().is_some());
+    }
+
+    #[test]
+    fn invalid_estimate_denies_physical_output() {
+        let mut context = healthy_context();
+        context.estimate_validity = StateValidity::Invalid;
+        let outcome = RuntimeAuthority::evaluate(context, commands(false, false));
+        assert_eq!(outcome.decision().authority, ActuationAuthority::Denied);
+        assert!(
+            outcome
+                .decision()
+                .reasons
+                .contains(AuthorityReasons::ESTIMATE_INVALID)
+        );
+        assert!(outcome.decision().hold_integrator);
+        assert!(outcome.authorized().is_none());
+    }
+
+    #[test]
+    fn actuator_saturation_is_authorized_but_explicitly_constrained() {
+        let outcome = RuntimeAuthority::evaluate(healthy_context(), commands(true, false));
+        assert_eq!(outcome.decision().authority, ActuationAuthority::ClosedLoop);
+        assert!(
+            outcome
+                .decision()
+                .reasons
+                .contains(AuthorityReasons::DRIVE_SATURATED)
+        );
+        assert!(outcome.decision().constrained);
+        assert!(outcome.decision().hold_integrator);
+        assert!(outcome.authorized().is_some());
+    }
+
+    #[test]
+    fn reaction_wheel_warning_constrains_without_revoking_output() {
+        let mut context = healthy_context();
+        context.reaction_wheel_authority = ReactionWheelAuthority::Warning;
+        let outcome = RuntimeAuthority::evaluate(context, commands(false, false));
+        assert_eq!(outcome.decision().authority, ActuationAuthority::ClosedLoop);
+        assert!(
+            outcome
+                .decision()
+                .reasons
+                .contains(AuthorityReasons::REACTION_WHEEL_WARNING)
+        );
+        assert!(outcome.decision().hold_integrator);
+        assert!(outcome.authorized().is_some());
+    }
+
+    #[test]
+    fn exhausted_reaction_wheel_revokes_physical_output() {
+        let mut context = healthy_context();
+        context.reaction_wheel_authority = ReactionWheelAuthority::Exhausted;
+        let outcome = RuntimeAuthority::evaluate(context, commands(false, false));
+        assert_eq!(outcome.decision().authority, ActuationAuthority::Denied);
+        assert!(
+            outcome
+                .decision()
+                .reasons
+                .contains(AuthorityReasons::REACTION_WHEEL_EXHAUSTED)
+        );
+        assert!(outcome.authorized().is_none());
     }
 }
