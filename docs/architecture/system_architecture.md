@@ -103,6 +103,10 @@ measurement-model
     physical sensor equation, IMU lever-arm semantics,
     encoder kinematics, local observability structure
 
+dsp-kernel
+    canonical Cortex-M numerical execution boundary;
+    CMSIS-DSP matrix/vector primitives
+
 state-estimator
     discrete predictor/corrector execution, measurement masks,
     estimate validity
@@ -255,6 +259,8 @@ It is not PWM, duty, timer compare, or motor-driver polarity. The current refere
 
 Numeric `A_d`, `B_d`, `L`, `K`, and optional LQI matrices are synthesized on the host from evidenced physical parameters. The STM32 executes those matrices deterministically and does not solve matrix exponentials or Riccati equations at runtime.
 
+All Cortex-M fixed-size products used by the measurement model, observer, LQR, and LQI are routed through `swp-dsp-kernel` to CMSIS-DSP. There is no parallel scalar production implementation. The non-ARM backend exists only to preserve semantic unit testing on hosts that cannot link an ARM CMSIS-DSP archive.
+
 See [`state_estimation_and_control.md`](state_estimation_and_control.md).
 
 ## Hardware ownership
@@ -324,7 +330,7 @@ The current firmware remains observation-only, so these contracts are establishe
 
 ## Real-time runtime
 
-The STM32F103 target uses Rust `no_std`, `embedded-hal` 1.0, `stm32f1xx-hal`, and RTIC.
+The STM32F103 target uses Rust `no_std`, `embedded-hal` 1.0, `stm32f1xx-hal`, RTIC, and CMSIS-DSP.
 
 The target composition is:
 
