@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+swp-actuator-model = { path = "../actuator-model" }
 swp-robot-domain = { path = "../robot-domain" }
 
 [lib]
