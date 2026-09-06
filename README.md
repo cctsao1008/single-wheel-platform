@@ -22,6 +22,9 @@ CalibratedObservation
 BodyObservation
       |
       v
+EstimatorMeasurement
+      |
+      v
 State Estimator
       |
       v
@@ -70,7 +73,7 @@ state-feedback
     u = u_ff - K (x_hat - x_ref)
 ```
 
-`control-runtime` composes estimator, state feedback, actuator inversion, and runtime authority into one executable control opportunity. It retains the previously authorized physical effort as the next observer input and never performs catch-up control for missed periods.
+`estimator-input` maps evidenced body-frame IMU data plus robot-semantic encoder observations into the exact measurement vector and availability mask consumed by the observer. `control-runtime` composes estimator, state feedback, actuator inversion, and runtime authority into one executable control opportunity. It retains the previously authorized physical effort as the next observer input and never performs catch-up control for missed periods.
 
 ## Current Runtime
 
@@ -96,7 +99,27 @@ Timeout
 
 Only `Healthy` timing can participate in closed-loop authority. A missing DATA_RDY event is detected by the independent TIM1 supervisor rather than by the sensor interrupt path itself.
 
-The current STM32 firmware is still **observation-only**. The estimator, LQR/LQI, actuator model, control-runtime composition, and authority contracts are implemented and tested, but numeric reference-platform gains and actuator parameters are not instantiated until the required physical evidence exists.
+The current STM32 firmware is still **observation-only**. The estimator-input adapter, estimator, LQR/LQI, actuator model, control-runtime composition, and authority contracts are implemented and tested, but numeric reference-platform gains, encoder transfer evidence, IMU calibration/frame evidence, and actuator parameters are not instantiated until the required physical evidence exists.
+
+## Estimator Input
+
+The observer does not consume raw QEI counts or sensor-frame IMU data.
+
+```text
+BodyImuObservation
+        +
+robot-semantic raw encoder snapshots
+        |
+        v
+encoder transfer / unwrap / rate
+        |
+        v
+EstimatorMeasurement
+```
+
+Encoder transfer requires the STM32 counter counts per **mechanical** revolution, mechanical sign, and an evidenced maximum inter-sample count delta. This keeps quadrature decode, gearing, and 16-bit counter unwrapping assumptions explicit. The first accepted counter sample establishes a relative zero; rate remains unavailable until a second timestamped sample exists.
+
+Missing or rejected encoder evidence becomes measurement-channel unavailability rather than numeric zero. The observer's required-measurement contract decides whether that frame is usable.
 
 ## Control Runtime
 
@@ -212,9 +235,11 @@ Hard denial removes physical-output authority. Constrained operation remains exp
 
 ## Numerical Execution
 
-Cortex-M control math uses CMSIS-DSP through `swp-dsp-kernel`.
+Cortex-M vector/matrix math uses CMSIS-DSP through `swp-dsp-kernel`, including affine IMU calibration and sensor-to-body vector products.
 
 ```text
+sensor-calibration
+frame-transform
 measurement-model
 state-estimator
 state-feedback
@@ -226,7 +251,7 @@ swp-dsp-kernel
 CMSIS-DSP / Cortex-M3
 ```
 
-There is no parallel scalar production backend on STM32. Non-ARM builds provide only a host semantic implementation for deterministic tests.
+There is no parallel scalar dot-product production backend on STM32. Non-ARM builds provide only a host semantic implementation for deterministic tests.
 
 Host synthesis in `tools/control/` performs exact zero-order-hold discretization and observer/LQR/LQI synthesis. The MCU does not solve matrix exponentials or Riccati equations at runtime.
 
@@ -242,7 +267,7 @@ derived
 unknown
 ```
 
-Unknown mass, inertia, geometry, encoder scale, IMU placement, actuator gain, friction, or delay is not replaced by a convenient nominal value.
+Unknown mass, inertia, geometry, encoder scale/sign/unwrap bound, IMU placement, actuator gain, friction, or delay is not replaced by a convenient nominal value.
 
 ## Repository Structure
 
@@ -253,12 +278,13 @@ crates/
   measurement-model/     sensor equations and observability model
   dsp-kernel/            CMSIS-DSP Cortex-M numerical boundary
   state-estimator/       fixed-rate discrete predictor/corrector
+  estimator-input/       body/encoder evidence -> estimator measurement vector
   state-feedback/        LQR/LQI execution
   control-runtime/       estimator -> control -> actuator -> authority composition
   actuator-model/        torque / command inverse model and saturation
   runtime-state/         operating state, timing health, physical-output authority
   plant-observation/     raw observation, timing, quality, acquisition status
-  sensor-calibration/    physical sensor calibration
+  sensor-calibration/    IMU calibration and evidenced encoder transfer
   frame-transform/       sensor-frame -> robot-body mapping
   reference-assembly/    installed hardware and board-to-role mapping
   observation-record/    binary recording / replay contract
@@ -309,11 +335,12 @@ PCB channel identity, installed assembly role, and robot-control semantics remai
 cargo fw
 ```
 
-CI checks formatting, Cortex-M workspace compilation, Clippy, CMSIS-DSP integration, model/estimator/controller/control-runtime/authority tests, host tools, control synthesis, and release firmware linking.
+CI checks formatting, Cortex-M workspace compilation, Clippy, CMSIS-DSP integration, model/estimator-input/estimator/controller/control-runtime/authority tests, host tools, control synthesis, and release firmware linking.
 
 ## Architecture Documents
 
 - [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
+- [`docs/architecture/estimator_input.md`](docs/architecture/estimator_input.md)
 - [`docs/architecture/control_runtime.md`](docs/architecture/control_runtime.md)
 - [`docs/architecture/plant_model.md`](docs/architecture/plant_model.md)
 - [`docs/architecture/measurement_model.md`](docs/architecture/measurement_model.md)
