@@ -152,9 +152,7 @@ mod app {
         local = [cadence_timer, telemetry, oled, page, tick]
     )]
     fn output_cadence(ctx: output_cadence::Context) {
-        ctx.local
-            .cadence_timer
-            .clear_interrupt(TimerEvent::Update);
+        ctx.local.cadence_timer.clear_interrupt(TimerEvent::Update);
         *ctx.local.tick = ctx.local.tick.wrapping_add(1);
         let tick = *ctx.local.tick;
         SHADOW_BASE_TICKS.store(tick, Ordering::Relaxed);

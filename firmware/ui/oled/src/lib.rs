@@ -112,7 +112,11 @@ impl OledRenderer {
 }
 
 fn render_overview(frame: &mut OledTextFrame, view: StatusView) {
-    write_label_value(&mut frame.rows[0], b"STATE ", runtime_mode(view.runtime_mode));
+    write_label_value(
+        &mut frame.rows[0],
+        b"STATE ",
+        runtime_mode(view.runtime_mode),
+    );
     write_label_value(&mut frame.rows[1], b"TIMING ", health(view.timing));
     write_label_value(&mut frame.rows[2], b"WATCH  ", health(view.watchdog));
     write_label_value(&mut frame.rows[3], b"BLE    ", link(view.ble));
@@ -121,11 +125,7 @@ fn render_overview(frame: &mut OledTextFrame, view: StatusView) {
         b"VEL mm/s ",
         i32::from(view.forward_velocity_mm_per_s),
     );
-    write_signed(
-        &mut frame.rows[5],
-        b"PITCH mr ",
-        i32::from(view.pitch_mrad),
-    );
+    write_signed(&mut frame.rows[5], b"PITCH mr ", i32::from(view.pitch_mrad));
     write_label_value(
         &mut frame.rows[6],
         b"AUTH   ",
@@ -160,17 +160,17 @@ fn render_control(frame: &mut OledTextFrame, view: StatusView) {
         b"VEL mm/s ",
         i32::from(view.forward_velocity_mm_per_s),
     );
-    write_signed(
-        &mut frame.rows[5],
-        b"PITCH mr ",
-        i32::from(view.pitch_mrad),
-    );
+    write_signed(&mut frame.rows[5], b"PITCH mr ", i32::from(view.pitch_mrad));
     write_hex32(&mut frame.rows[6], b"AUTH  0x", view.authority_reason_bits);
     write_hex32(&mut frame.rows[7], b"FAULT 0x", view.runtime_fault_bits);
 }
 
 fn render_health(frame: &mut OledTextFrame, view: StatusView) {
-    write_label_value(&mut frame.rows[0], b"STATE ", runtime_mode(view.runtime_mode));
+    write_label_value(
+        &mut frame.rows[0],
+        b"STATE ",
+        runtime_mode(view.runtime_mode),
+    );
     write_label_value(&mut frame.rows[1], b"TIMING ", health(view.timing));
     write_label_value(&mut frame.rows[2], b"WATCH  ", health(view.watchdog));
     write_label_value(&mut frame.rows[3], b"BLE    ", link(view.ble));

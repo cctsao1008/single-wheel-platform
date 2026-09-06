@@ -96,11 +96,15 @@ mod tests {
         });
         let mut publisher = TelemetryPublisher::new(transport);
         assert_eq!(
-            publisher.publish_latest(TelemetrySnapshot::default()).unwrap(),
+            publisher
+                .publish_latest(TelemetrySnapshot::default())
+                .unwrap(),
             TelemetryTxOutcome::Busy
         );
         assert_eq!(
-            publisher.publish_latest(TelemetrySnapshot::default()).unwrap(),
+            publisher
+                .publish_latest(TelemetrySnapshot::default())
+                .unwrap(),
             TelemetryTxOutcome::Sent
         );
         let bytes = publisher.into_transport().into_bytes();
