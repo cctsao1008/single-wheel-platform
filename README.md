@@ -1,52 +1,59 @@
 # Self-Balancing Single-Wheel Platform
 
-A Rust `no_std` embedded control platform for a self-balancing single-wheel robot.
+A Rust `no_std` control platform for a self-balancing single-wheel robot.
 
-The repository is structured around explicit physical and semantic boundaries: board wiring, installed hardware, observation, calibration, coordinate mapping, physical modeling, measurement modeling, state estimation, control, actuator authority, and electrical output are separate parts of the system.
+The repository separates physical evidence, sensing, estimation, control, actuator modeling, runtime authority, and board electrical output. The STM32 executes deterministic fixed-size control math; model derivation, system identification, discretization, and Riccati synthesis remain host-side engineering operations.
 
 ## Core Architecture
 
 ```text
-Physical Plant
+Physical Robot
       |
       v
 RawObservation
       |
-      | device transfer functions
       v
 ScaledObservation
       |
-      | measured calibration
       v
 CalibratedObservation
       |
-      | sensor -> body transform
       v
 BodyObservation
+      |
+      v
+State Estimator
       |
       v
 EstimatedState
       |
       v
-State-Space Control Law
+LQR / LQI
       |
       v
-GeneralizedDemand
+GeneralizedDemand [N m]
       |
       v
-ActuatorAllocation
+Actuator Model / Inverse Model
+      |
+      v
+Bounded Actuator Command
       |
       v
 RuntimeAuthority
       |
-      v
-ElectricalOutput
+      +-- denied ------> no physical output
       |
-      v
-Physical Actuators
+      +-- authorized --> AuthorizedActuation
+                              |
+                              v
+                    Electrical Output
+                              |
+                              v
+                     Physical Actuators
 ```
 
-The estimator and controller are grounded by explicit physical models:
+The model contracts are:
 
 ```text
 plant-model
@@ -63,102 +70,22 @@ state-feedback
     u = u_ff - K (x_hat - x_ref)
 ```
 
-Numerical discretization and Riccati synthesis are host-side engineering operations. The STM32 executes fixed-size deterministic matrices; it does not solve matrix exponentials or Riccati equations at runtime. Cortex-M real-time matrix/vector products are routed through `swp-dsp-kernel` to CMSIS-DSP; the STM32F103 does not retain a separate scalar control backend.
+`control-runtime` composes estimator, state feedback, actuator inversion, and runtime authority into one executable control opportunity. It retains the previously authorized physical effort as the next observer input and never performs catch-up control for missed periods.
 
-Observation and control remain independent from transport and user interfaces:
+## Current Runtime
 
-```text
-RawObservation
-      |
-      +----> semantic / control path
-      |
-      +----> RecordedObservation
-                   |
-                   v
-             USART2 TX DMA
-                   |
-                   v
-             ECB02S2 / BLE
-                   |
-                   v
-        Host recording / replay
-```
-
-The control path does not depend on BLE, OLED, host tools, or storage.
-
-## Platform
+Target MCU: `STM32F103C8T6`.
 
 ```text
-MCU             STM32F103C8T6
-IMU             MPU6050
-
-Reaction wheel  BLDC_1 / Encoder_1
-Drive wheel     BLDC_2 / Encoder_2
-Third channel   BLDC_3, unused by the reference assembly
-
-USART2          ECB02S2 BLE recording / observation interface
-USART1          wired bench / engineering interface
-OLED            PB4/PB5 optional local status interface
+MPU6050 DATA_RDY / PC13 EXTI13   500 Hz acquisition boundary
+TIM1                              1 kHz independent timing-health supervisor
+TIM2                              Encoder_1 QEI
+TIM4                              Encoder_2 QEI
+ADC1 / PA5                        battery observation
+USART2 TX / DMA1 CH7              RecordedObservation transport
 ```
 
-The robot body frame is right-handed:
-
-```text
-+X = forward
-+Y = left
-+Z = up
-```
-
-Board channels and robot roles are intentionally separate concepts:
-
-```text
-board-one-v2
-    PCB pins, timers, connectors, buses
-
-reference-assembly
-    installed hardware and channel-to-role mapping
-
-robot-domain
-    robot state, physical control demand, actuator roles
-
-plant-model
-    full robot configuration, reduced balance coordinates,
-    physical parameters, and plant dynamics
-
-measurement-model
-    physical sensor equation and local observability structure
-
-dsp-kernel
-    CMSIS-DSP numerical execution boundary on Cortex-M
-
-state-estimator
-    deterministic discrete predictor/corrector execution
-
-state-feedback
-    deterministic LQR/LQI execution
-```
-
-## Runtime
-
-The target runtime uses:
-
-```text
-Rust no_std
-embedded-hal 1.0
-stm32f1xx-hal
-RTIC 2.x
-CMSIS-DSP
-```
-
-The primary acquisition boundary is MPU6050 DATA_RDY at 500 Hz through PC13 / EXTI13. TIM1 independently supervises that sensor clock at 1 kHz so missing DATA_RDY cannot silently stop the future control path.
-
-```text
-MPU6050 DATA_RDY       500 Hz acquisition / estimator boundary
-TIM1                   1 kHz independent timing-health boundary
-USART2 TX / DMA1 CH7   100 Hz RecordedObservation transport
-```
-
-Primary sensor timing is represented as:
+The primary sensor timing states are:
 
 ```text
 Startup
@@ -167,86 +94,58 @@ Late
 Timeout
 ```
 
-Only `Healthy` timing is eligible for closed-loop physical output. This timing condition is part of runtime authority rather than being hidden inside the IMU driver.
+Only `Healthy` timing can participate in closed-loop authority. A missing DATA_RDY event is detected by the independent TIM1 supervisor rather than by the sensor interrupt path itself.
 
-The operating-state model is:
+The current STM32 firmware is still **observation-only**. The estimator, LQR/LQI, actuator model, control-runtime composition, and authority contracts are implemented and tested, but numeric reference-platform gains and actuator parameters are not instantiated until the required physical evidence exists.
 
-```text
-Boot
-  |
-  v
-HardwareCheck
-  |
-  v
-Standby
-  |
-  v
-CaptureWindow
-  |
-  v
-Balancing
-  |
-  +------> MomentumLimited
-  |
-  +------> Fault
-```
+## Control Runtime
 
-Actuator output is permitted only through runtime authority. Reaction-wheel speed is part of actuator authority because balance authority decreases as wheel momentum headroom is exhausted.
-
-## Observation Model
-
-Sensor acquisition preserves timing and measurement quality instead of collapsing all inputs into one synthetic sample instant.
+One control opportunity follows this causality:
 
 ```text
-IMU
-  raw accel / gyro / temperature
-  DATA_RDY freshness evidence
-  source-time evidence
-  read start / completion time
-  timing health
-  measurement quality
-
-Encoders
-  raw quadrature counters
-  individual capture time
-  measurement quality
-
-Battery
-  raw ADC value
-  read timing
-  measurement quality
+measurement[k]
+      |
+      v
+observer using applied u[k-1]
+      |
+      v
+estimated state[k]
+      |
+      v
+LQR / LQI
+      |
+      v
+requested torque[k]
+      |
+      v
+inverse actuator model
+      |
+      v
+bounded command[k]
+      |
+      v
+RuntimeAuthority
+      |
+      v
+applied u[k]
+      |
+      +----> observer input for k+1
 ```
 
-Scaling, physical calibration, and frame mapping are separate semantic transitions.
+The runtime preserves these distinct meanings:
 
 ```text
-raw register value
-      !=
-physical unit
-      !=
-calibrated sensor value
-      !=
-body-frame measurement
-      !=
-estimated robot state
+requested torque
+    != bounded actuator command
+    != authorized command
+    != electrical output
 ```
 
-`DATA_RDY` proves that a fresh MPU output image exists; it does not expose the exact internal MEMS sample instant. `source_sample_at_us` therefore remains explicitly unknown while IRQ service and I2C read timing are recorded.
+LQI integral state is advanced only when the current request and the candidate updated request both remain fully authorized and unconstrained. Saturation, reaction-wheel limiting, invalid estimation, invalid timing, or an ineligible operating state therefore cannot silently accumulate integral wind-up.
 
-## Plant Model
+## Physical Model
 
-The physical robot and the balance controller use different model scopes.
-
-The full robot configuration retains planar pose, yaw, body attitude, and the motor-relative wheel coordinates. The single-wheel ground contact is nonholonomic, so those coordinates are subject to rolling/contact constraints.
-
-The current upright / straight-line balance reduction is:
-
-```text
-q_b = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
-u_ref = [drive torque, reaction-wheel torque]^T
-```
-
-The reduced control state is:
+The reduced upright / straight-line balance state is:
 
 ```text
 x = [
@@ -260,178 +159,166 @@ x = [
 ]^T
 ```
 
-The reduced nonlinear contract is:
+with physical plant input:
 
 ```text
-M(q_b, p) q_b_ddot
-+ c(q_b, q_b_dot, p)
-+ g(q_b, p)
-+ d(q_b_dot, p)
+u = [drive-wheel torque, reaction-wheel torque]^T
+```
+
+The nonlinear plant contract is:
+
+```text
+M(q, p) q_ddot
++ c(q, q_dot, p)
++ g(q, p)
++ d(q_dot, p)
 =
-B(p) u_ref
+B(p) u
 ```
 
-The symbolic derivation shows that the nonlinear balance plant is coupled, while its stationary-upright first-order linearization separates into pitch/translation and roll/reaction-wheel momentum blocks. That separation is a derived local property, not an assumption inherited from legacy control topology.
-
-Unknown physical parameters remain unknown until measured or identified.
-
-## Estimation and State-Space Control
-
-`swp-state-estimator` implements the discrete predictor/corrector using the explicit physical measurement model. Required measurement channels, timing validity, non-finite input rejection, and estimate validity are first-class runtime state; the observer does not invent missing measurements.
-
-`swp-state-feedback` implements LQR and optional LQI in physical state and torque units:
-
-```text
-LQR
-    u = u_ff - K (x_hat - x_ref)
-
-LQI
-    z[k+1] = z[k] + Ts C_i (x_hat - x_ref)
-    u = u_ff - K_x (x_hat - x_ref) - K_i z
-```
-
-LQI exposes an explicit integrator `Hold` mode so runtime authority can stop integration when physical output is denied or constrained.
-
-Controller output is a physical torque demand:
-
-```text
-GeneralizedDemand
-    drive-wheel torque [N m]
-    reaction-wheel torque [N m]
-```
-
-The current reference-assembly allocation is numerically identity because one installed actuator owns each of those two plant inputs. The allocation boundary remains explicit so controller semantics never collapse into PCB channel identity or PWM duty.
-
-The Cortex-M numerical execution path is CMSIS-DSP through `swp-dsp-kernel`. It owns the fixed-size products used by the measurement model, observer, LQR, and LQI. Non-ARM builds use a host-only semantic emulator for deterministic tests; that code is not an embedded fallback.
-
-The reference firmware does **not** instantiate numeric observer/controller gains yet. The synthesis path refuses to fabricate missing masses, inertias, geometry, IMU placement, noise levels, encoder scaling, or actuator torque evidence.
-
-## Control Synthesis
-
-Host-side synthesis lives in `tools/control/`:
-
-```text
-measured / identified parameters
-        |
-        v
-continuous upright A, B
-        |
-        v
-exact zero-order hold @ 500 Hz
-        |
-        +--> A_d, B_d
-        +--> discrete LQR / optional LQI
-        +--> steady-state discrete observer
-        |
-        v
-JSON design artifact + generated Rust matrices
-```
-
-The reference design template intentionally contains `null` for unsupported quantities. Numeric gains become reference-platform facts only after the design input is backed by physical measurement or identification and correlated against the robot.
+Roll and pitch are not assumed globally decoupled. The stationary-upright linearization exposes a local pitch/translation block and a local roll/reaction-wheel-momentum block as a derived property of the model.
 
 ## Measurement Model
 
-The estimator does not treat sensor values as direct state variables. It compares body-frame observations with a physical sensor model:
+The estimator consumes physical observations, not synthetic tilt angles.
 
 ```text
 y = h(x, u, p)
 ```
 
-Around stationary upright the implemented local form is:
+Around stationary upright:
 
 ```text
-y = y_0 + C x + D u
+y = y0 + C x + D u
 ```
 
-The accelerometer is modeled as a specific-force sensor, including translational acceleration, angular acceleration at the IMU lever arm, gravity, and direct actuator feedthrough. It is not treated as a pure tilt sensor.
+The accelerometer is modeled as a specific-force sensor including gravity, translational acceleration, angular acceleration at the IMU lever arm, and actuator feedthrough. Encoder and gyro channels remain independent measurement evidence.
 
-The ideal upright model is structurally observable from encoder/gyro information alone. This is a local mathematical result, not a claim that accelerometer data is unnecessary in the physical estimator; bias, scale uncertainty, timing, noise, and model error still make independent specific-force information valuable.
+## Runtime Authority
 
-## Recording and Replay
+`RuntimeAuthority` is the only semantic boundary that can create `AuthorizedActuation`.
 
-`RawObservation` is encoded as a fixed-size CRC-protected `RecordedObservation` and streamed from USART2 through the on-board ECB02S2 BLE module. USART2 TX uses DMA1 channel 7; DMA removes byte-rate CPU service without changing the UART/BLE bandwidth contract.
+Authority considers:
 
 ```text
-RawObservation
-      |
-      v
-RecordedObservation
-      |
-      v
-USART2 TX DMA
-      |
-      v
-ECB02S2 BLE
-      |
-      v
-Python wireless observer
-      |
-      +----> raw binary capture
-      +----> live timing-health / signal view
-      +----> CSV
-      +----> deterministic replay
+operating state
+sensor timing health
+estimated-state validity
+reaction-wheel speed / headroom
+actuator saturation
 ```
 
-The host checks sequence continuity, CRC validity, firmware-reported dropped records, and primary IMU timing-health state. BLE packet boundaries and DMA transfer boundaries do not define record boundaries.
+Hard denial removes physical-output authority. Constrained operation remains explicit and holds LQI integration.
+
+## Numerical Execution
+
+Cortex-M control math uses CMSIS-DSP through `swp-dsp-kernel`.
+
+```text
+measurement-model
+state-estimator
+state-feedback
+      |
+      v
+swp-dsp-kernel
+      |
+      v
+CMSIS-DSP / Cortex-M3
+```
+
+There is no parallel scalar production backend on STM32. Non-ARM builds provide only a host semantic implementation for deterministic tests.
+
+Host synthesis in `tools/control/` performs exact zero-order-hold discretization and observer/LQR/LQI synthesis. The MCU does not solve matrix exponentials or Riccati equations at runtime.
+
+## Physical Evidence
+
+Reference-platform quantities live under `parameters/` and remain unknown until supported by evidence.
+
+```text
+measured
+identified
+datasheet
+derived
+unknown
+```
+
+Unknown mass, inertia, geometry, encoder scale, IMU placement, actuator gain, friction, or delay is not replaced by a convenient nominal value.
 
 ## Repository Structure
 
 ```text
 crates/
-  robot-domain/          Robot state and physical actuator-domain types
-  plant-model/           Physical plant coordinates, parameters, and dynamics
-  dsp-kernel/            CMSIS-DSP numerical backend for Cortex-M control math
-  measurement-model/     Sensor equation and local observability model
-  state-estimator/       Fixed-rate discrete predictor/corrector
-  state-feedback/        LQR/LQI physical state-feedback execution
-  reference-assembly/    Installed hardware and board-to-role allocation
-  plant-observation/     Raw acquisition, timing, quality, and health evidence
-  sensor-calibration/    Sensor scaling and measured calibration
-  frame-transform/       Sensor-frame to body-frame mapping
-  runtime-state/         Operating state, timing health, and actuator authority
-  observation-record/    Binary recording / replay contract
+  robot-domain/          robot-semantic states, units, actuator roles
+  plant-model/           physical plant dynamics and reduced balance model
+  measurement-model/     sensor equations and observability model
+  dsp-kernel/            CMSIS-DSP Cortex-M numerical boundary
+  state-estimator/       fixed-rate discrete predictor/corrector
+  state-feedback/        LQR/LQI execution
+  control-runtime/       estimator -> control -> actuator -> authority composition
+  actuator-model/        torque / command inverse model and saturation
+  runtime-state/         operating state, timing health, physical-output authority
+  plant-observation/     raw observation, timing, quality, acquisition status
+  sensor-calibration/    physical sensor calibration
+  frame-transform/       sensor-frame -> robot-body mapping
+  reference-assembly/    installed hardware and board-to-role mapping
+  observation-record/    binary recording / replay contract
   mpu6050/               MPU6050 device driver
   software-i2c/          embedded-hal software I2C
   board-one-v2/          PCB wiring and peripheral mapping
 
 firmware/
-  stm32f103/             STM32F103 RTIC target runtime
+  stm32f103/             RTIC target runtime
+
+parameters/
+  reference-assembly.json
 
 tools/
-  model/                 Symbolic plant derivation and structural analysis
-  control/               Exact ZOH, observer, LQR/LQI synthesis
-  recording/             Decode and deterministic replay tools
-  wireless/              ECB02S2 BLE capture and live observation
+  model/                 symbolic derivation and structural analysis
+  control/               exact ZOH, observer, LQR/LQI synthesis
+  actuator/              actuator identification
+  recording/             record decode / replay support
+  wireless/              BLE capture and live observation
 
 docs/
-  architecture/          System contracts and semantic boundaries
-  hardware/              Board, assembly, and pin mapping
-  commissioning/         Target runtime configuration
+  architecture/
+  hardware/
+  commissioning/
 ```
 
-## Build
+## Reference Assembly
 
-Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target.
+```text
+BLDC_1 / Encoder_1 -> ReactionWheel
+BLDC_2 / Encoder_2 -> DriveWheel
+BLDC_3             -> unused
+```
+
+Robot body frame:
+
+```text
++X = forward
++Y = left
++Z = up
+```
+
+PCB channel identity, installed assembly role, and robot-control semantics remain separate concepts.
+
+## Build
 
 ```bash
 cargo fw
 ```
 
-CI checks formatting, Cortex-M workspace compilation, Clippy, the CMSIS-DSP numerical boundary, plant/measurement/estimator/controller tests, protocol/replay tests, host-tool syntax, and the release firmware link.
+CI checks formatting, Cortex-M workspace compilation, Clippy, CMSIS-DSP integration, model/estimator/controller/control-runtime/authority tests, host tools, control synthesis, and release firmware linking.
 
-## Documentation
+## Architecture Documents
 
 - [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
+- [`docs/architecture/control_runtime.md`](docs/architecture/control_runtime.md)
 - [`docs/architecture/plant_model.md`](docs/architecture/plant_model.md)
 - [`docs/architecture/measurement_model.md`](docs/architecture/measurement_model.md)
 - [`docs/architecture/state_estimation_and_control.md`](docs/architecture/state_estimation_and_control.md)
-- [`docs/architecture/body_frame_contract.md`](docs/architecture/body_frame_contract.md)
 - [`docs/architecture/runtime_authority.md`](docs/architecture/runtime_authority.md)
-- [`docs/architecture/calibration_contract.md`](docs/architecture/calibration_contract.md)
 - [`docs/architecture/observation_time_health_replay.md`](docs/architecture/observation_time_health_replay.md)
-- [`docs/hardware/hardware_baseline.md`](docs/hardware/hardware_baseline.md)
 - [`docs/hardware/pin_mapping.md`](docs/hardware/pin_mapping.md)
 - [`docs/commissioning/runtime_profile.md`](docs/commissioning/runtime_profile.md)
-- [`tools/model/README.md`](tools/model/README.md)
-- [`tools/control/README.md`](tools/control/README.md)
-- [`tools/wireless/README.md`](tools/wireless/README.md)
