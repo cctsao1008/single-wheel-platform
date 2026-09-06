@@ -13,6 +13,7 @@ members = [
     "crates/plant-observation",
     "crates/sensor-calibration",
     "crates/frame-transform",
+    "crates/estimator-input",
     "crates/runtime-state",
     "crates/mpu6050",
     "crates/software-i2c",
