@@ -14,27 +14,24 @@ The platform is organized around four architectural domains:
                   └──┬───┘
                      │
                  FIRMWARE
-          control board + actuator hardware
 ```
 
-The arrows express ownership/dependency relationships. Runtime execution is a closed feedback loop, not a top-to-bottom pipeline.
+The arrows express ownership/dependency relationships. Runtime execution is a closed feedback loop, not a top-to-bottom software-layer pipeline.
 
 ## Plant
 
-Plant is the portable physical truth of the robot. It owns physical state and units, plant dynamics, measurement physics, raw observation semantics, and actuator physics.
+Plant is the portable physical truth of the robot. It owns physical state and units, plant dynamics, measurement physics, raw observation semantics, generalized physical input, and actuator physics/model constraints.
 
 ```text
 x_dot = f(x, u, p)
 y     = h(x, u, p)
 ```
 
-The current balance input is physical torque:
+The balance input is physical torque:
 
 ```text
 u = [drive-wheel torque, reaction-wheel torque]^T
 ```
-
-Plant does not know STM32, RP2350, RTIC, GPIO, PWM, PIO, BLE, or actuator electrical polarity.
 
 Current code:
 
@@ -46,60 +43,53 @@ plant/plant-observation
 plant/actuator-model
 ```
 
+Plant does not know STM32, RP2350, RTIC, GPIO, PWM, BLE, display buses, or actuator electrical polarity.
+
 ## Control
 
-Control defines desired behavior from estimated state and reference.
+Control owns desired closed-loop behavior.
 
 ```text
 EstimatedState + Reference
-            |
-            v
-       control law
-            |
-            v
+            ↓
+        control law
+            ↓
     GeneralizedDemand
 ```
-
-The current state-feedback form is:
-
-```text
-u = u_ff - K (x_hat - x_ref)
-```
-
-Control does not own sensors, target hardware, operating-state policy, or output authority.
 
 Current code:
 
 ```text
 control/state-feedback
+control/velocity-loop
 ```
+
+The inner state-feedback path produces physical `GeneralizedDemand`. The outer velocity loop runs at 100 Hz in the current STM32 runtime composition and produces a balance-state reference rather than an actuator command.
+
+Control does not own sensors, runtime state policy, timing/watchdog policy, or physical-output authority.
 
 ## Supervisor
 
-Supervisor owns runtime belief, operating policy, and physical-output authority. It consumes Plant semantics, invokes Control, and is the only semantic source of `AuthorizedActuation`.
+Supervisor owns runtime belief, operating policy, health, causality, and physical-output authority.
 
 ```text
 EstimatorMeasurement
-        |
-        v
+        ↓
 StateEstimator
-        |
-        v
+        ↓
 EstimatedState
-        |
-        +------> Control
-        |           |
-        |       demand
-        |           |
-        v           v
-operating state / timing / limits
-              |
-              v
-       RuntimeAuthority
-              |
-              +-- denied --> no token
-              |
-              +-- allowed -> AuthorizedActuation
+        ↓
+Control
+        ↓
+GeneralizedDemand
+        ↓
+Plant actuator model
+        ↓
+BoundedActuatorCommand
+        ↓
+RuntimeAuthority
+        ├── denied  -> no token
+        └── allowed -> AuthorizedActuation
 ```
 
 Current code:
@@ -108,14 +98,15 @@ Current code:
 supervisor/state-estimator
 supervisor/ekf
 supervisor/runtime-state
+supervisor/runtime-supervisor
 supervisor/control-runtime
 ```
 
-Supervisor has no STM32/RP2350/HAL dependency.
+`runtime-supervisor` owns watchdog, latched faults, and operating-state orchestration. Supervisor has no concrete MCU/HAL dependency.
 
 ## Firmware
 
-Firmware is the physical execution and target-composition domain. Its top-level taxonomy is role-based rather than implementation-generic:
+Firmware is the hardware-realization and target-composition domain.
 
 ```text
 firmware/
@@ -131,72 +122,79 @@ firmware/
 └── targets/
 ```
 
-There is intentionally no generic `devices/` or `drivers/` bucket. A hardware component is classified by its role in the system.
+There is intentionally no generic `devices/` or `drivers/` architectural bucket.
 
 ### Interfaces
 
-`interfaces/` contains target-independent physical-I/O contracts. The high-level actuation contract is:
+`interfaces/` contains target-independent physical-I/O contracts.
 
 ```text
 AuthorizedActuation
-        |
-        v
-   ActuationSink
-```
-
-`ActuationSink` is the only public high-level physical-output contract. It accepts an `AuthorizedActuation` token and supports explicit revocation of stale output.
-
-`ActuatorIo<Frame>` is the lower boundary between actuator-specific electrical/protocol semantics and the MCU mechanism that emits them:
-
-```text
-actuator semantics
-       |
- actuator-specific Frame
-       |
-       v
+        ↓
+ActuationSink
+        ↓
+actuator-specific Frame
+        ↓
 ActuatorIo<Frame>
-       |
-       v
-MCU peripheral backend
+        ↓
+MCU target backend
 ```
 
-This keeps actuator hardware semantics independent of the selected control board.
+`ActuationSink` consumes Supervisor-authorized actuation. `ActuatorIo<Frame>` separates actuator electrical/protocol meaning from the MCU mechanism that emits it.
 
 ### Sensors
 
-`sensors/` owns reusable sensing-device protocol and transfer-function logic. Current sensor implementation:
+Current reusable sensing-device behavior:
 
 ```text
 firmware/sensors/mpu6050
 ```
 
-Sensor mounting orientation, robot body-frame mapping, calibration evidence, and target pin routing are separate concerns.
+Sensor transfer behavior, mounting/frame evidence, calibration evidence, and target pin routing remain distinct concerns.
 
 ### Communications
 
-`communications/` is for external communication modules and endpoint/protocol behavior, for example an ECB02 BLE transport integration when it becomes a reusable component.
+Current code:
 
-Concrete UART/DMA peripheral ownership remains in `targets/`; board wiring remains in `boards/`. Communication modules do not own control policy.
+```text
+firmware/communications/telemetry
+firmware/communications/ecb02
+```
+
+`telemetry` defines the current fixed runtime telemetry packet, version/sequence/timestamp fields, CRC, and a non-blocking latest-value publisher.
+
+`ecb02` provides the reusable ECB02-facing byte-transport boundary. It does not own a UART instance, DMA channel, module configuration commands, or board wiring.
+
+A busy communication transport drops the current telemetry opportunity. There is no queue and no backlog replay into later control periods.
 
 ### UI
 
-`ui/` is for reusable human-interface components such as displays and higher-level button/indicator behavior. An OLED implementation belongs here once its concrete controller identity and reusable behavior are established.
+Current code:
 
-Simple board-local buttons or LEDs may remain board/target-owned until there is reusable UI behavior worth extracting.
+```text
+firmware/ui/status
+firmware/ui/oled
+```
+
+`status` defines the read-only presentation model for runtime/control/health information. `oled` renders that model into a fixed no-heap text frame and exposes a non-blocking display contract.
+
+A busy display drops the current UI opportunity. UI does not mutate Control or acquire actuation authority.
+
+The current reusable UI framework does not assert a concrete OLED controller identity, bus, address, or ONE V2 display pinout.
 
 ### Buses
 
-`buses/` owns reusable bus mechanisms. Current implementation:
+Current implementation:
 
 ```text
 firmware/buses/software-i2c
 ```
 
-A bus does not own the semantic meaning of the device attached to it.
+A bus owns transport mechanics, not the semantic meaning of the attached device.
 
 ### Adapters
 
-`adapters/` converts hardware evidence into portable platform semantics:
+Current semantic adapters:
 
 ```text
 firmware/adapters/sensor-calibration
@@ -204,179 +202,107 @@ firmware/adapters/frame-transform
 firmware/adapters/estimator-input
 ```
 
-Adapters may depend on Plant/Supervisor contracts but not on a concrete target executable.
+Adapters convert hardware evidence into portable Plant/Supervisor semantics.
 
 ### Boards
 
-`boards/` describes a control board's physical capabilities and wiring: MCU identity, pins, timers, connectors, and peripheral routes.
-
-A board must not silently assign robot roles to its connectors.
-
-Current board:
+Current board description:
 
 ```text
 firmware/boards/one-v2
 ```
 
-For example, the board knows `BLDC_1`, `BLDC_2`, pins, and timer channels; it does not define `ReactionWheel` or `DriveWheel` as intrinsic PCB identities.
+A board owns PCB wiring and peripheral capability. It does not silently assign robot roles to connectors.
 
 ### Actuators
 
-`actuators/` owns reusable actuator-interface electrical/protocol semantics independently of the MCU that emits them.
-
-Current actuator adapter:
+Current actuator electrical-semantic adapter:
 
 ```text
 firmware/actuators/one-v2-pwm-dir
 ```
 
-It owns the current ONE V2 PWM/DIR polarity and zero-effort encoding, implements `ActuationSink`, and emits an `ElectricalActuation` frame through `ActuatorIo<ElectricalActuation>`.
-
-A future actuator interface may use a different frame entirely, for example 3-PWM, SPI, CAN, or another protocol, while preserving the same `ActuationSink` boundary.
+It converts `AuthorizedActuation` into ONE V2 `ElectricalActuation` semantics and emits that frame through `ActuatorIo<ElectricalActuation>`.
 
 ### Assemblies
 
-`assemblies/` binds robot roles to the physically installed board/actuator channels. This is where statements such as:
-
-```text
-BLDC_1 / Encoder_1 -> ReactionWheel
-BLDC_2 / Encoder_2 -> DriveWheel
-```
-
-belong.
-
-Current assembly:
+Current installed role/channel binding:
 
 ```text
 firmware/assemblies/one-v2-reference
 ```
 
-Board identity, actuator protocol, and robot role are separate facts.
+```text
+BLDC_1 / Encoder_1 -> ReactionWheel
+BLDC_2 / Encoder_2 -> DriveWheel
+BLDC_3             -> unused
+```
+
+Board identity, actuator protocol, and robot role remain separate facts.
 
 ### Targets
 
-`targets/` owns executable MCU composition, scheduling, interrupts, DMA, concrete HAL resources, and target backends for actuator I/O.
-
-Current target family:
+Current STM32F103 target family:
 
 ```text
 firmware/targets/stm32f103/
 ├── observation
-├── live-shadow
 ├── control-footprint
+├── live-shadow
+├── control-shadow
+├── runtime-shadow
+├── io-shadow
 └── one-v2-pwm-dir
 ```
 
-The `one-v2-pwm-dir` backend owns the exact STM32F103 TIM3/GPIO resources and implements `ActuatorIo<ElectricalActuation>`. It does not own actuator polarity or runtime authority.
+`runtime-shadow` is the canonical non-actuating control integration target. It executes sensing, estimation, 200 Hz inner control, the 100 Hz outer velocity loop, Plant actuator bounding, Supervisor runtime qualification/authority, ONE V2 electrical encoding, and 100 Hz semantic runtime recording. Authorized electrical output terminates in RAM.
 
-A future RP2350 target belongs beside STM32F103:
+`io-shadow` is the non-actuating Communications/UI framework target. A 200 Hz target-owned cadence produces 50 Hz telemetry and 10 Hz OLED opportunities through RAM-only shadow transports. It owns no ECB02 UART or physical OLED bus/pins.
 
-```text
-firmware/targets/rp2350/...
-```
+`one-v2-pwm-dir` is the separate physical motor backend. It owns the concrete STM32F103 TIM3/GPIO resources but is not composed into `runtime-shadow` or `io-shadow`.
 
-and may provide PWM-slice, PIO, SPI, or CAN backends without changing Plant / Supervisor / Control.
-
-## Control-board and actuator-hardware portability
-
-The hardware composition is explicitly two-dimensional:
-
-```text
-                 portable robot domains
-        Plant / Supervisor / Control
-                    |
-                    v
-              ActuationSink
-                    |
-        +-----------+-----------+
-        |                       |
- actuator adapter A      actuator adapter B
-        |                       |
- ActuatorIo<FrameA>      ActuatorIo<FrameB>
-        |                       |
-   +----+-----+             +---+------+
-   |          |             |          |
-STM32F103   RP2350       STM32F103   RP2350
- backend     backend       backend     backend
-```
-
-A new control board should require a new board description/target backend, not a new controller. A new motor-driver or actuator-interface board should require a new actuator adapter, not a new estimator or control law. If the new control board and actuator hardware share an existing `ActuatorIo<Frame>` contract, only target composition changes.
-
-## Dependency rules
-
-```text
-Plant
-    no target-MCU dependency
-    no control-policy dependency
-    no physical-output mutation
-
-Control
-    may depend on Plant semantics
-    no firmware dependency
-    no authority ownership
-
-Supervisor
-    may depend on Plant + Control
-    no target-MCU/HAL dependency
-    is the only semantic source of AuthorizedActuation
-
-Firmware interfaces
-    define target-independent physical-I/O boundaries
-
-Firmware sensors / communications / ui
-    own role-specific reusable hardware behavior
-    do not own robot control policy
-
-Firmware buses
-    own transport mechanisms, not attached-device semantics
-
-Firmware boards
-    own wiring/capability, not robot roles or control policy
-
-Firmware actuators
-    own actuator electrical/protocol semantics, not MCU peripheral ownership
-
-Firmware assemblies
-    own installed role/channel binding
-
-Firmware targets
-    may compose all lower contracts
-    own concrete MCU peripherals and executable scheduling
-```
-
-`infrastructure/` remains horizontal support for numerical kernels, records, and profiling; it is not a fifth robot domain.
+A future RP2350 target may provide different peripheral backends without changing Plant, Control, or Supervisor ownership.
 
 ## Runtime causality
 
 ```text
-        ┌─────────────────────────────────────┐
-        │                                     │
-        ▼                                     │
-   Physical Plant                             │
-        │                                     │
-   observation                                │
-        ▼                                     │
-   Firmware input adapters                    │
-        │                                     │
-        ▼                                     │
-   Supervisor / estimator                     │
-        │                                     │
-   EstimatedState                             │
-        ▼                                     │
-      Control                                 │
-        │                                     │
-   GeneralizedDemand                          │
-        ▼                                     │
-   Supervisor / authority                     │
-        │                                     │
-   AuthorizedActuation                        │
-        ▼                                     │
-   Firmware / ActuationSink                   │
-        │                                     │
-        └──────── physical actuation ─────────┘
+Physical Plant
+      │ observation
+      ▼
+Firmware input path
+      ▼
+Supervisor / Estimator
+      │ EstimatedState
+      ▼
+Control
+      │ GeneralizedDemand
+      ▼
+Plant / Actuator Model
+      │ BoundedActuatorCommand
+      ▼
+Supervisor / RuntimeAuthority
+      │ AuthorizedActuation
+      ▼
+Firmware / actuator adapter
+      │ actuator-specific frame
+      ▼
+Firmware target backend
+      └──────────────► Physical Plant
 ```
 
-One sensor opportunity creates at most one control opportunity; missed periods are not replayed as catch-up control.
+One fresh sensor/control opportunity creates at most one control opportunity. Missed periods are not replayed as catch-up control iterations.
+
+The current non-actuating STM32F103 timing baseline is:
+
+```text
+sensing / estimator / inner balance    200 Hz
+outer velocity loop                    100 Hz
+semantic RuntimeObservation            100 Hz
+telemetry framework                     50 Hz
+OLED UI framework                       10 Hz
+```
+
+Telemetry and UI are lower-priority observations of current runtime state. Their drop-on-busy behavior cannot create a queue that changes control causality.
 
 ## Typed semantic boundaries
 
@@ -387,12 +313,30 @@ RawObservation
     != GeneralizedDemand
     != BoundedActuatorCommand
     != AuthorizedActuation
-    != actuator-specific frame
+    != actuator-specific electrical/protocol frame
     != physical output
 ```
 
-Each transition has one owner. The existence of a target backend or actuator frame never grants actuation authority by itself.
+Each transition has one clear owner. The existence of a target backend, communication endpoint, UI component, or actuator frame never grants actuation authority by itself.
+
+## Physical-output isolation
+
+The non-actuating integration targets stop before physical motor output:
+
+```text
+AuthorizedActuation
+      ↓
+ElectricalActuation
+      ↓
+RAM shadow sink
+      ↓
+STOP
+```
+
+They do not rely on a runtime `PWM_ENABLED` flag; the physical motor backend is absent from their target composition.
+
+The reusable ECB02/OLED frameworks likewise do not claim physical peripheral integration or verification. Concrete UART/display wiring and throughput/timing evidence belong to later target commissioning.
 
 ## Host engineering
 
-Model derivation, parameter identification, exact discretization, observer/controller synthesis, replay, and correlation remain host-side under `tools/`. Reference-backed nominal parameters may bootstrap execution; local measured or identified values supersede lower-confidence assumptions without changing this architecture.
+`infrastructure/` remains horizontal support for numerical kernels, records, and profiling. Model derivation, parameter identification, control synthesis, replay, and physical correlation remain host-side under `tools/`. Reference-backed or synthetic commissioning parameters may bootstrap structural execution, but physical validity requires measured/identified evidence.

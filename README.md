@@ -2,7 +2,7 @@
 
 A Rust `no_std` control platform for a reaction-wheel-stabilized single-wheel robot.
 
-The repository has four architectural domains. They define ownership and dependency, not execution order or directory depth.
+The repository has four architectural domains. They define ownership and dependency, not runtime execution order or directory depth.
 
 ```text
                   CONTROL
@@ -16,128 +16,16 @@ The repository has four architectural domains. They define ownership and depende
                   └──┬───┘
                      │
                  FIRMWARE
-          control board + actuator hardware
 ```
 
 ## Domains
 
-### Plant
+- **Plant** — physical state, units, dynamics, measurement physics, observation semantics, and actuator physics.
+- **Control** — desired closed-loop behavior. The current implementation contains inner state feedback and a 100 Hz outer velocity loop; it produces `GeneralizedDemand` in physical semantics.
+- **Supervisor** — estimation, runtime state, timing health, watchdog/fault handling, actuator qualification, and the only semantic promotion to `AuthorizedActuation`.
+- **Firmware** — sensing-device protocols, communications, UI, buses, actuator electrical semantics, board/assembly binding, MCU target composition, and physical I/O.
 
-`plant/` defines the physical system: state, units, dynamics, measurement physics, observations, and actuator physics. It does not know MCU peripherals, scheduling, or control policy.
-
-### Control
-
-`control/` defines desired closed-loop behavior from estimated state and reference. The current implementation is state feedback (`LQR` / `LQI`) producing `GeneralizedDemand` in physical units.
-
-### Supervisor
-
-`supervisor/` owns runtime belief and authority: state estimation, operating state, timing health, reaction-wheel headroom, actuator constraints, integrator hold policy, and the only semantic promotion to `AuthorizedActuation`.
-
-### Firmware
-
-`firmware/` makes the portable system real on hardware. Its top-level taxonomy is role-based so sensors, communication modules, UI, control boards, and actuator hardware do not collapse into generic `devices/` or `drivers/` buckets.
-
-```text
-firmware/
-├── interfaces/       target-independent physical-I/O contracts
-├── sensors/          sensing-device protocols and transfer functions
-├── communications/   external communication modules/endpoints
-├── ui/               human-interface components
-├── buses/            reusable bus implementations
-├── actuators/        actuator electrical/protocol semantics
-├── adapters/         hardware evidence -> platform semantics
-├── boards/           control-board wiring and peripheral capability
-├── assemblies/       robot roles -> installed hardware channels
-└── targets/          MCU-specific executable composition and HAL ownership
-```
-
-The actuation boundary is:
-
-```text
-Supervisor
-    |
-AuthorizedActuation
-    |
-    v
-ActuationSink
-    |
-    v
-actuator adapter
-    |
- actuator-specific frame
-    v
-ActuatorIo<Frame>
-    |
-    v
-control-board target backend
-    |
- GPIO / PWM / PIO / SPI / CAN
-    |
-    v
-actuator hardware
-```
-
-`ActuationSink` is target-independent. `ActuatorIo<Frame>` separates actuator electrical/protocol meaning from the MCU mechanism that emits it. A future RP2350 target can therefore reuse the same Plant / Supervisor / Control and, where electrically compatible, the same actuator adapter.
-
-Current ONE V2 composition:
-
-```text
-sensor      firmware/sensors/mpu6050
-board       firmware/boards/one-v2
-assembly    firmware/assemblies/one-v2-reference
-actuator    firmware/actuators/one-v2-pwm-dir
-target      firmware/targets/stm32f103
-```
-
-The installed actuator mapping remains:
-
-```text
-BLDC_1 / Encoder_1 -> ReactionWheel
-BLDC_2 / Encoder_2 -> DriveWheel
-BLDC_3             -> unused
-```
-
-Current STM32F103 resources include:
-
-```text
-MPU6050 DATA_RDY / PC13 EXTI13   500 Hz primary control opportunity
-TIM1                              1 kHz timing-health supervisor
-TIM2                              Encoder_1 QEI
-TIM4                              Encoder_2 QEI
-ADC1 / PA5                        battery observation
-USART2 TX / DMA1 CH7              telemetry
-TIM3_CH1 / PA6 + PA4 DIR          DriveWheel output backend
-TIM3_CH4 / PB1 + PB11 DIR         ReactionWheel output backend
-```
-
-The observation and live-shadow targets do not instantiate the motor output backend.
-
-## Runtime loop
-
-```text
-Physical Plant
-     |
- observation
-     v
-Supervisor / Estimator
-     |
- estimated state
-     v
-Control
-     |
- physical demand
-     v
-Supervisor / Authority
-     |
- AuthorizedActuation
-     v
-Firmware / ActuationSink
-     |
- physical actuation
-     +--------------------> Physical Plant
-```
-
-The semantic path remains typed:
+The canonical typed path is:
 
 ```text
 RawObservation
@@ -146,20 +34,113 @@ RawObservation
   -> GeneralizedDemand
   -> BoundedActuatorCommand
   -> AuthorizedActuation
-  -> actuator-specific frame
+  -> actuator-specific electrical/protocol frame
   -> physical output
 ```
 
+## Firmware shape
+
+```text
+firmware/
+├── interfaces/       target-independent physical-I/O contracts
+├── sensors/          sensing-device protocols and transfer functions
+├── communications/   telemetry and external communication endpoints
+├── ui/               reusable status/UI behavior
+├── buses/            reusable bus implementations
+├── actuators/        actuator electrical/protocol semantics
+├── adapters/         hardware evidence -> platform semantics
+├── boards/           control-board wiring and peripheral capability
+├── assemblies/       robot roles -> installed hardware channels
+└── targets/          MCU-specific executable composition and HAL ownership
+```
+
+Current reusable Firmware components include:
+
+```text
+sensing        firmware/sensors/mpu6050
+telemetry      firmware/communications/telemetry
+BLE boundary   firmware/communications/ecb02
+status view    firmware/ui/status
+OLED UI        firmware/ui/oled
+board          firmware/boards/one-v2
+assembly       firmware/assemblies/one-v2-reference
+actuator       firmware/actuators/one-v2-pwm-dir
+```
+
+The installed actuator mapping is:
+
+```text
+BLDC_1 / Encoder_1 -> ReactionWheel
+BLDC_2 / Encoder_2 -> DriveWheel
+BLDC_3             -> unused
+```
+
+## Actuation authority
+
+```text
+BoundedActuatorCommand
+        ↓
+Supervisor / RuntimeAuthority
+        ↓
+AuthorizedActuation
+        ↓
+Firmware / ActuationSink
+        ↓
+actuator-specific frame
+        ↓
+ActuatorIo<Frame>
+        ↓
+physical target backend
+```
+
+The existence of an actuator frame, target backend, PWM peripheral, or GPIO route never grants authority by itself.
+
+## Current non-actuating runtime
+
+The canonical STM32F103 runtime baseline is:
+
+```text
+inner sensing / estimation / balance    200 Hz
+outer velocity loop                     100 Hz
+semantic RuntimeObservation             100 Hz
+telemetry framework                      50 Hz
+OLED UI framework                        10 Hz
+```
+
+`firmware/targets/stm32f103/runtime-shadow` executes the control path through `AuthorizedActuation` and ONE V2 electrical encoding, then terminates in RAM. It owns no motor PWM/DIR backend.
+
+`firmware/targets/stm32f103/io-shadow` materializes the Communications/UI framework at 50 Hz telemetry and 10 Hz OLED update rates using RAM-only shadow transports. Both publishers use latest-value, drop-on-busy semantics: they own no backlog and do not replay missed output opportunities.
+
+The ECB02 and OLED crates therefore define reusable contracts and presentation/transport behavior, but **do not claim verified ONE V2 UART/display wiring, BLE throughput, module configuration, or physical OLED operation**.
+
+## Targets
+
+```text
+firmware/targets/stm32f103/
+├── observation
+├── control-footprint
+├── live-shadow
+├── control-shadow
+├── runtime-shadow
+├── io-shadow
+└── one-v2-pwm-dir
+```
+
+The first six targets are non-actuating integration/profiling targets. `one-v2-pwm-dir` contains the separate physical motor backend; it is not composed into `runtime-shadow` or `io-shadow`.
+
 ## Infrastructure and host engineering
 
-`infrastructure/` contains horizontal numerical and recording mechanisms. Host-side model derivation, system identification, control synthesis, replay, and correlation remain under `tools/`.
+`infrastructure/` contains horizontal numerical and recording mechanisms. Host-side system identification, control synthesis, recording decode/replay, and correlation live under `tools/`.
 
 ## Build
 
 ```bash
 cargo fw-observation
-cargo fw-live-shadow
 cargo fw-control-footprint
+cargo fw-live-shadow
+cargo fw-control-shadow
+cargo fw-runtime-shadow
+cargo fw-io-shadow
 ```
 
 Architecture: [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
