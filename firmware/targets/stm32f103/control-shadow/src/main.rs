@@ -395,7 +395,7 @@ mod app {
             &mut flash.acr,
         );
         let mut afio = ctx.device.AFIO.constrain(&mut rcc);
-        let mut gpioa = ctx.device.GPIOA.split(&mut rcc);
+        let gpioa = ctx.device.GPIOA.split(&mut rcc);
         let mut gpiob = ctx.device.GPIOB.split(&mut rcc);
         let mut gpioc = ctx.device.GPIOC.split(&mut rcc);
 
