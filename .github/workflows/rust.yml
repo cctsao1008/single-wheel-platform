@@ -28,6 +28,8 @@ jobs:
         run: cargo test -p swp-state-estimator --target x86_64-unknown-linux-gnu
       - name: State feedback tests
         run: cargo test -p swp-state-feedback --target x86_64-unknown-linux-gnu
+      - name: Actuator model tests
+        run: cargo test -p swp-actuator-model --target x86_64-unknown-linux-gnu
       - name: Reference assembly mapping tests
         run: cargo test -p swp-reference-assembly --target x86_64-unknown-linux-gnu
       - name: Sensor transfer and calibration tests
@@ -46,6 +48,8 @@ jobs:
         run: python3 -m py_compile tools/wireless/observe.py
       - name: Install control synthesis dependencies
         run: python3 -m pip install -r tools/control/requirements.txt
+      - name: Actuator identification tests
+        run: python3 -m unittest discover -s tools/actuator -p 'test_*.py'
       - name: Control synthesis tests
         run: python3 -m unittest discover -s tools/control -p 'test_*.py'
       - name: Link release firmware

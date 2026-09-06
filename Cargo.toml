@@ -7,6 +7,7 @@ members = [
     "crates/measurement-model",
     "crates/state-estimator",
     "crates/state-feedback",
+    "crates/actuator-model",
     "crates/reference-assembly",
     "crates/plant-observation",
     "crates/sensor-calibration",

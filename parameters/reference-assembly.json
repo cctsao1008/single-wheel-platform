@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "assembly": "reference-assembly",
+  "body": {
+    "mass_kg": {"value": null, "evidence": "unknown"},
+    "com_height_m": {"value": null, "evidence": "unknown"},
+    "inertia_roll_kg_m2": {"value": null, "evidence": "unknown"},
+    "inertia_pitch_kg_m2": {"value": null, "evidence": "unknown"},
+    "inertia_yaw_kg_m2": {"value": null, "evidence": "unknown"}
+  },
+  "drive_wheel": {
+    "radius_m": {"value": null, "evidence": "unknown"},
+    "mass_kg": {"value": null, "evidence": "unknown"},
+    "spin_inertia_kg_m2": {"value": null, "evidence": "unknown"},
+    "encoder_counts_per_revolution": {"value": null, "evidence": "unknown"},
+    "encoder_positive_sign": {"value": null, "evidence": "unknown"}
+  },
+  "reaction_wheel": {
+    "mass_kg": {"value": null, "evidence": "unknown"},
+    "com_height_m": {"value": null, "evidence": "unknown"},
+    "spin_inertia_kg_m2": {"value": null, "evidence": "unknown"},
+    "transverse_inertia_kg_m2": {"value": null, "evidence": "unknown"},
+    "encoder_counts_per_revolution": {"value": null, "evidence": "unknown"},
+    "encoder_positive_sign": {"value": null, "evidence": "unknown"}
+  },
+  "imu": {
+    "forward_x_m": {"value": null, "evidence": "unknown"},
+    "left_y_m": {"value": null, "evidence": "unknown"},
+    "up_z_m": {"value": null, "evidence": "unknown"}
+  },
+  "actuator": {
+    "drive": {
+      "torque_per_effective_command_nm": {"value": null, "evidence": "unknown"},
+      "command_deadzone": {"value": null, "evidence": "unknown"},
+      "viscous_friction_nm_per_rad_s": {"value": null, "evidence": "unknown"},
+      "coulomb_friction_nm": {"value": null, "evidence": "unknown"},
+      "delay_s": {"value": null, "evidence": "unknown"}
+    },
+    "reaction": {
+      "torque_per_effective_command_nm": {"value": null, "evidence": "unknown"},
+      "command_deadzone": {"value": null, "evidence": "unknown"},
+      "viscous_friction_nm_per_rad_s": {"value": null, "evidence": "unknown"},
+      "coulomb_friction_nm": {"value": null, "evidence": "unknown"},
+      "delay_s": {"value": null, "evidence": "unknown"}
+    }
+  }
+}
