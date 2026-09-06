@@ -36,7 +36,9 @@ RuntimeAuthority
 AuthorizedActuation token, if any, is discarded
 ```
 
-The 500 Hz deadline is 2 ms, or 144,000 DWT cycles at 72 MHz.
+The configured 500 Hz deadline is 2 ms, or 144,000 DWT cycles at the configured 72 MHz core clock.
+
+DWT cycle counts are the primary profiler evidence. Microsecond values are derived using the configured 72 MHz clock. The board's HSE frequency has not yet been independently correlated, so cycle counts must not be upgraded into independently measured wall-clock time until that correlation exists.
 
 ## Safety Boundary
 
@@ -46,7 +48,7 @@ The shadow observer also retains zero previous applied input on every step becau
 
 ## Evidence Boundary
 
-The profiler uses real MPU6050 register data, real DATA_RDY timing, and real TIM2/TIM4 counter snapshots.
+The profiler uses real MPU6050 register data, real DATA_RDY interrupt service, and real TIM2/TIM4 counter snapshots.
 
 The following values are intentionally synthetic and exist only to force ordinary numerical branches through the embedded implementation:
 
@@ -97,10 +99,10 @@ Capture the USART2 / ECB02S2 binary stream with the existing wireless capture pa
 python3 tools/recording/decode_control_profile.py capture.bin > control-profile.csv
 ```
 
-The decoder converts cycles to microseconds using the `cpu_hz` carried in each record and calculates instantaneous deadline headroom.
+The decoder keeps cycle counts and also derives microseconds from the configured `cpu_hz` carried in each record. Its deadline-headroom percentage is therefore a configured-clock view; the raw cycle fields remain canonical.
 
 ## Decision Rule
 
 Do not optimize from code size or intuition. Use measured `boot_max_critical_path_cycles`, the distribution of `critical_path_cycles`, and observed overruns.
 
-The reference working rule is to retain substantial margin below the 2 ms deadline for interrupt jitter, software-I2C variation, future actuator service, and fault handling. If the measured full critical path remains comfortably below the deadline, there is no evidence-based reason to replace STM32F103 or convert the control path to fixed point.
+The reference working rule is to retain substantial margin below the configured 144,000-cycle deadline for interrupt jitter, software-I2C variation, future actuator service, and fault handling. If the measured full critical path remains comfortably below the deadline, there is no evidence-based reason to replace STM32F103 or convert the control path to fixed point.
