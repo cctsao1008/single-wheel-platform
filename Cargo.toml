@@ -7,12 +7,15 @@ members = [
     "plant/plant-observation",
     "plant/actuator-model",
     "control/state-feedback",
+    "control/velocity-loop",
     "supervisor/state-estimator",
     "supervisor/ekf",
     "supervisor/runtime-state",
+    "supervisor/runtime-supervisor",
     "supervisor/control-runtime",
     "infrastructure/dsp-kernel",
     "infrastructure/observation-record",
+    "infrastructure/runtime-observation-record",
     "infrastructure/control-profile-record",
     "firmware/interfaces/actuation",
     "firmware/sensors/mpu6050",
@@ -28,6 +31,7 @@ members = [
     "firmware/targets/stm32f103/control-footprint",
     "firmware/targets/stm32f103/live-shadow",
     "firmware/targets/stm32f103/control-shadow",
+    "firmware/targets/stm32f103/runtime-shadow",
 ]
 
 [workspace.package]
