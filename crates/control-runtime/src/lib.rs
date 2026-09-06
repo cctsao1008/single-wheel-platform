@@ -12,9 +12,7 @@ use swp_runtime_state::{
 use swp_state_estimator::{
     EstimateError, EstimatedBalanceState, EstimatorMeasurement, LinearObserver,
 };
-use swp_state_feedback::{
-    ControlError, IntegratorUpdate, LqiController, LqrController,
-};
+use swp_state_feedback::{ControlError, IntegratorUpdate, LqiController, LqrController};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum StateFeedbackController {
@@ -120,7 +118,10 @@ impl ControlRuntime {
     /// ZOH prediction interval and the local direct-feedthrough measurement input.
     /// The new request is not considered applied until `RuntimeAuthority` creates
     /// an `AuthorizedActuation` token.
-    pub fn step(&mut self, input: ControlStepInput) -> Result<ControlStepResult, ControlRuntimeError> {
+    pub fn step(
+        &mut self,
+        input: ControlStepInput,
+    ) -> Result<ControlStepResult, ControlRuntimeError> {
         let estimate = self
             .observer
             .step(
@@ -130,9 +131,9 @@ impl ControlRuntime {
             )
             .map_err(ControlRuntimeError::Estimate)?;
 
-        let reaction_wheel_authority = self.reaction_wheel_limits.classify(
-            AngularRateRadPerSec(estimate.state.reaction_wheel_rate_rad_per_s),
-        );
+        let reaction_wheel_authority = self.reaction_wheel_limits.classify(AngularRateRadPerSec(
+            estimate.state.reaction_wheel_rate_rad_per_s,
+        ));
         let authority_context = AuthorityContext {
             operating_state: input.operating_state,
             timing: input.timing,
@@ -284,9 +285,7 @@ mod tests {
     };
     use swp_runtime_state::AuthorityReasons;
     use swp_state_estimator::{MeasurementMask, ObserverDesign, ObserverGain};
-    use swp_state_feedback::{
-        IntegralBounds, IntegralGain, IntegralProjection, StateFeedbackGain,
-    };
+    use swp_state_feedback::{IntegralBounds, IntegralGain, IntegralProjection, StateFeedbackGain};
 
     fn observer() -> LinearObserver {
         let mut a_d = [[0.0; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT];
@@ -312,13 +311,8 @@ mod tests {
             c,
             d: [[0.0; REFERENCE_INPUT_COUNT]; UPRIGHT_MEASUREMENT_COUNT],
         };
-        let design = ObserverDesign::new(
-            plant,
-            measurement,
-            ObserverGain::new(l).unwrap(),
-            mask,
-        )
-        .unwrap();
+        let design =
+            ObserverDesign::new(plant, measurement, ObserverGain::new(l).unwrap(), mask).unwrap();
         LinearObserver::new(design, ReducedBalanceState::default()).unwrap()
     }
 
@@ -368,7 +362,9 @@ mod tests {
             StateFeedbackGain::new([[0.0; REDUCED_BALANCE_STATE_COUNT]; 2]).unwrap(),
         );
         let mut runtime = runtime(StateFeedbackController::Lqr(controller), 1.0);
-        let result = runtime.step(step_input([0.0; UPRIGHT_MEASUREMENT_COUNT])).unwrap();
+        let result = runtime
+            .step(step_input([0.0; UPRIGHT_MEASUREMENT_COUNT]))
+            .unwrap();
 
         assert_eq!(result.estimate.validity, StateValidity::Valid);
         assert_eq!(result.authority.authority, ActuationAuthority::ClosedLoop);
@@ -391,9 +387,17 @@ mod tests {
 
         let result = runtime.step(input).unwrap();
         assert_eq!(result.authority.authority, ActuationAuthority::Denied);
-        assert!(result.authority.reasons.contains(AuthorityReasons::SENSOR_TIMING));
+        assert!(
+            result
+                .authority
+                .reasons
+                .contains(AuthorityReasons::SENSOR_TIMING)
+        );
         assert!(result.authorized_actuation.is_none());
-        assert_eq!(runtime.previous_applied_input(), ReferencePlantInput::default());
+        assert_eq!(
+            runtime.previous_applied_input(),
+            ReferencePlantInput::default()
+        );
     }
 
     #[test]
@@ -470,7 +474,10 @@ mod tests {
         assert!(runtime.previous_applied_input().drive_torque_nm > 0.0);
 
         assert!(runtime.reset(ReducedBalanceState::default()));
-        assert_eq!(runtime.previous_applied_input(), ReferencePlantInput::default());
+        assert_eq!(
+            runtime.previous_applied_input(),
+            ReferencePlantInput::default()
+        );
         assert_eq!(runtime.observer.estimate().validity, StateValidity::Invalid);
     }
 }
