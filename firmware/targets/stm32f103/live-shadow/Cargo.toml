@@ -17,7 +17,7 @@ swp-board-one-v2 = { path = "../../../boards/one-v2" }
 swp-control-profile-record = { path = "../../../../infrastructure/control-profile-record" }
 swp-frame-transform = { path = "../../../adapters/frame-transform" }
 swp-measurement-model = { path = "../../../../plant/measurement-model" }
-swp-mpu6050 = { path = "../../../devices/mpu6050" }
+swp-mpu6050 = { path = "../../../sensors/mpu6050" }
 swp-plant-model = { path = "../../../../plant/plant-model" }
 swp-plant-observation = { path = "../../../../plant/plant-observation" }
 swp-robot-domain = { path = "../../../../plant/robot-domain" }

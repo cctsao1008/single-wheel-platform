@@ -16,7 +16,7 @@ The repository has four architectural domains. They define ownership and depende
                   └──┬───┘
                      │
                  FIRMWARE
-          control board + driver board
+          control board + actuator hardware
 ```
 
 ## Domains
@@ -35,18 +35,20 @@ The repository has four architectural domains. They define ownership and depende
 
 ### Firmware
 
-`firmware/` makes the portable system real on hardware. It is deliberately split so the control board and motor-driver board can change independently:
+`firmware/` makes the portable system real on hardware. Its top-level taxonomy is role-based so sensors, communication modules, UI, control boards, and actuator hardware do not collapse into generic `devices/` or `drivers/` buckets.
 
 ```text
 firmware/
-├── interfaces/      cross-target physical-I/O contracts
-├── devices/         device protocols and transfer functions
-├── buses/           reusable bus implementations
-├── adapters/        sensor/device data -> platform semantics
-├── boards/          control-board wiring and peripheral capability
-├── drivers/         motor-driver electrical/protocol semantics
-├── assemblies/      robot roles -> installed board/driver channels
-└── targets/         MCU-specific executable composition and HAL ownership
+├── interfaces/       target-independent physical-I/O contracts
+├── sensors/          sensing-device protocols and transfer functions
+├── communications/   external communication modules/endpoints
+├── ui/               human-interface components
+├── buses/            reusable bus implementations
+├── actuators/        actuator electrical/protocol semantics
+├── adapters/         hardware evidence -> platform semantics
+├── boards/           control-board wiring and peripheral capability
+├── assemblies/       robot roles -> installed hardware channels
+└── targets/          MCU-specific executable composition and HAL ownership
 ```
 
 The actuation boundary is:
@@ -60,11 +62,11 @@ AuthorizedActuation
 ActuationSink
     |
     v
-motor-driver adapter
+actuator adapter
     |
- driver-specific frame
+ actuator-specific frame
     v
-DriverIo<Frame>
+ActuatorIo<Frame>
     |
     v
 control-board target backend
@@ -72,18 +74,19 @@ control-board target backend
  GPIO / PWM / PIO / SPI / CAN
     |
     v
-motor-driver board
+actuator hardware
 ```
 
-`ActuationSink` is target-independent. `DriverIo<Frame>` separates a driver's electrical/protocol meaning from the MCU mechanism that emits it. A future RP2350 target can therefore reuse the same Plant / Supervisor / Control and, where electrically compatible, the same driver adapter.
+`ActuationSink` is target-independent. `ActuatorIo<Frame>` separates actuator electrical/protocol meaning from the MCU mechanism that emits it. A future RP2350 target can therefore reuse the same Plant / Supervisor / Control and, where electrically compatible, the same actuator adapter.
 
 Current ONE V2 composition:
 
 ```text
-board      firmware/boards/one-v2
-assembly   firmware/assemblies/one-v2-reference
-driver     firmware/drivers/one-v2-pwm-dir
-target     firmware/targets/stm32f103
+sensor      firmware/sensors/mpu6050
+board       firmware/boards/one-v2
+assembly    firmware/assemblies/one-v2-reference
+actuator    firmware/actuators/one-v2-pwm-dir
+target      firmware/targets/stm32f103
 ```
 
 The installed actuator mapping remains:
@@ -143,7 +146,7 @@ RawObservation
   -> GeneralizedDemand
   -> BoundedActuatorCommand
   -> AuthorizedActuation
-  -> driver-specific frame
+  -> actuator-specific frame
   -> physical output
 ```
 

@@ -16,12 +16,12 @@ RuntimeAuthority
                          ActuationSink
                               |
                               v
-                     motor-driver adapter
+                       actuator adapter
                               |
-                       driver-specific frame
+                     actuator-specific frame
                               |
                               v
-                      DriverIo<Frame>
+                      ActuatorIo<Frame>
                               |
                               v
                     control-board backend
@@ -30,24 +30,24 @@ RuntimeAuthority
                        physical interface
 ```
 
-`ActuationSink` is target-independent. It accepts no raw `NormalizedCommand`. `DriverIo<Frame>` is lower-level and separates motor-driver semantics from the MCU mechanism used to emit the frame.
+`ActuationSink` is target-independent. It accepts no raw `NormalizedCommand`. `ActuatorIo<Frame>` is lower-level and separates actuator electrical/protocol semantics from the MCU mechanism used to emit the frame.
 
 ## Portability boundary
 
-A control-board change and a motor-driver change are independent architectural operations.
+A control-board change and an actuator-hardware change are independent architectural operations.
 
 ```text
 new control board
     -> add/replace board description + target backend
 
-new motor-driver board
-    -> add/replace driver adapter and its Frame
+new motor-driver / actuator-interface board
+    -> add/replace actuator adapter and its Frame
 
 Plant / Supervisor / Control
     -> unchanged unless the physical plant or control problem itself changes
 ```
 
-For a driver that can reuse an existing frame contract, an RP2350 backend may implement the same `DriverIo<Frame>` currently implemented by STM32F103. Drivers using SPI, CAN, 3-PWM, or another interface may define a different frame while retaining the same `ActuationSink` boundary.
+For actuator hardware that can reuse an existing frame contract, an RP2350 backend may implement the same `ActuatorIo<Frame>` currently implemented by STM32F103. Interfaces using SPI, CAN, 3-PWM, or another mechanism may define a different frame while retaining the same `ActuationSink` boundary.
 
 ## Current ONE V2 composition
 
@@ -55,7 +55,7 @@ For a driver that can reuse an existing frame contract, an RP2350 backend may im
 firmware/interfaces/actuation
         |
         v
-firmware/drivers/one-v2-pwm-dir
+firmware/actuators/one-v2-pwm-dir
         |
   ElectricalActuation
         |
@@ -78,7 +78,7 @@ and the control-board wiring by:
 firmware/boards/one-v2
 ```
 
-Board identity, assembly role, driver semantics, and MCU backend are intentionally separate facts.
+Board identity, assembly role, actuator semantics, and MCU backend are intentionally separate facts.
 
 ## Current electrical resources
 
@@ -95,7 +95,7 @@ The BLDC enable nets are hard-wired to 3.3 V on the reviewed board. Runtime auth
 
 The V2.0 executable source configures TIM3 with `ARR=7199`, `PSC=0` at a 72 MHz timer clock, giving a 10 kHz carrier.
 
-The canonical driver adapter represents the physical line encoding as:
+The canonical actuator adapter represents the physical line encoding as:
 
 ```text
 m = abs(normalized_command)
@@ -113,11 +113,11 @@ DIR low
 PWM line continuously high
 ```
 
-The vendor reaction-wheel `+100` timer-count term is not part of the canonical driver encoding. Dead zone, static friction, and minimum effective effort belong in the Plant actuator model and require measured or identified evidence.
+The vendor reaction-wheel `+100` timer-count term is not part of the canonical actuator encoding. Dead zone, static friction, and minimum effective effort belong in the Plant actuator model and require measured or identified evidence.
 
 ## Revocation
 
-`ActuationSink::revoke()` must replace any previously applied command with the concrete driver's configured zero-demand / neutral encoding. It exists so a target runtime does not leave stale physical effort latched when Supervisor withdraws authority or the control opportunity disappears.
+`ActuationSink::revoke()` must replace any previously applied command with the concrete actuator interface's configured zero-demand / neutral encoding. It exists so a target runtime does not leave stale physical effort latched when Supervisor withdraws authority or the control opportunity disappears.
 
 Revocation is not a universal electrical-safe-state claim. For the current ONE V2 interface, the external behavior of zero command and disabled PWM channels still requires commissioning evidence.
 
@@ -132,7 +132,7 @@ PA4       Drive DIR
 PB11      Reaction DIR
 ```
 
-It implements `DriverIo<ElectricalActuation>`. Driver polarity and authority are not duplicated in the target backend.
+It implements `ActuatorIo<ElectricalActuation>`. Actuator polarity and authority are not duplicated in the target backend.
 
 Its constructor requires the exact HAL resource types but does not configure or enable TIM3. PWM enable remains an explicit commissioning action.
 

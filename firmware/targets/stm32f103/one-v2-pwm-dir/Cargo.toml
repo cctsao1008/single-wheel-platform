@@ -11,4 +11,4 @@ path = "src/lib.rs"
 [dependencies]
 stm32f1xx-hal.workspace = true
 swp-actuation-interface = { path = "../../../interfaces/actuation" }
-swp-one-v2-pwm-dir-driver = { path = "../../../drivers/one-v2-pwm-dir" }
+swp-one-v2-pwm-dir = { path = "../../../actuators/one-v2-pwm-dir" }

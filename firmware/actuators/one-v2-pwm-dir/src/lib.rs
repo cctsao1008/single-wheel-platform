@@ -1,12 +1,12 @@
 #![no_std]
 
-use swp_actuation_interface::{ActuationSink, DriverIo};
+use swp_actuation_interface::{ActuationSink, ActuatorIo};
 use swp_runtime_state::AuthorizedActuation;
 
 /// Vendor V2.0 TIM3 carrier frequency.
 ///
 /// This is executable-source evidence from `MiniBalance_PWM_Init(7199, 0)` at a
-/// 72 MHz timer clock. It is a motor-interface fact, not a control-loop rate.
+/// 72 MHz timer clock. It is an actuator-interface fact, not a control-loop rate.
 pub const VENDOR_V2_PWM_FREQUENCY_HZ: u32 = 10_000;
 
 /// Electrical line state requested for one installed motor interface.
@@ -20,7 +20,7 @@ pub struct MotorElectricalCommand {
     pub pwm_line_high_fraction: f32,
 }
 
-/// Driver-specific electrical frame for the two installed balance actuators.
+/// Actuator-specific electrical frame for the two installed balance actuators.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ElectricalActuation {
     pub drive: MotorElectricalCommand,
@@ -74,16 +74,16 @@ fn encode_channel(command: f32) -> MotorElectricalCommand {
     }
 }
 
-/// Portable ONE V2 motor-driver adapter.
+/// Portable ONE V2 PWM/DIR actuator adapter.
 ///
 /// `Io` is supplied by the selected control-board target. STM32F103, RP2350, or
-/// another MCU may implement `DriverIo<ElectricalActuation>` without changing
-/// the driver encoding or the upstream Plant / Supervisor / Control domains.
-pub struct OneV2PwmDirDriver<Io> {
+/// another MCU may implement `ActuatorIo<ElectricalActuation>` without changing
+/// the actuator encoding or the upstream Plant / Supervisor / Control domains.
+pub struct OneV2PwmDirAdapter<Io> {
     io: Io,
 }
 
-impl<Io> OneV2PwmDirDriver<Io> {
+impl<Io> OneV2PwmDirAdapter<Io> {
     pub const fn new(io: Io) -> Self {
         Self { io }
     }
@@ -97,9 +97,9 @@ impl<Io> OneV2PwmDirDriver<Io> {
     }
 }
 
-impl<Io> ActuationSink for OneV2PwmDirDriver<Io>
+impl<Io> ActuationSink for OneV2PwmDirAdapter<Io>
 where
-    Io: DriverIo<ElectricalActuation>,
+    Io: ActuatorIo<ElectricalActuation>,
 {
     type Error = Io::Error;
 
@@ -178,7 +178,7 @@ mod tests {
         last: Option<ElectricalActuation>,
     }
 
-    impl DriverIo<ElectricalActuation> for FakeIo {
+    impl ActuatorIo<ElectricalActuation> for FakeIo {
         type Error = Infallible;
 
         fn write_frame(&mut self, frame: ElectricalActuation) -> Result<(), Self::Error> {
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn actuation_sink_revoke_replaces_the_previous_command_with_zero_effort() {
-        let mut sink = OneV2PwmDirDriver::new(FakeIo::default());
+        let mut sink = OneV2PwmDirAdapter::new(FakeIo::default());
         sink.apply_authorized(authorized(0.4, -0.6)).unwrap();
         assert_ne!(sink.io_mut().last, Some(ElectricalActuation::zero_effort()));
 

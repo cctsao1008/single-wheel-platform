@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 swp-dsp-kernel = { path = "../../../infrastructure/dsp-kernel" }
-swp-mpu6050 = { path = "../../devices/mpu6050" }
+swp-mpu6050 = { path = "../../sensors/mpu6050" }
 swp-plant-observation = { path = "../../../plant/plant-observation" }
 
 [lib]

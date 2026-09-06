@@ -7,8 +7,8 @@ use stm32f1xx_hal::{
     pac,
     timer::{C1, C4, PwmChannel},
 };
-use swp_actuation_interface::DriverIo;
-use swp_one_v2_pwm_dir_driver::{ElectricalActuation, OneV2PwmDirDriver};
+use swp_actuation_interface::ActuatorIo;
+use swp_one_v2_pwm_dir::{ElectricalActuation, OneV2PwmDirAdapter};
 
 /// ONE V2.0 drive-wheel control-board resources:
 ///
@@ -24,11 +24,11 @@ pub type DriveDirection = PA4<Output<PushPull>>;
 pub type ReactionPwm = PwmChannel<pac::TIM3, C4>;
 pub type ReactionDirection = PB11<Output<PushPull>>;
 
-/// Concrete STM32F103 backend for the ONE V2 PWM/DIR driver interface.
+/// Concrete STM32F103 backend for the ONE V2 PWM/DIR actuator interface.
 ///
-/// This type owns only target-specific peripheral mutation. Driver polarity and
-/// zero-effort semantics remain in `swp-one-v2-pwm-dir-driver`, while authority
-/// remains upstream in Supervisor.
+/// This type owns only target-specific peripheral mutation. Actuator polarity and
+/// zero-effort semantics remain in `swp-one-v2-pwm-dir`, while authority remains
+/// upstream in Supervisor.
 pub struct MotorElectricalOutputs {
     drive_pwm: DrivePwm,
     reaction_pwm: ReactionPwm,
@@ -80,19 +80,19 @@ impl MotorElectricalOutputs {
 
     /// Disable both TIM3 output channels.
     ///
-    /// The external driver/motor state while a channel is disabled is a measured
+    /// The external actuator state while a channel is disabled is a measured
     /// hardware property. This method is not a universal motor safe-state claim.
     pub fn disable_channels(&mut self) {
         self.drive_pwm.disable();
         self.reaction_pwm.disable();
     }
 
-    /// Wrap this MCU backend in the portable ONE V2 driver adapter.
+    /// Wrap this MCU backend in the portable ONE V2 actuator adapter.
     ///
     /// The returned type implements `ActuationSink` and therefore accepts only
     /// `AuthorizedActuation` at the physical-actuation boundary.
     pub fn into_actuation_sink(self) -> OneV2ActuationSink {
-        OneV2PwmDirDriver::new(self)
+        OneV2PwmDirAdapter::new(self)
     }
 
     fn apply_electrical(&mut self, electrical: ElectricalActuation) {
@@ -120,7 +120,7 @@ impl MotorElectricalOutputs {
     }
 }
 
-impl DriverIo<ElectricalActuation> for MotorElectricalOutputs {
+impl ActuatorIo<ElectricalActuation> for MotorElectricalOutputs {
     type Error = Infallible;
 
     fn write_frame(&mut self, frame: ElectricalActuation) -> Result<(), Self::Error> {
@@ -129,7 +129,7 @@ impl DriverIo<ElectricalActuation> for MotorElectricalOutputs {
     }
 }
 
-pub type OneV2ActuationSink = OneV2PwmDirDriver<MotorElectricalOutputs>;
+pub type OneV2ActuationSink = OneV2PwmDirAdapter<MotorElectricalOutputs>;
 
 fn duty_from_line_high_fraction(max_duty: u16, fraction: f32) -> u16 {
     let bounded = fraction.clamp(0.0, 1.0);
