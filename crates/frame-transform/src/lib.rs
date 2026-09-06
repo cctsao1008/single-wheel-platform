@@ -186,8 +186,7 @@ mod tests {
     #[test]
     fn mapping_preserves_timing_quality_and_evidence() {
         let rotation =
-            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-                .unwrap();
+            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]).unwrap();
         let frame_evidence = FrameEvidence {
             revision: 3,
             basis: FrameEvidenceBasis::PhysicalTiltTest,
@@ -205,8 +204,7 @@ mod tests {
         let mut input = calibrated();
         input.calibration_evidence = None;
         let rotation =
-            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-                .unwrap();
+            SensorToBodyRotation::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]).unwrap();
 
         assert_eq!(
             map_calibrated_imu_to_body(
