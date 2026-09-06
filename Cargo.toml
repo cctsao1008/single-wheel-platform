@@ -10,6 +10,7 @@ members = [
     "crates/state-feedback",
     "crates/control-runtime",
     "crates/actuator-model",
+    "crates/one-v2-electrical-output",
     "crates/control-profile-record",
     "crates/reference-assembly",
     "crates/plant-observation",
@@ -22,6 +23,7 @@ members = [
     "crates/observation-record",
     "crates/board-one-v2",
     "firmware/stm32f103",
+    "firmware/stm32f103-electrical-output",
     "firmware/control-footprint-stm32f103",
     "firmware/live-shadow-stm32f103",
 ]

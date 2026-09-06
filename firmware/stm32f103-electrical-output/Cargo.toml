@@ -1,0 +1,14 @@
+[package]
+name = "swp-stm32f103-electrical-output"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+stm32f1xx-hal.workspace = true
+swp-one-v2-electrical-output = { path = "../../crates/one-v2-electrical-output" }
+swp-runtime-state = { path = "../../crates/runtime-state" }

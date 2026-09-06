@@ -1,0 +1,13 @@
+[package]
+name = "swp-one-v2-electrical-output"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-runtime-state = { path = "../runtime-state" }
+
+[dev-dependencies]
+swp-actuator-model = { path = "../actuator-model" }
+swp-robot-domain = { path = "../robot-domain" }

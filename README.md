@@ -176,6 +176,8 @@ actuator saturation
 
 A denied step cannot reach physical output. Constrained operation remains explicit and holds LQI integration.
 
+The ONE V2 electrical-output path accepts only `AuthorizedActuation`, maps the installed drive/reaction roles to the vendor-evidenced PWM/DIR line encoding, and binds concrete mutation to TIM3_CH1/TIM3_CH4 plus PA4/PB11. Observation and live-shadow firmware do not instantiate this owner.
+
 ## Reference-backed parameters
 
 Physical provenance is explicit:
@@ -234,7 +236,11 @@ TIM2                              Encoder_1 QEI
 TIM4                              Encoder_2 QEI
 ADC1 / PA5                        battery observation
 USART2 TX / DMA1 CH7              telemetry transport
+TIM3_CH1 / PA6 + PA4 DIR          DriveWheel electrical output sink
+TIM3_CH4 / PB1 + PB11 DIR         ReactionWheel electrical output sink
 ```
+
+The TIM3 sink exists as an authority-gated target component. It is not instantiated by the current observation or live-shadow firmware.
 
 There is no catch-up control. One DATA_RDY event creates at most one physical control opportunity.
 
@@ -250,7 +256,8 @@ live-shadow
     execute the full control computation without motor electrical ownership
 
 closed-loop
-    StateEstimator -> LQR/LQI -> RuntimeAuthority -> ElectricalOutput
+    StateEstimator -> LQR/LQI -> RuntimeAuthority -> AuthorizedActuation
+                   -> ElectricalOutput -> PWM / DIR
 ```
 
 ## Repository structure
@@ -267,6 +274,7 @@ crates/
   state-feedback/
   control-runtime/
   actuator-model/
+  one-v2-electrical-output/
   runtime-state/
   plant-observation/
   sensor-calibration/
@@ -280,6 +288,7 @@ crates/
 
 firmware/
   stm32f103/
+  stm32f103-electrical-output/
   live-shadow-stm32f103/
   control-footprint-stm32f103/
 
@@ -327,3 +336,4 @@ Architecture details:
 - [`docs/architecture/plant_model.md`](docs/architecture/plant_model.md)
 - [`docs/architecture/measurement_model.md`](docs/architecture/measurement_model.md)
 - [`docs/architecture/runtime_authority.md`](docs/architecture/runtime_authority.md)
+- [`docs/architecture/electrical_output.md`](docs/architecture/electrical_output.md)
