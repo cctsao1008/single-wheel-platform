@@ -1,35 +1,45 @@
 # State Estimation and State-Space Control
 
-The upright balance controller operates on estimated physical state, not peripheral values. The real-time path is intentionally split into deterministic execution on the MCU and numerical design on the host.
+The balance runtime is model-based but estimator-agnostic. The architectural boundary is `StateEstimator`; a particular estimator implementation is selected from timing, model fidelity, sensor quality, and measured closed-loop behavior.
 
 ```text
-BodyObservation
-      |
-      v
-State Estimator
-      |
-      v
-EstimatedState
-      |
-      v
-LQR / LQI
-      |
-      v
-GeneralizedDemand
-      |
-      v
-Reference-Assembly Allocation
-      |
-      v
-RuntimeAuthority
-      |
-      v
-ElectricalOutput
+BodyObservation + Encoder Kinematics
+              |
+              v
+     EstimatorMeasurement
+              |
+              v
+        StateEstimator
+        /     |      \
+       /      |       \
+linear   lightweight   EKF
+observer  fusion       estimator
+       \      |       /
+        \     |      /
+              v
+       EstimatedState
+              |
+              v
+          LQR / LQI
+              |
+              v
+      GeneralizedDemand
+              |
+              v
+ Actuator Model / Inverse Model
+              |
+              v
+      RuntimeAuthority
+              |
+              v
+       ElectricalOutput
 ```
+
+The estimator boundary is canonical. EKF is a production-capable implementation, not a requirement for the architecture to exist.
 
 ## State contract
 
-The current reduced stationary-upright state is
+The reduced upright balance state is
 
 ```text
 x = [
@@ -43,237 +53,217 @@ x = [
 ]^T
 ```
 
-with
+where `s` is forward displacement, `theta` is body pitch, `phi` is body roll, and `psi_r_dot` is reaction-wheel rate relative to the body.
+
+The physical plant input is
 
 ```text
-s           forward displacement
-theta       body pitch
-phi         body roll
-psi_r_dot   reaction-wheel rate relative to the body
+u = [tau_drive, tau_reaction]^T
 ```
 
-This is a local balance state, not the full mobile-robot configuration. Yaw and planar nonholonomic mobility remain in the wider plant model.
+PWM, direction GPIO, timer compare values, and motor-driver polarity are downstream electrical semantics.
 
-The physical input vector is
+## Plant and measurement models
+
+The host derives the nonlinear plant
 
 ```text
-u = [
-    tau_drive,
-    tau_reaction,
-]^T
+M(q, p) q_ddot + c(q, q_dot, p) + g(q, p) + d(q_dot, p) = B(p) u
 ```
 
-Controller demand is therefore expressed as physical drive-wheel and reaction-wheel torque. PWM, direction GPIO, motor-driver scaling, saturation, and electrical polarity remain downstream concerns.
+and the local upright model used for synthesis and deterministic embedded execution.
 
-## Discrete plant
-
-The controller and observer use the exact zero-order-hold discrete model at the configured inner-loop period:
+The estimator consumes the physical measurement model
 
 ```text
-x[k+1] = A_d x[k] + B_d u[k]
+y = h(x, u, p)
 ```
 
-For the current 500 Hz target,
+with the current channel order
 
 ```text
-T_s = 0.002 s
+accel_x
+accel_y
+accel_z
+gyro_x
+gyro_y
+gyro_z
+drive_encoder_relative_angle
+reaction_wheel_relative_rate
 ```
 
-The canonical host synthesis computes
+The accelerometer is treated as a specific-force sensor. Translational acceleration, gravity, angular acceleration at the IMU lever arm, rotational terms, and actuator feedthrough belong in the measurement model rather than being silently collapsed into a geometric tilt angle.
+
+## Estimator implementations
+
+### Linear observer
+
+`swp-state-estimator` provides the fixed-rate discrete predictor/corrector
 
 ```text
-A_d = exp(A_c T_s)
-
-B_d = integral_0^T_s exp(A_c tau) B_c d(tau)
+x_pred[k] = A_d x_hat[k-1] + B_d u[k-1]
+innovation[k] = y[k] - y_0 - C x_pred[k] - D u[k]
+x_hat[k] = x_pred[k] + L innovation[k]
 ```
 
-rather than using a forward-Euler approximation.
+It is useful as a deterministic reference implementation, for local-upright verification, and where fixed-gain estimation is sufficient.
 
-No numeric `A_d`, `B_d`, controller gain, or observer gain becomes a reference-platform fact until the required physical parameters and design evidence are supplied.
+### Lightweight fusion
 
-## Measurement equation
+A complementary-class estimator is a valid production option when the physical sensor geometry and measured dynamics show that it provides adequate state quality. This is not treated as a lesser architecture.
 
-The estimator uses the physical local measurement model
+The open Mini-Wheelbot is a useful reference: its deployed estimator combines gyro integration, accelerometer tilt correction, motor encoder state, and complementary fusion while its normal balancing controller uses state feedback. That implementation demonstrates that a reaction-wheel unicycle does not require a full EKF merely to achieve stable balancing.
+
+Reference: <https://github.com/wheelbot/Mini-Wheelbot>
+
+### Extended Kalman filter
+
+`swp-ekf` provides the model-based nonlinear-estimator path. Its production design uses fixed-size `no_std` storage, local nonlinear measurement Jacobians, sequential scalar measurement updates, and covariance propagation suitable for Cortex-M execution.
+
+EKF is preferred when its additional model/noise treatment produces measurable benefit in state error, innovation behavior, disturbance rejection, or operating envelope. It is not selected solely because it is mathematically more elaborate.
+
+## Controller
+
+The balance controller remains state feedback independent of the chosen estimator:
 
 ```text
-y[k] = y_0 + C x[k] + D u[k]
+u[k] = u_ff[k] - K (x_hat[k] - x_ref[k])
 ```
 
-with the fixed channel order
+LQI may add explicit integral coordinates when zero steady-state tracking error is required. Runtime authority controls whether integration may advance so saturation, invalid estimation, momentum limits, or timing faults cannot create hidden wind-up.
+
+The nonlinear plant is not globally decoupled. Around stationary upright, the model may expose a useful local structure:
 
 ```text
-[
-    accel_x,
-    accel_y,
-    accel_z,
-    gyro_x,
-    gyro_y,
-    gyro_z,
-    drive_encoder_relative_angle,
-    reaction_wheel_relative_rate,
-]
+pitch / translation -> drive-wheel torque
+roll / reaction-wheel momentum -> reaction-wheel torque
 ```
 
-The direct-feedthrough matrix `D` is retained. Accelerometer specific force can change during the same sample interval as actuator effort; the estimator must not silently model that effect as state alone.
+That structure may be exploited by controller synthesis when it follows from the model. It is not assumed as a global physical truth.
 
-## Observer execution
+The Mini-Wheelbot provides a useful external example of this distinction: it uses a full nonlinear Wheelbot model for simulation/system identification while its regular balancing controller uses separate four-state roll and pitch LQR feedback paths.
 
-`swp-state-estimator` implements the fixed-rate linear predictor/corrector:
+## Reference-backed nominal parameters
+
+Physical evidence does not gate architectural completeness. A complete executable controller may be instantiated from reference-backed nominal parameters and then improved by local measurements.
+
+Accepted provenance classes are:
 
 ```text
-x_pred[k]
-    = A_d x_hat[k-1] + B_d u[k-1]
-
-innovation[k]
-    = y[k] - y_0 - C x_pred[k] - D u[k]
-
-x_hat[k]
-    = x_pred[k] + L innovation[k]
+measured
+identified
+datasheet
+reference-platform
+literature
+derived
+nominal
+unknown
 ```
 
-`u[k-1]` and `u[k]` are explicit separate inputs because state propagation and direct sensor feedthrough have different time meanings.
+A nominal or literature-derived value must remain labeled as such. It must not be represented as measured or identified.
 
-The estimator also receives an explicit measurement-availability mask and timing-valid flag. A required missing channel, non-finite value, invalid primary timing boundary, or numerical fault invalidates the estimate rather than silently continuing with fabricated state.
-
-The current estimator core does not choose `L` on the MCU. Observer gain synthesis is a host-side numerical-design function.
-
-## LQR
-
-`swp-state-feedback` executes the physical state-feedback law
+The precedence is generally:
 
 ```text
-u[k]
-    = u_ff[k] - K (x_hat[k] - x_ref[k])
+local measured / identified
+        ^
+local geometry / component datasheet
+        ^
+reference platform / literature
+        ^
+engineering nominal estimate
 ```
 
-The controller does not clamp, normalize, or convert torque demand into PWM. An unconstrained demand is useful information: downstream allocation and runtime authority own the distinction between desired and physically allowed actuation.
+New local evidence replaces lower-confidence assumptions without changing the software architecture.
 
-The canonical host synthesis uses the discrete algebraic Riccati equation on `(A_d, B_d)`. Initial diagonal `Q` and `R` weighting is parameterized through explicit physical state and input scales rather than inherited legacy gains.
+## External reference evidence
 
-## LQI
+External platforms are used for method, model structure, initial ranges, and commissioning strategy; their physical gains and parameters are not copied blindly into this robot.
 
-When zero steady-state tracking error is required, two explicit integral coordinates may be added:
+### Mini-Wheelbot
+
+The public Mini-Wheelbot repository provides:
 
 ```text
-z[k+1]
-    = z[k] + T_s C_i (x_hat[k] - x_ref[k])
-
-u[k]
-    = u_ff[k]
-      - K_x (x_hat[k] - x_ref[k])
-      - K_i z[k+1]
+nonlinear rigid-body dynamics
+reaction-wheel and drive-wheel torque inputs
+state-feedback balancing controller
+complementary-class state estimation
+nonlinear system-identification scripts
+measured disturbance datasets
+parameter-bounded fitting workflow
 ```
 
-`C_i` is an explicit projection from the seven-state error into the two integrated quantities. The chosen projection is therefore part of the controller design rather than an implicit historical convention.
+This is high-value executable reference evidence for software structure and system-identification workflow.
 
-The real-time LQI API exposes `Integrate` and `Hold`. Runtime authority can freeze integration when actuation is denied or constrained so anti-windup behavior follows actual authority rather than hidden controller saturation.
+### Wheel-E
 
-## Numeric design boundary
-
-Host-side synthesis is in:
+Wheel-E provides literature evidence for:
 
 ```text
-tools/control/synthesize_upright.py
+full nonlinear Lagrangian modeling
+explicit friction modeling
+linearization and controllability analysis
+Kalman filtering / LQG evaluation
+sensor-placement effects
+STM32 real-time control architecture
 ```
 
-The host owns:
+Its Kalman/LQG results are primarily simulation/design evidence and therefore do not supersede local robot measurements.
+
+## Numerical execution boundary
+
+The host owns expensive design operations:
 
 ```text
-physical-parameter ingestion
+symbolic / nonlinear model derivation
+system identification
 exact zero-order-hold discretization
-LQR / optional LQI Riccati synthesis
-steady-state discrete observer synthesis
+observer / EKF design quantities
+LQR / LQI synthesis
 closed-loop eigenvalue checks
-generated Rust matrix constants
+parameter correlation
 ```
 
-The MCU owns:
+The STM32 owns deterministic real-time execution:
 
 ```text
-fixed-rate prediction
-measurement correction
-state validity
-matrix state feedback
-integrator state
-runtime authority interaction
+measurement projection
+state estimation
+state feedback
+actuator inversion
+runtime authority
+physical electrical output
 ```
 
-This split keeps expensive numerical synthesis off the STM32F103 while preserving a deterministic and inspectable real-time implementation.
+Cortex-M fixed-size dot products and matrix/vector kernels use `swp-dsp-kernel` and CMSIS-DSP. Host scalar code exists only for semantic tests.
 
-## Numerical execution backend
+## Development and correlation loop
 
-The Cortex-M real-time linear-algebra path is CMSIS-DSP. `swp-dsp-kernel` is the single numerical execution boundary used by the measurement model, state estimator, and state-feedback controller.
-
-On `thumbv7m-none-eabi` the backend calls the CMSIS-DSP Cortex-M3 implementation directly. There is no scalar production fallback on the STM32F103.
+The platform follows
 
 ```text
-measurement-model
-    C x
-    D u
-        |
-        v
-state-estimator
-    A_d x_hat
-    B_d u
-    L innovation
-        |
-        v
-state-feedback
-    K x_error
-    C_i x_error
-    K_i z
-        |
-        v
-swp-dsp-kernel
-        |
-        v
-CMSIS-DSP / Cortex-M3
+reference / datasheet / literature
+              |
+              v
+       nominal parameter set
+              |
+              v
+       executable model
+              |
+              v
+ estimator + LQR/LQI + authority
+              |
+              v
+        physical robot
+              |
+              v
+ measurement / system identification
+              |
+              v
+       model correlation
+              |
+              +--------> replace nominal assumptions
 ```
 
-Non-ARM builds provide only a semantic emulator for host unit tests. That emulator is not an alternative embedded implementation and is never compiled into the Cortex-M production target.
-
-This boundary also provides the migration point for CMSIS-DSP fixed-point kernels if the controller representation later moves from `f32` to Q31; estimator and controller semantics do not need to change.
-
-## Current instantiation status
-
-The estimator and state-feedback cores are implemented as reusable `no_std` components, but the reference firmware does not yet instantiate numeric gains or authorize motor output.
-
-The missing physical evidence currently includes, at minimum:
-
-```text
-body / wheel masses and centers of mass
-body roll / pitch inertia
-reaction-wheel spin / transverse inertia
-drive-wheel spin inertia and radius
-IMU lever-arm placement
-encoder scale and sign
-actuator command -> physical torque behavior
-measurement noise / process-residual levels
-```
-
-The synthesis template leaves unsupported quantities as `null` and refuses to generate a numeric design until they are supplied. This is deliberate: unknown parameters are identified, not invented.
-
-## Acceptance criterion
-
-A generated estimator/controller is not accepted because the Riccati equation has a solution. It must pass the physical correlation chain:
-
-```text
-identified parameters
-      |
-      v
-model prediction
-      |
-      v
-measured open-loop correlation
-      |
-      v
-observer residual correlation
-      |
-      v
-bounded closed-loop commissioning
-      |
-      v
-closed-loop residual / authority analysis
-```
-
-Model disagreement is engineering evidence. It is not hidden by retuning gains until the physical cause is understood.
+The goal is not to delay implementation until every parameter is measured. The goal is to keep provenance explicit while continuously improving model correlation and closed-loop performance.
