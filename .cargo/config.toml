@@ -9,3 +9,4 @@ rustflags = [
 
 [alias]
 fw = "build -p swp-stm32f103 --release"
+fw-control-footprint = "build -p swp-control-footprint-stm32f103 --release"
