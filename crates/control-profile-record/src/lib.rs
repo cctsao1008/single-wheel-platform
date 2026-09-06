@@ -221,6 +221,9 @@ mod tests {
 
         let mut corrupt = encoded;
         corrupt[33] ^= 0x80;
-        assert_eq!(ControlProfileSample::decode(&corrupt), Err(DecodeError::Crc));
+        assert_eq!(
+            ControlProfileSample::decode(&corrupt),
+            Err(DecodeError::Crc)
+        );
     }
 }

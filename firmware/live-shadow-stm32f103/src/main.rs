@@ -546,11 +546,8 @@ mod app {
         health_timer.listen(TimerEvent::Update);
 
         let (profile_producer, profile_consumer) = ctx.local.profile_queue.split();
-        let profile_pump = ProfileDmaPump::new(
-            profile_dma,
-            profile_consumer,
-            ctx.local.profile_dma_buffer,
-        );
+        let profile_pump =
+            ProfileDmaPump::new(profile_dma, profile_consumer, ctx.local.profile_dma_buffer);
 
         let initial_cycle = DWT::cycle_count();
         let started_at_us = u64::from(initial_cycle) / CYCLES_PER_US;
@@ -659,8 +656,7 @@ mod app {
             Err(_) => (RawSample::default(), MeasurementQuality::IO_ERROR),
         };
         let imu_read_cycles = elapsed_cycles(imu_read_started_cycle);
-        if timing == SensorTimingHealth::Healthy
-            && imu_quality.contains(MeasurementQuality::IO_OK)
+        if timing == SensorTimingHealth::Healthy && imu_quality.contains(MeasurementQuality::IO_OK)
         {
             imu_quality |= MeasurementQuality::TIMING_VALID;
         }
@@ -694,12 +690,10 @@ mod app {
         );
 
         let critical_path_cycles = elapsed_cycles(critical_started_cycle);
-        *ctx.local.window_max_critical_path_cycles = (*ctx
-            .local
-            .window_max_critical_path_cycles)
-            .max(critical_path_cycles);
-        *ctx.local.boot_max_critical_path_cycles = (*ctx.local.boot_max_critical_path_cycles)
-            .max(critical_path_cycles);
+        *ctx.local.window_max_critical_path_cycles =
+            (*ctx.local.window_max_critical_path_cycles).max(critical_path_cycles);
+        *ctx.local.boot_max_critical_path_cycles =
+            (*ctx.local.boot_max_critical_path_cycles).max(critical_path_cycles);
 
         let mut status = step.status;
         if critical_path_cycles > CONTROL_DEADLINE_CYCLES {
