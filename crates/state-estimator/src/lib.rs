@@ -1,5 +1,6 @@
 #![no_std]
 
+use swp_dsp_kernel::dot_f32;
 use swp_measurement_model::{UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel};
 use swp_plant_model::{
     DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT, ReducedBalanceState,
@@ -162,6 +163,9 @@ impl LinearObserver {
 
     /// Execute one fixed-rate predictor/corrector step.
     ///
+    /// All fixed-size linear algebra in the estimator execution path is routed
+    /// through `swp-dsp-kernel`, whose Cortex-M backend is CMSIS-DSP.
+    ///
     /// `previous_input` is the physical actuator input applied over the interval
     /// from k-1 to k and therefore drives the discrete state prediction.
     /// `measurement_input` is the input associated with y[k] and is kept
@@ -204,8 +208,8 @@ impl LinearObserver {
 
         let mut predicted = [0.0; REDUCED_BALANCE_STATE_COUNT];
         for (row, output) in predicted.iter_mut().enumerate() {
-            *output = dot_state(self.design.plant.a_d[row], self.state)
-                + dot_input(self.design.plant.b_d[row], previous_input);
+            *output = dot_f32(&self.design.plant.a_d[row], &self.state)
+                + dot_f32(&self.design.plant.b_d[row], &previous_input);
         }
 
         let predicted_measurement = self
@@ -221,9 +225,7 @@ impl LinearObserver {
 
         let mut corrected = predicted;
         for (row, output) in corrected.iter_mut().enumerate() {
-            for (column, residual) in innovation.iter().enumerate() {
-                *output += self.design.gain.l[row][column] * residual;
-            }
+            *output += dot_f32(&self.design.gain.l[row], &innovation);
         }
 
         if !corrected.iter().all(|value| value.is_finite()) {
@@ -235,23 +237,6 @@ impl LinearObserver {
         self.validity = StateValidity::Valid;
         Ok(self.estimate())
     }
-}
-
-fn dot_state(
-    row: [f32; REDUCED_BALANCE_STATE_COUNT],
-    vector: [f32; REDUCED_BALANCE_STATE_COUNT],
-) -> f32 {
-    row.iter()
-        .zip(vector.iter())
-        .map(|(lhs, rhs)| lhs * rhs)
-        .sum()
-}
-
-fn dot_input(row: [f32; REFERENCE_INPUT_COUNT], vector: [f32; REFERENCE_INPUT_COUNT]) -> f32 {
-    row.iter()
-        .zip(vector.iter())
-        .map(|(lhs, rhs)| lhs * rhs)
-        .sum()
 }
 
 fn state_from_vector(value: [f32; REDUCED_BALANCE_STATE_COUNT]) -> ReducedBalanceState {
