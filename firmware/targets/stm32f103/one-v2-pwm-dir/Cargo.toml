@@ -1,0 +1,14 @@
+[package]
+name = "swp-stm32f103-one-v2-pwm-dir"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+stm32f1xx-hal.workspace = true
+swp-actuation-interface = { path = "../../../interfaces/actuation" }
+swp-one-v2-pwm-dir-driver = { path = "../../../drivers/one-v2-pwm-dir" }

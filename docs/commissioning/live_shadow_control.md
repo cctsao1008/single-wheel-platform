@@ -42,7 +42,7 @@ DWT cycle counts are the primary profiler evidence. Microsecond values are deriv
 
 ## Safety Boundary
 
-`firmware/live-shadow-stm32f103` deliberately does not configure TIM3 or any motor GPIO. It cannot convert an `AuthorizedActuation` token into electrical output.
+`firmware/targets/stm32f103/live-shadow` deliberately does not configure TIM3 or any motor GPIO. It cannot convert an `AuthorizedActuation` token into physical output.
 
 The shadow observer also retains zero previous applied input on every step because no physical motor effort was applied. A synthetic authority decision must never be mistaken for plant actuation.
 

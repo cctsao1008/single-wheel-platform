@@ -1,0 +1,12 @@
+[package]
+name = "swp-actuation-interface"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-runtime-state = { path = "../../../supervisor/runtime-state" }
+
+[lib]
+path = "src/lib.rs"

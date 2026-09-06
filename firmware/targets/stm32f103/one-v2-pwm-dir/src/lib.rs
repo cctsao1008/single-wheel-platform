@@ -1,37 +1,34 @@
 #![no_std]
 
+use core::convert::Infallible;
+
 use stm32f1xx_hal::{
     gpio::{Output, PushPull, gpioa::PA4, gpiob::PB11},
     pac,
     timer::{C1, C4, PwmChannel},
 };
-use swp_one_v2_electrical_output::{ElectricalActuation, encode_authorized};
-use swp_runtime_state::AuthorizedActuation;
+use swp_actuation_interface::DriverIo;
+use swp_one_v2_pwm_dir_driver::{ElectricalActuation, OneV2PwmDirDriver};
 
-/// ONE V2.0 drive-wheel electrical resources:
+/// ONE V2.0 drive-wheel control-board resources:
 ///
 /// - BLDC_2 PWM: PA6 / TIM3_CH1
 /// - BLDC_2 DIR: PA4
 pub type DrivePwm = PwmChannel<pac::TIM3, C1>;
 pub type DriveDirection = PA4<Output<PushPull>>;
 
-/// ONE V2.0 reaction-wheel electrical resources:
+/// ONE V2.0 reaction-wheel control-board resources:
 ///
 /// - BLDC_1 PWM: PB1 / TIM3_CH4
 /// - BLDC_1 DIR: PB11
 pub type ReactionPwm = PwmChannel<pac::TIM3, C4>;
 pub type ReactionDirection = PB11<Output<PushPull>>;
 
-/// Concrete STM32F103 owner of the two installed motor electrical outputs.
+/// Concrete STM32F103 backend for the ONE V2 PWM/DIR driver interface.
 ///
-/// Construction requires the exact TIM3 channels and direction pins. A caller
-/// cannot substitute unrelated timer/GPIO resources, and physical commands can
-/// only be applied with an `AuthorizedActuation` token.
-///
-/// This type deliberately does not configure TIM3 or GPIO pin modes. The owning
-/// firmware must create PA6/TIM3_CH1 and PB1/TIM3_CH4 using the no-remap TIM3
-/// mapping and configure PA4/PB11 as push-pull outputs. Separating configuration
-/// from mutation keeps board bring-up and runtime authority explicit.
+/// This type owns only target-specific peripheral mutation. Driver polarity and
+/// zero-effort semantics remain in `swp-one-v2-pwm-dir-driver`, while authority
+/// remains upstream in Supervisor.
 pub struct MotorElectricalOutputs {
     drive_pwm: DrivePwm,
     reaction_pwm: ReactionPwm,
@@ -40,6 +37,10 @@ pub struct MotorElectricalOutputs {
 }
 
 impl MotorElectricalOutputs {
+    /// Construct the target backend from the exact ONE V2 TIM3 channels and DIR pins.
+    ///
+    /// The caller still owns TIM3/GPIO configuration. Construction does not enable
+    /// PWM channels and therefore does not itself start physical motor output.
     pub fn new(
         drive_pwm: DrivePwm,
         reaction_pwm: ReactionPwm,
@@ -52,13 +53,13 @@ impl MotorElectricalOutputs {
             drive_direction,
             reaction_direction,
         };
-        outputs.hold_vendor_idle_encoding();
+        outputs.hold_zero_effort_encoding();
         outputs
     }
 
-    /// Set the vendor V2.0 zero-effort line encoding without changing channel
-    /// enable state: DIR low and PWM line continuously high.
-    pub fn hold_vendor_idle_encoding(&mut self) {
+    /// Set the current ONE V2 zero-effort electrical encoding without changing
+    /// channel enable state: DIR low and PWM line continuously high.
+    pub fn hold_zero_effort_encoding(&mut self) {
         self.drive_direction.set_low();
         self.reaction_direction.set_low();
 
@@ -70,30 +71,28 @@ impl MotorElectricalOutputs {
 
     /// Explicitly enable the two installed TIM3 PWM channels.
     ///
-    /// Calling this is a physical commissioning action. The current observation
-    /// and live-shadow firmware do not construct this owner and therefore cannot
-    /// enable these channels.
+    /// This remains a physical commissioning action; no observation or live-shadow
+    /// target constructs this backend.
     pub fn enable_channels(&mut self) {
         self.drive_pwm.enable();
         self.reaction_pwm.enable();
     }
 
-    /// Disable both TIM3 output channels. The final external motor-driver state
-    /// while channels are disabled remains a hardware property and must be
-    /// verified during commissioning; this method is not advertised as a generic
-    /// electrical safe-state primitive.
+    /// Disable both TIM3 output channels.
+    ///
+    /// The external driver/motor state while a channel is disabled is a measured
+    /// hardware property. This method is not a universal motor safe-state claim.
     pub fn disable_channels(&mut self) {
         self.drive_pwm.disable();
         self.reaction_pwm.disable();
     }
 
-    /// Apply one runtime-authorized command to TIM3 PWM and DIR resources.
+    /// Wrap this MCU backend in the portable ONE V2 driver adapter.
     ///
-    /// The semantic-to-electrical conversion is performed by
-    /// `swp-one-v2-electrical-output`; this sink owns only concrete MCU mutation.
-    pub fn apply(&mut self, authorized: AuthorizedActuation) {
-        let electrical = encode_authorized(authorized);
-        self.apply_electrical(electrical);
+    /// The returned type implements `ActuationSink` and therefore accepts only
+    /// `AuthorizedActuation` at the physical-actuation boundary.
+    pub fn into_actuation_sink(self) -> OneV2ActuationSink {
+        OneV2PwmDirDriver::new(self)
     }
 
     fn apply_electrical(&mut self, electrical: ElectricalActuation) {
@@ -120,6 +119,17 @@ impl MotorElectricalOutputs {
         self.reaction_pwm.set_duty(reaction_duty);
     }
 }
+
+impl DriverIo<ElectricalActuation> for MotorElectricalOutputs {
+    type Error = Infallible;
+
+    fn write_frame(&mut self, frame: ElectricalActuation) -> Result<(), Self::Error> {
+        self.apply_electrical(frame);
+        Ok(())
+    }
+}
+
+pub type OneV2ActuationSink = OneV2PwmDirDriver<MotorElectricalOutputs>;
 
 fn duty_from_line_high_fraction(max_duty: u16, fraction: f32) -> u16 {
     let bounded = fraction.clamp(0.0, 1.0);

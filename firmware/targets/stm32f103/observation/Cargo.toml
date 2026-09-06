@@ -1,0 +1,20 @@
+[package]
+name = "swp-stm32f103-observation"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+cortex-m.workspace = true
+heapless.workspace = true
+panic-halt.workspace = true
+rtic.workspace = true
+stm32f1xx-hal.workspace = true
+swp-board-one-v2 = { path = "../../../boards/one-v2" }
+swp-mpu6050 = { path = "../../../devices/mpu6050" }
+swp-observation-record = { path = "../../../../infrastructure/observation-record" }
+swp-plant-observation = { path = "../../../../plant/plant-observation" }
+swp-runtime-state = { path = "../../../../supervisor/runtime-state" }
+swp-software-i2c = { path = "../../../buses/software-i2c" }

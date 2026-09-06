@@ -7,10 +7,10 @@ publish = false
 
 [dependencies]
 swp-frame-transform = { path = "../frame-transform" }
-swp-measurement-model = { path = "../../plant/measurement-model" }
-swp-plant-observation = { path = "../../plant/plant-observation" }
+swp-measurement-model = { path = "../../../plant/measurement-model" }
+swp-plant-observation = { path = "../../../plant/plant-observation" }
 swp-sensor-calibration = { path = "../sensor-calibration" }
-swp-state-estimator = { path = "../../supervisor/state-estimator" }
+swp-state-estimator = { path = "../../../supervisor/state-estimator" }
 
 [lib]
 path = "src/lib.rs"

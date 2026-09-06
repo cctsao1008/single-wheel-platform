@@ -6,8 +6,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-swp-dsp-kernel = { path = "../../infrastructure/dsp-kernel" }
-swp-plant-observation = { path = "../../plant/plant-observation" }
+swp-dsp-kernel = { path = "../../../infrastructure/dsp-kernel" }
+swp-plant-observation = { path = "../../../plant/plant-observation" }
 swp-sensor-calibration = { path = "../sensor-calibration" }
 
 [lib]

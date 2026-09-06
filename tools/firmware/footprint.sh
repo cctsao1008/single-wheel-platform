@@ -6,10 +6,10 @@ if ! command -v arm-none-eabi-size >/dev/null 2>&1; then
   exit 1
 fi
 
-cargo build -p swp-stm32f103 --release --target thumbv7m-none-eabi
+cargo build -p swp-stm32f103-observation --release --target thumbv7m-none-eabi
 cargo build -p swp-control-footprint-stm32f103 --release --target thumbv7m-none-eabi
 
-baseline="target/thumbv7m-none-eabi/release/swp-stm32f103"
+baseline="target/thumbv7m-none-eabi/release/swp-stm32f103-observation"
 control="target/thumbv7m-none-eabi/release/swp-control-footprint-stm32f103"
 
 echo

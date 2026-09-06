@@ -14,55 +14,29 @@ The platform is organized around four architectural domains:
                   └──┬───┘
                      │
                  FIRMWARE
-              STM32 / RP2350
+          control board + driver board
 ```
 
-The arrows express architectural dependency and service relationships. They are not a single runtime data pipeline.
+The arrows express ownership/dependency relationships. Runtime execution is a closed feedback loop, not a top-to-bottom pipeline.
 
 ## Plant
 
-Plant is the portable physical truth of the robot.
-
-It owns:
-
-```text
-physical state and units
-plant dynamics
-measurement physics
-raw observation semantics
-actuator physical model
-```
-
-Canonical equations are:
+Plant is the portable physical truth of the robot. It owns physical state and units, plant dynamics, measurement physics, raw observation semantics, and actuator physics.
 
 ```text
 x_dot = f(x, u, p)
 y     = h(x, u, p)
 ```
 
-The reduced upright state is:
-
-```text
-x = [
-    forward displacement,
-    forward velocity,
-    pitch,
-    pitch rate,
-    roll,
-    roll rate,
-    reaction-wheel relative rate,
-]^T
-```
-
-The physical plant input is:
+The current balance input is physical torque:
 
 ```text
 u = [drive-wheel torque, reaction-wheel torque]^T
 ```
 
-Plant does not know STM32, RP2350, RTIC, GPIO, PWM, BLE, or electrical polarity.
+Plant does not know STM32, RP2350, RTIC, GPIO, PWM, PIO, BLE, or motor-driver polarity.
 
-Current code lives in:
+Current code:
 
 ```text
 plant/robot-domain
@@ -92,9 +66,9 @@ The current state-feedback form is:
 u = u_ff - K (x_hat - x_ref)
 ```
 
-LQI may add explicit integral coordinates. The controller does not decide whether physical output is currently permitted.
+Control does not own sensors, target hardware, operating-state policy, or output authority.
 
-Current code lives in:
+Current code:
 
 ```text
 control/state-feedback
@@ -102,9 +76,7 @@ control/state-feedback
 
 ## Supervisor
 
-Supervisor owns runtime belief, operating policy, and physical-output authority.
-
-It consumes Plant semantics, invokes Control, and decides what may become physically effective.
+Supervisor owns runtime belief, operating policy, and physical-output authority. It consumes Plant semantics, invokes Control, and is the only semantic source of `AuthorizedActuation`.
 
 ```text
 EstimatorMeasurement
@@ -125,28 +97,12 @@ operating state / timing / limits
               v
        RuntimeAuthority
               |
-              +-- denied --> no physical-output token
+              +-- denied --> no token
               |
               +-- allowed -> AuthorizedActuation
 ```
 
-Supervisor owns:
-
-```text
-state estimation
-operating state
-sensor timing health
-state validity
-reaction-wheel headroom
-actuator constraint interpretation
-LQI integrator hold policy
-previous applied input
-one-step control orchestration
-```
-
-The estimator boundary is `StateEstimator`; linear observer and EKF are implementations of that contract.
-
-Current code lives in:
+Current code:
 
 ```text
 supervisor/state-estimator
@@ -155,58 +111,175 @@ supervisor/runtime-state
 supervisor/control-runtime
 ```
 
+Supervisor has no STM32/RP2350/HAL dependency.
+
 ## Firmware
 
-Firmware is the physical execution and target-composition domain.
-
-It owns:
+Firmware is the physical execution and target-composition domain. It is intentionally decomposed along hardware identities that can vary independently:
 
 ```text
-device drivers and transfer functions
-sensor calibration / frame projection adapters
-board and installed-assembly binding
-interrupts and scheduling
-concrete peripheral ownership
-recording / telemetry transport integration
-electrical output
+firmware/
+├── interfaces/
+├── devices/
+├── buses/
+├── adapters/
+├── boards/
+├── drivers/
+├── assemblies/
+└── targets/
 ```
 
-Firmware is allowed to depend on Plant, Supervisor, and Control because it is the composition boundary that creates an executable robot.
+### Interfaces
 
-Current code includes:
+`interfaces/` contains target-independent physical-I/O contracts. The actuation contract is:
 
 ```text
-firmware/mpu6050
-firmware/software-i2c
-firmware/sensor-calibration
-firmware/frame-transform
-firmware/estimator-input
-firmware/board-one-v2
-firmware/reference-assembly
-firmware/one-v2-electrical-output
-firmware/stm32f103-electrical-output
-firmware/stm32f103
-firmware/live-shadow-stm32f103
-firmware/control-footprint-stm32f103
+AuthorizedActuation
+        |
+        v
+   ActuationSink
 ```
 
-A future RP2350 target belongs here and should reuse the same portable Plant / Supervisor / Control contracts.
+`ActuationSink` is the only public high-level physical-output contract. It accepts an `AuthorizedActuation` token and supports explicit revocation of stale output.
 
-## Infrastructure
-
-`infrastructure/` is horizontal support, not a fifth control layer.
+`DriverIo<Frame>` is the lower boundary between a driver-specific frame and the MCU mechanism that emits it:
 
 ```text
-infrastructure/dsp-kernel
-infrastructure/observation-record
-infrastructure/control-profile-record
+driver semantics
+      |
+ driver-specific Frame
+      |
+      v
+DriverIo<Frame>
+      |
+      v
+MCU peripheral backend
 ```
 
-Numerical kernels, record formats, and profiling transport do not own robot behavior.
+This keeps driver-board semantics independent of the selected control board.
+
+### Devices and buses
+
+`devices/` owns IC/device protocols and transfer functions. `buses/` owns reusable transport implementations.
+
+Current examples:
+
+```text
+firmware/devices/mpu6050
+firmware/buses/software-i2c
+```
+
+Neither category owns robot role or control policy.
+
+### Adapters
+
+`adapters/` converts device/board evidence into portable platform semantics:
+
+```text
+firmware/adapters/sensor-calibration
+firmware/adapters/frame-transform
+firmware/adapters/estimator-input
+```
+
+Adapters may depend on Plant/Supervisor contracts but not on a concrete target executable.
+
+### Boards
+
+`boards/` describes a control board's physical capabilities and wiring: MCU identity, pins, timers, connectors, and peripheral routes.
+
+A board must not silently assign robot roles to its connectors.
+
+Current board:
+
+```text
+firmware/boards/one-v2
+```
+
+For example, the board knows `BLDC_1`, `BLDC_2`, pins, and timer channels; it does not define `ReactionWheel` or `DriveWheel` as intrinsic PCB identities.
+
+### Drivers
+
+`drivers/` owns motor-driver electrical/protocol semantics independently of the MCU that emits them.
+
+Current driver adapter:
+
+```text
+firmware/drivers/one-v2-pwm-dir
+```
+
+It owns the current ONE V2 PWM/DIR polarity and zero-effort encoding, implements `ActuationSink`, and emits a driver-specific `ElectricalActuation` frame through `DriverIo<ElectricalActuation>`.
+
+A future driver may use a different frame entirely, for example 3-PWM, SPI, CAN, or another protocol, while preserving the same `ActuationSink` boundary.
+
+### Assemblies
+
+`assemblies/` binds robot roles to the physically installed board/driver channels. This is where statements such as:
+
+```text
+BLDC_1 / Encoder_1 -> ReactionWheel
+BLDC_2 / Encoder_2 -> DriveWheel
+```
+
+belong.
+
+Current assembly:
+
+```text
+firmware/assemblies/one-v2-reference
+```
+
+Board identity, driver protocol, and robot role are separate facts.
+
+### Targets
+
+`targets/` owns executable MCU composition, scheduling, interrupts, DMA, concrete HAL resources, and target backends for driver I/O.
+
+Current target family:
+
+```text
+firmware/targets/stm32f103/
+├── observation
+├── live-shadow
+├── control-footprint
+└── one-v2-pwm-dir
+```
+
+The `one-v2-pwm-dir` backend owns the exact STM32F103 TIM3/GPIO resources and implements `DriverIo<ElectricalActuation>`. It does not own driver polarity or runtime authority.
+
+A future RP2350 target belongs beside STM32F103:
+
+```text
+firmware/targets/rp2350/...
+```
+
+and may provide PWM-slice, PIO, SPI, or CAN backends without changing Plant / Supervisor / Control.
+
+## Control-board and driver-board portability
+
+The hardware composition is explicitly two-dimensional:
+
+```text
+                 portable robot domains
+        Plant / Supervisor / Control
+                    |
+                    v
+              ActuationSink
+                    |
+        +-----------+-----------+
+        |                       |
+   driver adapter A        driver adapter B
+        |                       |
+   DriverIo<FrameA>         DriverIo<FrameB>
+        |                       |
+   +----+-----+             +---+------+
+   |          |             |          |
+STM32F103   RP2350       STM32F103   RP2350
+ backend     backend       backend     backend
+```
+
+A new control board should require a new target backend, not a new controller. A new motor-driver board should require a new driver adapter, not a new estimator or control law. If the new control board and driver share an existing `DriverIo<Frame>` contract, only target composition changes.
 
 ## Dependency rules
-
-The architecture is governed by these rules:
 
 ```text
 Plant
@@ -221,19 +294,29 @@ Control
 
 Supervisor
     may depend on Plant + Control
-    no STM32/RP2350/HAL dependency
+    no target-MCU/HAL dependency
     is the only semantic source of AuthorizedActuation
 
-Firmware
-    may compose Plant + Supervisor + Control
-    owns concrete devices, timers, GPIO, DMA and electrical output
+Firmware interfaces
+    define target-independent physical-I/O boundaries
+
+Firmware boards
+    own wiring/capability, not robot roles or control policy
+
+Firmware drivers
+    own driver electrical/protocol semantics, not MCU peripheral ownership
+
+Firmware assemblies
+    own installed role/channel binding
+
+Firmware targets
+    may compose all lower contracts
+    own concrete MCU peripherals and executable scheduling
 ```
 
-Horizontal infrastructure may be used where appropriate but must not acquire system policy.
+`infrastructure/` remains horizontal support for numerical kernels, records, and profiling; it is not a fifth robot domain.
 
 ## Runtime causality
-
-The physical runtime is a closed loop:
 
 ```text
         ┌─────────────────────────────────────┐
@@ -258,7 +341,7 @@ The physical runtime is a closed loop:
         │                                     │
    AuthorizedActuation                        │
         ▼                                     │
-   Firmware electrical output                 │
+   Firmware / ActuationSink                   │
         │                                     │
         └──────── physical actuation ─────────┘
 ```
@@ -267,8 +350,6 @@ One sensor opportunity creates at most one control opportunity; missed periods a
 
 ## Typed semantic boundaries
 
-The runtime does not collapse physical meaning into anonymous numeric commands:
-
 ```text
 RawObservation
     != EstimatorMeasurement
@@ -276,29 +357,12 @@ RawObservation
     != GeneralizedDemand
     != BoundedActuatorCommand
     != AuthorizedActuation
-    != ElectricalActuation
+    != driver-specific frame
+    != physical output
 ```
 
-Each transition has one owner. In particular, electrical-output code accepts `AuthorizedActuation`, not an arbitrary normalized command.
+Each transition has one owner. The existence of a target backend or driver frame never grants actuation authority by itself.
 
 ## Host engineering
 
-Model derivation, parameter identification, exact discretization, observer/controller synthesis, replay, and correlation remain host-side operations under `tools/`.
-
-```text
-measurement / recorded evidence
-            |
-            v
-identification / correlation
-            |
-            v
-model / estimator / control synthesis
-            |
-            v
-canonical parameters
-            |
-            v
-MCU runtime
-```
-
-Reference-backed nominal parameters may bootstrap the executable system. Local measured or identified values supersede lower-confidence assumptions without changing the four-domain architecture.
+Model derivation, parameter identification, exact discretization, observer/controller synthesis, replay, and correlation remain host-side under `tools/`. Reference-backed nominal parameters may bootstrap execution; local measured or identified values supersede lower-confidence assumptions without changing this architecture.

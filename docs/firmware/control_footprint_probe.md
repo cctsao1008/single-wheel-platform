@@ -1,11 +1,11 @@
 # Control Footprint Probe
 
-The reference STM32F103 firmware remains observation-only until physical evidence is sufficient to instantiate the estimator, controller, encoder transfer, actuator model, and runtime authority with reference-platform values.
+The STM32F103 observation target remains non-actuating until physical evidence is sufficient to instantiate the estimator, controller, encoder transfer, actuator model, and output path with commissioned parameters.
 
-A separate non-production binary exists to measure the linked cost of the complete control path before those physical values are available:
+A separate non-production binary measures the linked cost of the complete control path:
 
 ```text
-firmware/control-footprint-stm32f103
+firmware/targets/stm32f103/control-footprint
 ```
 
 It links and executes:
@@ -29,14 +29,14 @@ Actuator Inverse Model
 RuntimeAuthority
 ```
 
-The probe uses a synthetic numeric fixture only to keep the complete path reachable by the linker. The fixture is not reference-platform evidence, is not used by the production firmware, and must not be copied into `parameters/` or a generated control design.
+The probe uses a synthetic numeric fixture only to keep the complete path reachable by the linker. The fixture is not reference-platform evidence, is not used by the observation firmware, and must not be copied into `parameters/` or a generated control design.
 
-The probe owns no motor peripherals, does not configure TIM3 or motor GPIO, and cannot create an electrical output. It exists only for Cortex-M3 linkage and Flash/RAM footprint measurement through the same CMSIS-DSP numerical backend used by the control crates.
+The probe owns no motor peripherals and cannot create physical output.
 
 Build both images with:
 
 ```bash
-cargo fw
+cargo fw-observation
 cargo fw-control-footprint
 ```
 

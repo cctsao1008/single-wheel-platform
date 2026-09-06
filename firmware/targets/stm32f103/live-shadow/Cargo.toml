@@ -1,0 +1,28 @@
+[package]
+name = "swp-live-shadow-stm32f103"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+cortex-m.workspace = true
+heapless.workspace = true
+panic-halt.workspace = true
+rtic.workspace = true
+stm32f1xx-hal.workspace = true
+swp-actuator-model = { path = "../../../../plant/actuator-model" }
+swp-board-one-v2 = { path = "../../../boards/one-v2" }
+swp-control-profile-record = { path = "../../../../infrastructure/control-profile-record" }
+swp-frame-transform = { path = "../../../adapters/frame-transform" }
+swp-measurement-model = { path = "../../../../plant/measurement-model" }
+swp-mpu6050 = { path = "../../../devices/mpu6050" }
+swp-plant-model = { path = "../../../../plant/plant-model" }
+swp-plant-observation = { path = "../../../../plant/plant-observation" }
+swp-robot-domain = { path = "../../../../plant/robot-domain" }
+swp-runtime-state = { path = "../../../../supervisor/runtime-state" }
+swp-sensor-calibration = { path = "../../../adapters/sensor-calibration" }
+swp-software-i2c = { path = "../../../buses/software-i2c" }
+swp-state-estimator = { path = "../../../../supervisor/state-estimator" }
+swp-state-feedback = { path = "../../../../control/state-feedback" }
