@@ -10,7 +10,8 @@ use swp_runtime_state::{
     OperatingState, ReactionWheelSpeedLimits, RuntimeAuthority, SensorTimingHealth,
 };
 use swp_state_estimator::{
-    EstimateError, EstimatedBalanceState, EstimatorMeasurement, LinearObserver,
+    BalanceStateEstimator, EstimateError, EstimatedBalanceState, EstimatorMeasurement,
+    LinearObserver,
 };
 use swp_state_feedback::{ControlError, IntegratorUpdate, LqiController, LqrController};
 
@@ -58,7 +59,7 @@ pub enum ControlRuntimeError {
 
 /// Executable composition of the model-based balance path.
 ///
-/// This crate owns causality between estimator, controller, inverse actuator
+/// This crate owns causality between StateEstimator, controller, inverse actuator
 /// model, and runtime authority. It does not own sensors, board peripherals, or
 /// generated numeric design data.
 ///
@@ -66,23 +67,29 @@ pub enum ControlRuntimeError {
 /// input for the next observer prediction. A denied step records zero applied
 /// input. One call represents one measurement opportunity; callers must never
 /// execute backlog calls to catch up a missed real-time period.
-pub struct ControlRuntime {
-    observer: LinearObserver,
+pub struct ControlRuntime<E = LinearObserver>
+where
+    E: BalanceStateEstimator,
+{
+    estimator: E,
     controller: StateFeedbackController,
     actuators: ActuatorPairModel,
     reaction_wheel_limits: ReactionWheelSpeedLimits,
     previous_applied_input: ReferencePlantInput,
 }
 
-impl ControlRuntime {
-    pub const fn new(
-        observer: LinearObserver,
+impl<E> ControlRuntime<E>
+where
+    E: BalanceStateEstimator,
+{
+    pub fn new(
+        estimator: E,
         controller: StateFeedbackController,
         actuators: ActuatorPairModel,
         reaction_wheel_limits: ReactionWheelSpeedLimits,
     ) -> Self {
         Self {
-            observer,
+            estimator,
             controller,
             actuators,
             reaction_wheel_limits,
@@ -103,18 +110,18 @@ impl ControlRuntime {
 
     /// Reset all dynamic control state before a new closed-loop capture.
     ///
-    /// The observer is reset to the supplied physical state, the LQI integrator
+    /// The selected estimator is reset to the supplied physical state, the LQI integrator
     /// is cleared, and the remembered plant input returns to zero. Entering a
     /// balancing session must therefore never inherit stale control history.
     pub fn reset(&mut self, initial_state: ReducedBalanceState) -> bool {
         self.previous_applied_input = ReferencePlantInput::default();
         self.controller.reset();
-        self.observer.reset(initial_state)
+        self.estimator.reset(initial_state)
     }
 
     /// Execute exactly one model-based control opportunity.
     ///
-    /// The observer uses the previously authorized physical effort for both the
+    /// The selected estimator uses the previously authorized physical effort for both the
     /// ZOH prediction interval and the local direct-feedthrough measurement input.
     /// The new request is not considered applied until `RuntimeAuthority` creates
     /// an `AuthorizedActuation` token.
@@ -123,7 +130,7 @@ impl ControlRuntime {
         input: ControlStepInput,
     ) -> Result<ControlStepResult, ControlRuntimeError> {
         let estimate = self
-            .observer
+            .estimator
             .step(
                 self.previous_applied_input,
                 self.previous_applied_input,
@@ -479,6 +486,9 @@ mod tests {
             runtime.previous_applied_input(),
             ReferencePlantInput::default()
         );
-        assert_eq!(runtime.observer.estimate().validity, StateValidity::Invalid);
+        assert_eq!(
+            runtime.estimator.estimate().validity,
+            StateValidity::Invalid
+        );
     }
 }

@@ -1,14 +1,20 @@
 # Control Runtime Composition
 
-`swp-control-runtime` is the executable composition boundary between estimation, state feedback, actuator inversion, and physical-output authority.
+`swp-control-runtime` is the executable composition boundary between state estimation, state feedback, actuator inversion, and physical-output authority.
 
-It does not own board peripherals, sensors, generated gains, or host-side synthesis. Its job is to make the causality of one real-time balance opportunity explicit and reusable by both the STM32 firmware and deterministic host replay.
+The runtime is estimator-agnostic:
+
+```rust
+ControlRuntime<E: BalanceStateEstimator>
+```
+
+The default implementation remains `LinearObserver` for compatibility and deterministic reference testing, while `ExtendedKalmanFilter` implements the same estimator contract. A lightweight estimator may use the same boundary when justified by measured performance.
 
 ```text
 EstimatorMeasurement[k]
         |
         v
-LinearObserver
+StateEstimator<E>
   uses applied u[k-1]
         |
         v
@@ -34,123 +40,118 @@ RuntimeAuthority
         +-- authorized --> AuthorizedActuation[k]
                               |
                               v
-                        predicted applied
-                        physical torque u[k]
+                       ElectricalOutput
                               |
-                              +---- stored for estimator[k+1]
+                              v
+                         PWM / DIR
 ```
 
 ## Causality
 
-The observer distinguishes the input that drove the plant over the previous sample interval from the command being computed now. In the reference zero-order-hold composition, the previous physically authorized effort is used for both discrete prediction and the local direct-feedthrough term associated with the current measurement.
+The selected estimator distinguishes the physical effort applied over the previous sample interval from the command being computed now. In the current zero-order-hold composition, the previous authorized plant effort is supplied to prediction and to the current local measurement-feedthrough input.
 
-A new controller request is not considered applied merely because the controller computed it. It becomes plant input only after:
+A controller request is not plant input merely because it was computed. The semantic sequence is:
 
 ```text
 state feedback
+  -> requested torque
   -> actuator inverse model
   -> bounded command
   -> runtime authority
   -> AuthorizedActuation
+  -> electrical output
 ```
 
-If authority is denied, the remembered applied plant input for the next observer prediction is zero.
-
-This preserves the distinction:
+This preserves:
 
 ```text
 requested torque
     != bounded command
-    != authorized command
+    != authorized actuation
+    != electrical output
     != applied plant input
 ```
 
+The remembered estimator input represents the predicted physical effort associated with authorized actuation. If authority denies the step, the remembered input is zero.
+
 ## One call, one physical opportunity
 
-One `ControlRuntime::step()` call corresponds to one measurement opportunity. The caller must not execute backlog steps to make up for missed real-time periods.
+One `ControlRuntime::step()` corresponds to one measurement/control opportunity. Missed real time is never recovered by executing backlog controller calls.
 
 ```text
 late / missed DATA_RDY
-        |
-        v
-timing health / authority
+        -> timing health / authority
+        -> no catch-up execution
 ```
-
-not:
-
-```text
-late / missed DATA_RDY
-        |
-        v
-multiple estimator/controller calls back-to-back
-```
-
-Physical time cannot be caught up by replaying computation.
 
 ## Session reset
 
-`ControlRuntime::reset()` clears dynamic control history before a new balancing session:
+`ControlRuntime::reset()` clears dynamic state before a new balancing session:
 
 ```text
-observer state      <- supplied captured state
-observer validity   <- Invalid until a valid correction
-LQI integral state  <- zero
-previous applied u  <- zero
+selected estimator state <- supplied initial state
+estimator validity        <- implementation-defined invalid until correction
+LQI integral state        <- zero
+previous applied u        <- zero
 ```
 
-This prevents stale estimator, integral, or actuator history from surviving a Standby -> Balancing transition.
+For EKF, reset also restores its configured reset covariance.
 
 ## LQI anti-windup
 
-The LQI path uses authority-aware two-stage evaluation.
-
-First the current integral state is held and the request is evaluated through actuator limits and runtime authority. Only if that request is fully authorized and unconstrained is a candidate integral update computed.
-
-The updated request is then evaluated again. The integral state is committed only if the updated request also remains fully authorized and unconstrained.
+LQI uses authority-aware two-stage evaluation. The current integral state is first held and evaluated through actuator limits and authority. Only a fully authorized, unconstrained request permits a candidate integration step. The candidate is committed only if its resulting request is also fully authorized and unconstrained.
 
 ```text
-current integral
-      |
-      v
 Hold request
-      |
-      +-- denied/constrained --------------------> keep integral
-      |
-      v
+   |-- denied/constrained -> keep integral
+   v
 candidate Integrate request
-      |
-      +-- denied/constrained --------------------> discard candidate
-      |
-      v
-fully authorized and unconstrained
-      |
-      v
-commit new integral state
+   |-- denied/constrained -> discard candidate
+   v
+commit integral
 ```
 
-This prevents even one control sample of integral accumulation at the onset of actuator saturation or reaction-wheel authority limiting.
+## Numeric design and provenance
 
-## Runtime vs numeric design
+The runtime owns no reference-platform gains. Host engineering supplies estimator/controller/actuator design data.
 
-The crate contains no reference-platform numeric gains. Numeric observer and controller design remains host-generated from evidenced physical parameters in `tools/control/`.
-
-The intended deployment path is:
+Reference-backed nominal values may instantiate an initial controller; local measurement and system identification then replace lower-confidence assumptions. Provenance is explicit rather than used as a software-completeness gate.
 
 ```text
-physical evidence
-      |
-      v
-host synthesis
-      |
-      v
-generated ObserverDesign / gains / actuator parameters
-      |
-      v
-ControlRuntime
-      |
-      +--> STM32 live 500 Hz execution
-      |
-      +--> host deterministic replay
+reference / datasheet / literature / nominal
+                    |
+                    v
+              host synthesis
+                    |
+                    v
+ estimator design + controller gains + actuator model
+                    |
+                    v
+            ControlRuntime<E>
+                    |
+          +---------+---------+
+          |                   |
+      live STM32          host replay
+          |
+          v
+measurement / identification / correlation
+          |
+          +------> replace nominal assumptions
 ```
 
-Until those physical inputs are evidenced, the STM32 reference firmware remains observation-only even though the executable control composition itself is implemented and tested.
+## Commissioning modes
+
+Observation and shadow execution are commissioning modes around the same architecture:
+
+```text
+observation
+    acquire and record sensor evidence
+
+live-shadow
+    execute estimator/control/authority with motor electrical ownership absent
+
+closed-loop
+    execute estimator/control/authority and deliver AuthorizedActuation to the electrical-output layer
+```
+
+The platform architecture is therefore complete independently of which commissioning mode is currently selected.

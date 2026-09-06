@@ -6,6 +6,7 @@ members = [
     "crates/dsp-kernel",
     "crates/measurement-model",
     "crates/state-estimator",
+    "crates/ekf",
     "crates/state-feedback",
     "crates/control-runtime",
     "crates/actuator-model",

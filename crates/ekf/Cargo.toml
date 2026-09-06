@@ -1,0 +1,23 @@
+[package]
+name = "swp-ekf"
+version = "0.1.0"
+description = "Production-capable nonlinear estimator implementation for the single-wheel platform"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+libm = "0.2"
+swp-dsp-kernel = { path = "../dsp-kernel" }
+swp-measurement-model = { path = "../measurement-model" }
+swp-plant-model = { path = "../plant-model" }
+swp-robot-domain = { path = "../robot-domain" }
+swp-state-estimator = { path = "../state-estimator" }
+
+[lints.clippy]
+# Fixed-size covariance algebra deliberately names row/column indices; iterator
+# rewrites obscure the matrix equations without changing bounds or allocation.
+needless_range_loop = "allow"
+
+[lib]
+path = "src/lib.rs"
