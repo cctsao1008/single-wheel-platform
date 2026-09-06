@@ -486,6 +486,9 @@ mod tests {
             runtime.previous_applied_input(),
             ReferencePlantInput::default()
         );
-        assert_eq!(runtime.estimator.estimate().validity, StateValidity::Invalid);
+        assert_eq!(
+            runtime.estimator.estimate().validity,
+            StateValidity::Invalid
+        );
     }
 }
