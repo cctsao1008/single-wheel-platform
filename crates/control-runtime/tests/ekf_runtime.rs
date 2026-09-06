@@ -6,6 +6,7 @@ use swp_ekf::{EkfDesign, EkfNoise, ExtendedKalmanFilter};
 use swp_measurement_model::{UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel};
 use swp_plant_model::{
     DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT, ReducedBalanceState,
+    ReferencePlantInput,
 };
 use swp_robot_domain::{GeneralizedDemand, StateValidity};
 use swp_runtime_state::{
@@ -106,4 +107,5 @@ fn ekf_implements_the_same_closed_loop_runtime_contract() {
     assert_eq!(result.estimate.validity, StateValidity::Valid);
     assert_eq!(result.authority.authority, ActuationAuthority::ClosedLoop);
     assert!(result.authorized_actuation.is_some());
+    assert_eq!(result.applied_input, ReferencePlantInput::default());
 }
