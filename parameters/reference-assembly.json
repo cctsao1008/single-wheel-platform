@@ -13,7 +13,8 @@
     "mass_kg": {"value": null, "evidence": "unknown"},
     "spin_inertia_kg_m2": {"value": null, "evidence": "unknown"},
     "encoder_counts_per_revolution": {"value": null, "evidence": "unknown"},
-    "encoder_positive_sign": {"value": null, "evidence": "unknown"}
+    "encoder_positive_sign": {"value": null, "evidence": "unknown"},
+    "encoder_max_abs_delta_counts_per_sample": {"value": null, "evidence": "unknown"}
   },
   "reaction_wheel": {
     "mass_kg": {"value": null, "evidence": "unknown"},
@@ -21,7 +22,8 @@
     "spin_inertia_kg_m2": {"value": null, "evidence": "unknown"},
     "transverse_inertia_kg_m2": {"value": null, "evidence": "unknown"},
     "encoder_counts_per_revolution": {"value": null, "evidence": "unknown"},
-    "encoder_positive_sign": {"value": null, "evidence": "unknown"}
+    "encoder_positive_sign": {"value": null, "evidence": "unknown"},
+    "encoder_max_abs_delta_counts_per_sample": {"value": null, "evidence": "unknown"}
   },
   "imu": {
     "forward_x_m": {"value": null, "evidence": "unknown"},

@@ -1,0 +1,16 @@
+[package]
+name = "swp-estimator-input"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-frame-transform = { path = "../frame-transform" }
+swp-measurement-model = { path = "../measurement-model" }
+swp-plant-observation = { path = "../plant-observation" }
+swp-sensor-calibration = { path = "../sensor-calibration" }
+swp-state-estimator = { path = "../state-estimator" }
+
+[lib]
+path = "src/lib.rs"
