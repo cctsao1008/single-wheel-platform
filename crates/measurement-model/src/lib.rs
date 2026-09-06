@@ -1,5 +1,6 @@
 #![no_std]
 
+use swp_dsp_kernel::dot_f32;
 use swp_plant_model::{
     PlantParameters, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT,
     linearize_stationary_upright,
@@ -64,12 +65,8 @@ impl UprightMeasurementModel {
         let mut measurement = self.nominal;
 
         for (row, output) in measurement.iter_mut().enumerate() {
-            for (column, value) in state.iter().enumerate() {
-                *output += self.c[row][column] * value;
-            }
-            for (column, value) in input.iter().enumerate() {
-                *output += self.d[row][column] * value;
-            }
+            *output += dot_f32(&self.c[row], &state);
+            *output += dot_f32(&self.d[row], &input);
         }
 
         measurement
