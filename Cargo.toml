@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/robot-domain",
     "crates/plant-model",
+    "crates/dsp-kernel",
     "crates/measurement-model",
     "crates/state-estimator",
     "crates/state-feedback",
