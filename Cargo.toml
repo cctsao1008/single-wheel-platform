@@ -19,6 +19,10 @@ members = [
     "infrastructure/control-profile-record",
     "firmware/interfaces/actuation",
     "firmware/sensors/mpu6050",
+    "firmware/communications/telemetry",
+    "firmware/communications/ecb02",
+    "firmware/ui/status",
+    "firmware/ui/oled",
     "firmware/buses/software-i2c",
     "firmware/adapters/sensor-calibration",
     "firmware/adapters/frame-transform",
@@ -32,6 +36,7 @@ members = [
     "firmware/targets/stm32f103/live-shadow",
     "firmware/targets/stm32f103/control-shadow",
     "firmware/targets/stm32f103/runtime-shadow",
+    "firmware/targets/stm32f103/io-shadow",
 ]
 
 [workspace.package]
