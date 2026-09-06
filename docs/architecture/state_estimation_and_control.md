@@ -200,6 +200,40 @@ runtime authority interaction
 
 This split keeps expensive numerical synthesis off the STM32F103 while preserving a deterministic and inspectable real-time implementation.
 
+## Numerical execution backend
+
+The Cortex-M real-time linear-algebra path is CMSIS-DSP. `swp-dsp-kernel` is the single numerical execution boundary used by the measurement model, state estimator, and state-feedback controller.
+
+On `thumbv7m-none-eabi` the backend calls the CMSIS-DSP Cortex-M3 implementation directly. There is no scalar production fallback on the STM32F103.
+
+```text
+measurement-model
+    C x
+    D u
+        |
+        v
+state-estimator
+    A_d x_hat
+    B_d u
+    L innovation
+        |
+        v
+state-feedback
+    K x_error
+    C_i x_error
+    K_i z
+        |
+        v
+swp-dsp-kernel
+        |
+        v
+CMSIS-DSP / Cortex-M3
+```
+
+Non-ARM builds provide only a semantic emulator for host unit tests. That emulator is not an alternative embedded implementation and is never compiled into the Cortex-M production target.
+
+This boundary also provides the migration point for CMSIS-DSP fixed-point kernels if the controller representation later moves from `f32` to Q31; estimator and controller semantics do not need to change.
+
 ## Current instantiation status
 
 The estimator and state-feedback cores are implemented as reusable `no_std` components, but the reference firmware does not yet instantiate numeric gains or authorize motor output.
