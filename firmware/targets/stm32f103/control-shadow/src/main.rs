@@ -254,11 +254,9 @@ mod app {
             // Reference assembly mapping:
             // Encoder_1 = reaction wheel, Encoder_2 = drive wheel.
             let captured_at_us = raw.acquisition_started_us;
-            let (drive_angle, drive_rate, reaction_rate) = self.encoders.observe(
-                raw.encoders[1].count,
-                raw.encoders[0].count,
-                captured_at_us,
-            );
+            let (drive_angle, drive_rate, reaction_rate) =
+                self.encoders
+                    .observe(raw.encoders[1].count, raw.encoders[0].count, captured_at_us);
 
             let mut values = [0.0; UPRIGHT_MEASUREMENT_COUNT];
             // This projection is intentionally synthetic until measured IMU
@@ -298,10 +296,8 @@ mod app {
                 Ok(value) => value,
                 Err(_) => return,
             };
-            SHADOW_DRIVE_DEMAND_MNM.store(
-                scale_milli(demand.drive_wheel_torque.0),
-                Ordering::Relaxed,
-            );
+            SHADOW_DRIVE_DEMAND_MNM
+                .store(scale_milli(demand.drive_wheel_torque.0), Ordering::Relaxed);
             SHADOW_REACTION_DEMAND_MNM.store(
                 scale_milli(demand.reaction_wheel_torque.0),
                 Ordering::Relaxed,
@@ -318,10 +314,8 @@ mod app {
                 Ok(value) => value,
                 Err(_) => return,
             };
-            SHADOW_DRIVE_COMMAND_PERMILLE.store(
-                scale_milli(commands.drive.command.get()),
-                Ordering::Relaxed,
-            );
+            SHADOW_DRIVE_COMMAND_PERMILLE
+                .store(scale_milli(commands.drive.command.get()), Ordering::Relaxed);
             SHADOW_REACTION_COMMAND_PERMILLE.store(
                 scale_milli(commands.reaction.command.get()),
                 Ordering::Relaxed,
