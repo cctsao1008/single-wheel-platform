@@ -11,10 +11,7 @@ pub trait ActuationSink {
     type Error;
 
     /// Apply one command that has already passed runtime authority.
-    fn apply_authorized(
-        &mut self,
-        actuation: AuthorizedActuation,
-    ) -> Result<(), Self::Error>;
+    fn apply_authorized(&mut self, actuation: AuthorizedActuation) -> Result<(), Self::Error>;
 
     /// Revoke any previously applied command by driving the concrete motor interface
     /// to its configured zero-demand / neutral encoding.

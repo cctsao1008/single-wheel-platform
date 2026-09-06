@@ -103,10 +103,7 @@ where
 {
     type Error = Io::Error;
 
-    fn apply_authorized(
-        &mut self,
-        actuation: AuthorizedActuation,
-    ) -> Result<(), Self::Error> {
+    fn apply_authorized(&mut self, actuation: AuthorizedActuation) -> Result<(), Self::Error> {
         self.io.write_frame(encode_authorized(actuation))
     }
 
