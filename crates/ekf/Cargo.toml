@@ -1,6 +1,7 @@
 [package]
 name = "swp-ekf"
 version = "0.1.0"
+description = "Production-capable nonlinear estimator implementation for the single-wheel platform"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
