@@ -121,6 +121,24 @@ pub enum EstimateError {
     NumericalFault,
 }
 
+/// Architecture-facing contract for balance-state estimation.
+///
+/// Control-runtime depends on this semantic boundary rather than on a specific
+/// observer implementation. Estimator implementations own their internal
+/// covariance/gain state while exposing the same physical causality.
+pub trait BalanceStateEstimator {
+    fn reset(&mut self, state: ReducedBalanceState) -> bool;
+
+    fn estimate(&self) -> EstimatedBalanceState;
+
+    fn step(
+        &mut self,
+        previous_input: ReferencePlantInput,
+        measurement_input: ReferencePlantInput,
+        measurement: EstimatorMeasurement,
+    ) -> Result<EstimatedBalanceState, EstimateError>;
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LinearObserver {
     design: ObserverDesign,
@@ -235,6 +253,25 @@ impl LinearObserver {
         self.state = corrected;
         self.validity = StateValidity::Valid;
         Ok(self.estimate())
+    }
+}
+
+impl BalanceStateEstimator for LinearObserver {
+    fn reset(&mut self, state: ReducedBalanceState) -> bool {
+        LinearObserver::reset(self, state)
+    }
+
+    fn estimate(&self) -> EstimatedBalanceState {
+        LinearObserver::estimate(self)
+    }
+
+    fn step(
+        &mut self,
+        previous_input: ReferencePlantInput,
+        measurement_input: ReferencePlantInput,
+        measurement: EstimatorMeasurement,
+    ) -> Result<EstimatedBalanceState, EstimateError> {
+        LinearObserver::step(self, previous_input, measurement_input, measurement)
     }
 }
 

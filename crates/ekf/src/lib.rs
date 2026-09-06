@@ -10,7 +10,8 @@ use swp_plant_model::{
 };
 use swp_robot_domain::StateValidity;
 use swp_state_estimator::{
-    EstimateError, EstimatedBalanceState, EstimatorMeasurement, MeasurementMask,
+    BalanceStateEstimator, EstimateError, EstimatedBalanceState, EstimatorMeasurement,
+    MeasurementMask,
 };
 
 const MIN_INNOVATION_VARIANCE: f32 = 1.0e-12;
@@ -103,6 +104,7 @@ pub struct ExtendedKalmanFilter {
     design: EkfDesign,
     state: [f32; REDUCED_BALANCE_STATE_COUNT],
     covariance: [[f32; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT],
+    reset_variance: [f32; REDUCED_BALANCE_STATE_COUNT],
     validity: StateValidity,
 }
 
@@ -130,6 +132,7 @@ impl ExtendedKalmanFilter {
             design,
             state,
             covariance,
+            reset_variance: initial_variance,
             validity: StateValidity::Invalid,
         })
     }
@@ -167,6 +170,7 @@ impl ExtendedKalmanFilter {
         }
 
         self.state = vector;
+        self.reset_variance = variance;
         self.covariance = [[0.0; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT];
         for index in 0..REDUCED_BALANCE_STATE_COUNT {
             self.covariance[index][index] = variance[index];
@@ -392,6 +396,27 @@ pub fn nonlinear_measurement_jacobian(
     h[ACCEL_Z][2] += -g * libm::cosf(phi) * libm::sinf(theta);
     h[ACCEL_Z][4] += -g * libm::sinf(phi) * libm::cosf(theta);
     h
+}
+
+impl BalanceStateEstimator for ExtendedKalmanFilter {
+    fn reset(&mut self, state: ReducedBalanceState) -> bool {
+        let variance = self.reset_variance;
+        ExtendedKalmanFilter::reset(self, state, variance)
+    }
+
+    fn estimate(&self) -> EstimatedBalanceState {
+        ExtendedKalmanFilter::estimate(self)
+    }
+
+    fn step(
+        &mut self,
+        previous_input: ReferencePlantInput,
+        measurement_input: ReferencePlantInput,
+        measurement: EstimatorMeasurement,
+    ) -> Result<EstimatedBalanceState, EstimateError> {
+        ExtendedKalmanFilter::step(self, previous_input, measurement_input, measurement)
+            .map(|result| result.estimate)
+    }
 }
 
 fn symmetrize(
