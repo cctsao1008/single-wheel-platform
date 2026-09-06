@@ -63,9 +63,7 @@ impl EstimatorInputBuilder {
         let imu_usable = measurement_usable(imu.quality);
         let imu_timing_valid = imu_usable
             && imu.quality.contains(MeasurementQuality::TIMING_VALID)
-            && imu
-                .quality
-                .contains(MeasurementQuality::FRESHNESS_VERIFIED);
+            && imu.quality.contains(MeasurementQuality::FRESHNESS_VERIFIED);
 
         if imu_usable {
             values[ACCEL_X] = imu.acceleration.0[0];
