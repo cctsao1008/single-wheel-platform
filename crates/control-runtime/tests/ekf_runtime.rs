@@ -75,7 +75,8 @@ fn actuators() -> ActuatorPairModel {
 #[test]
 fn ekf_implements_the_same_closed_loop_runtime_contract() {
     let controller = StateFeedbackController::Lqr(LqrController::new(
-        StateFeedbackGain::new([[0.0; REDUCED_BALANCE_STATE_COUNT]; REFERENCE_INPUT_COUNT]).unwrap(),
+        StateFeedbackGain::new([[0.0; REDUCED_BALANCE_STATE_COUNT]; REFERENCE_INPUT_COUNT])
+            .unwrap(),
     ));
     let mut runtime = ControlRuntime::new(
         ekf(),
