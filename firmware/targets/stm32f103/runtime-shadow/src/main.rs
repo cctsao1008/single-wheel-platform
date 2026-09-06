@@ -134,7 +134,12 @@ mod app {
     }
 
     impl SyntheticEncoderTracker {
-        fn observe(&mut self, drive_count: u16, reaction_count: u16, captured_at_us: u64) -> (f32, f32, f32) {
+        fn observe(
+            &mut self,
+            drive_count: u16,
+            reaction_count: u16,
+            captured_at_us: u64,
+        ) -> (f32, f32, f32) {
             if !self.primed {
                 self.primed = true;
                 self.previous_drive_count = drive_count;
@@ -145,7 +150,8 @@ mod app {
             let delta_us = captured_at_us.saturating_sub(self.previous_at_us).max(1);
             let delta_s = delta_us as f32 * 1.0e-6;
             let drive_delta = drive_count.wrapping_sub(self.previous_drive_count) as i16 as i32;
-            let reaction_delta = reaction_count.wrapping_sub(self.previous_reaction_count) as i16 as i32;
+            let reaction_delta =
+                reaction_count.wrapping_sub(self.previous_reaction_count) as i16 as i32;
             self.drive_unwrapped_counts += i64::from(drive_delta);
             let drive_angle = self.drive_unwrapped_counts as f32 * SYNTHETIC_RAD_PER_COUNT;
             let drive_rate = drive_delta as f32 * SYNTHETIC_RAD_PER_COUNT / delta_s;
@@ -157,9 +163,15 @@ mod app {
         }
     }
 
-    struct ShadowElectricalIo { last: ElectricalActuation }
+    struct ShadowElectricalIo {
+        last: ElectricalActuation,
+    }
     impl ShadowElectricalIo {
-        const fn new() -> Self { Self { last: ElectricalActuation::zero_effort() } }
+        const fn new() -> Self {
+            Self {
+                last: ElectricalActuation::zero_effort(),
+            }
+        }
     }
     impl ActuatorIo<ElectricalActuation> for ShadowElectricalIo {
         type Error = Infallible;
@@ -195,7 +207,9 @@ mod app {
     impl ShadowEngine {
         fn new() -> Self {
             let mut a_d = [[0.0; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT];
-            for (index, row) in a_d.iter_mut().enumerate() { row[index] = 1.0; }
+            for (index, row) in a_d.iter_mut().enumerate() {
+                row[index] = 1.0;
+            }
             let plant = DiscreteLinearPlant {
                 sample_period_s: 1.0 / INNER_HZ as f32,
                 a_d,
@@ -220,7 +234,8 @@ mod app {
                 measurement_model,
                 ObserverGain::new(l).expect("synthetic observer gain"),
                 required,
-            ).expect("synthetic observer design");
+            )
+            .expect("synthetic observer design");
             let observer = LinearObserver::new(design, ReducedBalanceState::default())
                 .expect("synthetic observer initial state");
             let mut k = [[0.0; REDUCED_BALANCE_STATE_COUNT]; 2];
@@ -228,20 +243,29 @@ mod app {
             k[0][3] = 0.05;
             k[1][4] = 0.8;
             k[1][5] = 0.05;
-            let controller = LqrController::new(StateFeedbackGain::new(k).expect("synthetic state-feedback gain"));
+            let controller = LqrController::new(
+                StateFeedbackGain::new(k).expect("synthetic state-feedback gain"),
+            );
             let outer_loop = VelocityLoop::new(
-                VelocityLoopParameters::new(0.08, 0.02, 0.12, 1.0).expect("synthetic outer-loop parameters"),
+                VelocityLoopParameters::new(0.08, 0.02, 0.12, 1.0)
+                    .expect("synthetic outer-loop parameters"),
                 1.0 / OUTER_HZ as f32,
-            ).expect("100 Hz outer loop");
+            )
+            .expect("100 Hz outer loop");
             let actuator_parameters = ActuatorParameters::new(10.0, 0.05, 0.001, 0.002, 0.1)
                 .expect("synthetic actuator parameters");
-            let actuator = StaticActuatorModel::new(actuator_parameters).expect("synthetic actuator model");
+            let actuator =
+                StaticActuatorModel::new(actuator_parameters).expect("synthetic actuator model");
             Self {
                 observer,
                 controller,
                 outer_loop,
-                actuators: ActuatorPairModel { drive: actuator, reaction: actuator },
-                reaction_limits: ReactionWheelSpeedLimits::new(1_000.0, 2_000.0).expect("synthetic reaction-wheel limits"),
+                actuators: ActuatorPairModel {
+                    drive: actuator,
+                    reaction: actuator,
+                },
+                reaction_limits: ReactionWheelSpeedLimits::new(1_000.0, 2_000.0)
+                    .expect("synthetic reaction-wheel limits"),
                 encoders: SyntheticEncoderTracker::default(),
                 sink: OneV2PwmDirAdapter::new(ShadowElectricalIo::new()),
                 reference: ReducedBalanceState::default(),
@@ -254,11 +278,9 @@ mod app {
             SHADOW_STAGE.store(1, Ordering::Relaxed);
             let scaled = scale_mpu6050(raw.imu, mpu_config()).ok()?;
             let captured_at_us = raw.acquisition_started_us;
-            let (drive_angle, drive_rate, reaction_rate) = self.encoders.observe(
-                raw.encoders[1].count,
-                raw.encoders[0].count,
-                captured_at_us,
-            );
+            let (drive_angle, drive_rate, reaction_rate) =
+                self.encoders
+                    .observe(raw.encoders[1].count, raw.encoders[0].count, captured_at_us);
             let mut values = [0.0; UPRIGHT_MEASUREMENT_COUNT];
             values[ACCEL_X] = scaled.acceleration.0[0] * 0.01;
             values[ACCEL_Y] = scaled.acceleration.0[1] * 0.01;
@@ -275,32 +297,62 @@ mod app {
             );
             SHADOW_STAGE.store(2, Ordering::Relaxed);
             let zero_input = ReferencePlantInput::default();
-            let estimate = self.observer.step(zero_input, zero_input, measurement).ok()?;
+            let estimate = self
+                .observer
+                .step(zero_input, zero_input, measurement)
+                .ok()?;
             SHADOW_STAGE.store(3, Ordering::Relaxed);
 
             self.outer_divider = self.outer_divider.wrapping_add(1);
             if self.outer_divider >= OUTER_DECIMATION {
                 self.outer_divider = 0;
-                let update = if self.hold_outer_integrator { VelocityIntegratorUpdate::Hold } else { VelocityIntegratorUpdate::Integrate };
-                let output = self.outer_loop.update(
-                    estimate.state,
-                    VelocityTarget { forward_velocity_m_per_s: SHADOW_VELOCITY_TARGET_M_PER_S },
-                    update,
-                ).ok()?;
+                let update = if self.hold_outer_integrator {
+                    VelocityIntegratorUpdate::Hold
+                } else {
+                    VelocityIntegratorUpdate::Integrate
+                };
+                let output = self
+                    .outer_loop
+                    .update(
+                        estimate.state,
+                        VelocityTarget {
+                            forward_velocity_m_per_s: SHADOW_VELOCITY_TARGET_M_PER_S,
+                        },
+                        update,
+                    )
+                    .ok()?;
                 self.reference = output.reference;
-                SHADOW_PITCH_REFERENCE_MRAD.store(scale_milli(self.reference.pitch_rad), Ordering::Relaxed);
+                SHADOW_PITCH_REFERENCE_MRAD
+                    .store(scale_milli(self.reference.pitch_rad), Ordering::Relaxed);
             }
 
-            let demand = self.controller.command(estimate.state, self.reference, GeneralizedDemand::default()).ok()?;
-            SHADOW_DRIVE_DEMAND_MNM.store(scale_milli(demand.drive_wheel_torque.0), Ordering::Relaxed);
-            SHADOW_REACTION_DEMAND_MNM.store(scale_milli(demand.reaction_wheel_torque.0), Ordering::Relaxed);
+            let demand = self
+                .controller
+                .command(estimate.state, self.reference, GeneralizedDemand::default())
+                .ok()?;
+            SHADOW_DRIVE_DEMAND_MNM
+                .store(scale_milli(demand.drive_wheel_torque.0), Ordering::Relaxed);
+            SHADOW_REACTION_DEMAND_MNM.store(
+                scale_milli(demand.reaction_wheel_torque.0),
+                Ordering::Relaxed,
+            );
             SHADOW_STAGE.store(4, Ordering::Relaxed);
-            let commands = self.actuators.command_for_demand(
-                demand,
-                ActuatorPairOperatingPoint { drive_speed_rad_per_s: drive_rate, reaction_speed_rad_per_s: reaction_rate },
-            ).ok()?;
-            SHADOW_DRIVE_COMMAND_PERMILLE.store(scale_milli(commands.drive.command.get()), Ordering::Relaxed);
-            SHADOW_REACTION_COMMAND_PERMILLE.store(scale_milli(commands.reaction.command.get()), Ordering::Relaxed);
+            let commands = self
+                .actuators
+                .command_for_demand(
+                    demand,
+                    ActuatorPairOperatingPoint {
+                        drive_speed_rad_per_s: drive_rate,
+                        reaction_speed_rad_per_s: reaction_rate,
+                    },
+                )
+                .ok()?;
+            SHADOW_DRIVE_COMMAND_PERMILLE
+                .store(scale_milli(commands.drive.command.get()), Ordering::Relaxed);
+            SHADOW_REACTION_COMMAND_PERMILLE.store(
+                scale_milli(commands.reaction.command.get()),
+                Ordering::Relaxed,
+            );
             SHADOW_STAGE.store(5, Ordering::Relaxed);
             let reaction_wheel_authority = self.reaction_limits.classify(AngularRateRadPerSec(
                 estimate.state.reaction_wheel_rate_rad_per_s,
@@ -412,15 +464,22 @@ mod app {
         dwt.enable_cycle_counter();
         let mut flash = ctx.device.FLASH.constrain();
         let mut rcc = ctx.device.RCC.freeze(
-            rcc::Config::hse(8.MHz()).sysclk(72.MHz()).pclk1(36.MHz()).pclk2(72.MHz()),
+            rcc::Config::hse(8.MHz())
+                .sysclk(72.MHz())
+                .pclk1(36.MHz())
+                .pclk2(72.MHz()),
             &mut flash.acr,
         );
         let mut afio = ctx.device.AFIO.constrain(&mut rcc);
         let gpioa = ctx.device.GPIOA.split(&mut rcc);
         let mut gpiob = ctx.device.GPIOB.split(&mut rcc);
         let mut gpioc = ctx.device.GPIOC.split(&mut rcc);
-        let sda = gpiob.pb8.into_open_drain_output_with_state(&mut gpiob.crh, PinState::High);
-        let scl = gpiob.pb9.into_open_drain_output_with_state(&mut gpiob.crh, PinState::High);
+        let sda = gpiob
+            .pb8
+            .into_open_drain_output_with_state(&mut gpiob.crh, PinState::High);
+        let scl = gpiob
+            .pb9
+            .into_open_drain_output_with_state(&mut gpiob.crh, PinState::High);
         let delay = ctx.core.SYST.delay(&rcc.clocks);
         let mut bus = SoftwareI2c::new(sda, scl, delay, I2C_HALF_PERIOD_NS, 100);
         let bus_ready = bus.recover_bus().is_ok();
@@ -434,15 +493,19 @@ mod app {
             imu_int.clear_interrupt_pending_bit();
             imu_int.enable_interrupt(&mut ctx.device.EXTI);
         }
-        let encoder_1 = Timer::new(ctx.device.TIM2, &mut rcc).qei((gpioa.pa0, gpioa.pa1), QeiOptions::default());
-        let encoder_2 = Timer::new(ctx.device.TIM4, &mut rcc).qei((gpiob.pb6, gpiob.pb7), QeiOptions::default());
+        let encoder_1 = Timer::new(ctx.device.TIM2, &mut rcc)
+            .qei((gpioa.pa0, gpioa.pa1), QeiOptions::default());
+        let encoder_2 = Timer::new(ctx.device.TIM4, &mut rcc)
+            .qei((gpiob.pb6, gpiob.pb7), QeiOptions::default());
         let mut health_timer = ctx.device.TIM1.counter_ms(&mut rcc);
         health_timer.start(HEALTH_PERIOD_MS.millis()).unwrap();
         health_timer.listen(TimerEvent::Update);
         let initial_cycle = DWT::cycle_count();
         let started_at_us = u64::from(initial_cycle) / CYCLES_PER_US;
-        let timing_limits = SensorTimingLimits::new(EXPECTED_PERIOD_US, LATE_AFTER_US, TIMEOUT_AFTER_US).unwrap();
-        let control_watchdog = ControlWatchdog::new(CONTROL_WATCHDOG_TIMEOUT_US, started_at_us).unwrap();
+        let timing_limits =
+            SensorTimingLimits::new(EXPECTED_PERIOD_US, LATE_AFTER_US, TIMEOUT_AFTER_US).unwrap();
+        let control_watchdog =
+            ControlWatchdog::new(CONTROL_WATCHDOG_TIMEOUT_US, started_at_us).unwrap();
         let mut runtime_supervisor = RuntimeSupervisor::new();
         let _ = runtime_supervisor.boot_complete();
         if imu_configured {
@@ -479,7 +542,9 @@ mod app {
 
     #[idle]
     fn idle(_: idle::Context) -> ! {
-        loop { cortex_m::asm::wfi(); }
+        loop {
+            cortex_m::asm::wfi();
+        }
     }
 
     #[task(
@@ -490,9 +555,16 @@ mod app {
     )]
     fn timing_health(mut ctx: timing_health::Context) {
         ctx.local.health_timer.clear_interrupt(TimerEvent::Update);
-        let now_us = capture_timestamp_us(ctx.local.health_last_cycle, ctx.local.health_cycle_epoch);
-        let timing = ctx.shared.imu_timing_monitor.lock(|monitor| monitor.poll(now_us));
-        let watchdog = ctx.shared.control_watchdog.lock(|watchdog| watchdog.poll(now_us));
+        let now_us =
+            capture_timestamp_us(ctx.local.health_last_cycle, ctx.local.health_cycle_epoch);
+        let timing = ctx
+            .shared
+            .imu_timing_monitor
+            .lock(|monitor| monitor.poll(now_us));
+        let watchdog = ctx
+            .shared
+            .control_watchdog
+            .lock(|watchdog| watchdog.poll(now_us));
         ctx.shared.runtime_supervisor.lock(|runtime| {
             runtime.observe_independent_health(timing, watchdog);
             publish_runtime(*runtime);
@@ -509,27 +581,55 @@ mod app {
     )]
     fn imu_data_ready(mut ctx: imu_data_ready::Context) {
         let critical_started = DWT::cycle_count();
-        let acquisition_started_us = capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
+        let acquisition_started_us =
+            capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
         ctx.local.imu_int.clear_interrupt_pending_bit();
-        let timing = ctx.shared.imu_timing_monitor.lock(|monitor| monitor.on_event(acquisition_started_us));
+        let timing = ctx
+            .shared
+            .imu_timing_monitor
+            .lock(|monitor| monitor.on_event(acquisition_started_us));
         SHADOW_TIMING.store(timing_code(timing), Ordering::Relaxed);
-        let read_started_at_us = TimestampEvidence::Known(capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch));
+        let read_started_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
+        ));
         let (sample, mut imu_quality) = match ctx.local.imu.read_raw() {
-            Ok(value) => (value, MeasurementQuality::AVAILABLE | MeasurementQuality::IO_OK | MeasurementQuality::FRESHNESS_VERIFIED),
+            Ok(value) => (
+                value,
+                MeasurementQuality::AVAILABLE
+                    | MeasurementQuality::IO_OK
+                    | MeasurementQuality::FRESHNESS_VERIFIED,
+            ),
             Err(_) => (RawSample::default(), MeasurementQuality::IO_ERROR),
         };
-        if timing == SensorTimingHealth::Healthy && imu_quality.contains(MeasurementQuality::IO_OK) {
+        if timing == SensorTimingHealth::Healthy && imu_quality.contains(MeasurementQuality::IO_OK)
+        {
             imu_quality |= MeasurementQuality::TIMING_VALID;
         }
-        let read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch));
-        let encoder_quality = MeasurementQuality::AVAILABLE | MeasurementQuality::IO_OK | MeasurementQuality::TIMING_VALID;
+        let read_completed_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
+        ));
+        let encoder_quality = MeasurementQuality::AVAILABLE
+            | MeasurementQuality::IO_OK
+            | MeasurementQuality::TIMING_VALID;
         let encoder_1_count = ctx.local.encoder_1.count();
-        let encoder_1_at_us = TimestampEvidence::Known(capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch));
+        let encoder_1_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
+        ));
         let encoder_2_count = ctx.local.encoder_2.count();
-        let encoder_2_at_us = TimestampEvidence::Known(capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch));
+        let encoder_2_at_us = TimestampEvidence::Known(capture_timestamp_us(
+            ctx.local.imu_last_cycle,
+            ctx.local.imu_cycle_epoch,
+        ));
         let mut acquisition_status = AcquisitionStatus::NONE;
-        if *ctx.local.bus_ready { acquisition_status |= AcquisitionStatus::BUS_READY; }
-        if *ctx.local.imu_present { acquisition_status |= AcquisitionStatus::IMU_PRESENT; }
+        if *ctx.local.bus_ready {
+            acquisition_status |= AcquisitionStatus::BUS_READY;
+        }
+        if *ctx.local.imu_present {
+            acquisition_status |= AcquisitionStatus::IMU_PRESENT;
+        }
         if *ctx.local.imu_configured {
             acquisition_status |= AcquisitionStatus::IMU_CONFIGURED;
             acquisition_status |= AcquisitionStatus::IMU_DATA_READY_IRQ_ENABLED;
@@ -541,7 +641,8 @@ mod app {
             SensorTimingHealth::Timeout => AcquisitionStatus::IMU_TIMING_TIMEOUT,
             SensorTimingHealth::Startup => AcquisitionStatus::NONE,
         };
-        let acquisition_completed_us = capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
+        let acquisition_completed_us =
+            capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
         let raw = RawObservation {
             sample_index: *ctx.local.sample_index,
             acquisition_started_us,
@@ -556,8 +657,16 @@ mod app {
                 quality: imu_quality,
             },
             encoders: [
-                RawEncoderObservation { captured_at_us: encoder_1_at_us, count: encoder_1_count, quality: encoder_quality },
-                RawEncoderObservation { captured_at_us: encoder_2_at_us, count: encoder_2_count, quality: encoder_quality },
+                RawEncoderObservation {
+                    captured_at_us: encoder_1_at_us,
+                    count: encoder_1_count,
+                    quality: encoder_quality,
+                },
+                RawEncoderObservation {
+                    captured_at_us: encoder_2_at_us,
+                    count: encoder_2_count,
+                    quality: encoder_quality,
+                },
             ],
             battery: Default::default(),
             acquisition_status,
@@ -566,7 +675,10 @@ mod app {
         let current_sample = *ctx.local.sample_index;
         *ctx.local.sample_index = ctx.local.sample_index.wrapping_add(1);
         if timing != SensorTimingHealth::Healthy {
-            SHADOW_CRITICAL_PATH_CYCLES.store(DWT::cycle_count().wrapping_sub(critical_started), Ordering::Relaxed);
+            SHADOW_CRITICAL_PATH_CYCLES.store(
+                DWT::cycle_count().wrapping_sub(critical_started),
+                Ordering::Relaxed,
+            );
             return;
         }
         let Some(step) = ctx.local.shadow.prepare(raw) else {
@@ -576,8 +688,12 @@ mod app {
             });
             return;
         };
-        let completed_at_us = capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
-        let watchdog = ctx.shared.control_watchdog.lock(|watchdog| watchdog.observe_control_completion(completed_at_us));
+        let completed_at_us =
+            capture_timestamp_us(ctx.local.imu_last_cycle, ctx.local.imu_cycle_epoch);
+        let watchdog = ctx
+            .shared
+            .control_watchdog
+            .lock(|watchdog| watchdog.observe_control_completion(completed_at_us));
         SHADOW_WATCHDOG.store(watchdog_code(watchdog), Ordering::Relaxed);
         let operating_state = ctx.shared.runtime_supervisor.lock(|runtime| {
             if runtime.state() == OperatingState::CaptureWindow
@@ -590,11 +706,17 @@ mod app {
             publish_runtime(*runtime);
             runtime.state()
         });
-        let (authority_reasons, authorized) = ctx.local.shadow.apply_shadow_authority(operating_state, timing, step);
+        let (authority_reasons, authorized) =
+            ctx.local
+                .shadow
+                .apply_shadow_authority(operating_state, timing, step);
         *ctx.local.record_divider = ctx.local.record_divider.wrapping_add(1);
         if *ctx.local.record_divider >= RECORD_DECIMATION {
             *ctx.local.record_divider = 0;
-            let faults = ctx.shared.runtime_supervisor.lock(|runtime| runtime.faults());
+            let faults = ctx
+                .shared
+                .runtime_supervisor
+                .lock(|runtime| runtime.faults());
             ctx.local.runtime_records.push(RecordedRuntimeObservation {
                 observation: RuntimeObservation {
                     sample_index: current_sample,
@@ -615,7 +737,10 @@ mod app {
                 dropped_records: ctx.local.runtime_records.overwritten,
             });
         }
-        SHADOW_CRITICAL_PATH_CYCLES.store(DWT::cycle_count().wrapping_sub(critical_started), Ordering::Relaxed);
+        SHADOW_CRITICAL_PATH_CYCLES.store(
+            DWT::cycle_count().wrapping_sub(critical_started),
+            Ordering::Relaxed,
+        );
     }
 
     fn mpu_config() -> MpuConfig {
@@ -629,9 +754,16 @@ mod app {
     }
 
     fn publish_electrical(electrical: ElectricalActuation) {
-        SHADOW_DRIVE_PWM_HIGH_PERMILLE.store(scale_milli(electrical.drive.pwm_line_high_fraction), Ordering::Relaxed);
-        SHADOW_REACTION_PWM_HIGH_PERMILLE.store(scale_milli(electrical.reaction.pwm_line_high_fraction), Ordering::Relaxed);
-        let direction_bits = (electrical.drive.direction_high as u32) | ((electrical.reaction.direction_high as u32) << 1);
+        SHADOW_DRIVE_PWM_HIGH_PERMILLE.store(
+            scale_milli(electrical.drive.pwm_line_high_fraction),
+            Ordering::Relaxed,
+        );
+        SHADOW_REACTION_PWM_HIGH_PERMILLE.store(
+            scale_milli(electrical.reaction.pwm_line_high_fraction),
+            Ordering::Relaxed,
+        );
+        let direction_bits = (electrical.drive.direction_high as u32)
+            | ((electrical.reaction.direction_high as u32) << 1);
         SHADOW_DIRECTION_BITS.store(direction_bits, Ordering::Relaxed);
     }
     fn publish_runtime(runtime: RuntimeSupervisor) {
@@ -666,11 +798,19 @@ mod app {
     }
     fn scale_milli(value: f32) -> i32 {
         let scaled = value * 1_000.0;
-        if scaled >= i32::MAX as f32 { i32::MAX } else if scaled <= i32::MIN as f32 { i32::MIN } else { scaled as i32 }
+        if scaled >= i32::MAX as f32 {
+            i32::MAX
+        } else if scaled <= i32::MIN as f32 {
+            i32::MIN
+        } else {
+            scaled as i32
+        }
     }
     fn capture_timestamp_us(last_cycle: &mut u32, cycle_epoch: &mut u64) -> u64 {
         let now = DWT::cycle_count();
-        if now < *last_cycle { *cycle_epoch += 1_u64 << 32; }
+        if now < *last_cycle {
+            *cycle_epoch += 1_u64 << 32;
+        }
         *last_cycle = now;
         (*cycle_epoch + u64::from(now)) / CYCLES_PER_US
     }

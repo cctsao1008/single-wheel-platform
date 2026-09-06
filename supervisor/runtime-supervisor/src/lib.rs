@@ -14,11 +14,21 @@ impl RuntimeFaults {
     pub const REACTION_WHEEL_EXHAUSTED: Self = Self(1 << 3);
     pub const CONTROL_NUMERICAL_FAULT: Self = Self(1 << 4);
 
-    pub const fn bits(self) -> u16 { self.0 }
-    pub const fn from_bits(bits: u16) -> Self { Self(bits) }
-    pub const fn contains(self, other: Self) -> bool { self.0 & other.0 == other.0 }
-    pub const fn is_empty(self) -> bool { self.0 == 0 }
-    pub const fn with(self, other: Self) -> Self { Self(self.0 | other.0) }
+    pub const fn bits(self) -> u16 {
+        self.0
+    }
+    pub const fn from_bits(bits: u16) -> Self {
+        Self(bits)
+    }
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+    pub const fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -69,8 +79,12 @@ impl ControlWatchdog {
         self.health
     }
 
-    pub const fn health(self) -> ControlWatchdogHealth { self.health }
-    pub const fn timeout_us(self) -> u32 { self.timeout_us }
+    pub const fn health(self) -> ControlWatchdogHealth {
+        self.health
+    }
+    pub const fn timeout_us(self) -> u32 {
+        self.timeout_us
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -79,11 +93,23 @@ pub struct FaultLatch {
 }
 
 impl FaultLatch {
-    pub const fn new() -> Self { Self { faults: RuntimeFaults::NONE } }
-    pub fn latch(&mut self, faults: RuntimeFaults) { self.faults = self.faults.with(faults); }
-    pub fn clear_all(&mut self) { self.faults = RuntimeFaults::NONE; }
-    pub const fn faults(self) -> RuntimeFaults { self.faults }
-    pub const fn is_faulted(self) -> bool { !self.faults.is_empty() }
+    pub const fn new() -> Self {
+        Self {
+            faults: RuntimeFaults::NONE,
+        }
+    }
+    pub fn latch(&mut self, faults: RuntimeFaults) {
+        self.faults = self.faults.with(faults);
+    }
+    pub fn clear_all(&mut self) {
+        self.faults = RuntimeFaults::NONE;
+    }
+    pub const fn faults(self) -> RuntimeFaults {
+        self.faults
+    }
+    pub const fn is_faulted(self) -> bool {
+        !self.faults.is_empty()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,19 +125,30 @@ pub struct RuntimeSupervisor {
 }
 
 impl Default for RuntimeSupervisor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RuntimeSupervisor {
     pub const fn new() -> Self {
-        Self { state: OperatingState::Boot, faults: FaultLatch::new() }
+        Self {
+            state: OperatingState::Boot,
+            faults: FaultLatch::new(),
+        }
     }
 
-    pub const fn state(self) -> OperatingState { self.state }
-    pub const fn faults(self) -> RuntimeFaults { self.faults.faults() }
+    pub const fn state(self) -> OperatingState {
+        self.state
+    }
+    pub const fn faults(self) -> RuntimeFaults {
+        self.faults.faults()
+    }
 
     pub fn boot_complete(&mut self) -> Result<(), RuntimeTransitionError> {
-        if self.state != OperatingState::Boot { return Err(RuntimeTransitionError::InvalidTransition); }
+        if self.state != OperatingState::Boot {
+            return Err(RuntimeTransitionError::InvalidTransition);
+        }
         self.state = OperatingState::HardwareCheck;
         Ok(())
     }
@@ -147,9 +184,13 @@ impl RuntimeSupervisor {
 
     /// Fault recovery is explicit; runtime health never auto-clears a latch.
     pub fn clear_faults_to_standby(&mut self) -> Result<(), RuntimeTransitionError> {
-        if self.state != OperatingState::Fault { return Err(RuntimeTransitionError::InvalidTransition); }
+        if self.state != OperatingState::Fault {
+            return Err(RuntimeTransitionError::InvalidTransition);
+        }
         self.faults.clear_all();
-        if self.faults.is_faulted() { return Err(RuntimeTransitionError::FaultStillLatched); }
+        if self.faults.is_faulted() {
+            return Err(RuntimeTransitionError::FaultStillLatched);
+        }
         self.state = OperatingState::Standby;
         Ok(())
     }
@@ -161,11 +202,20 @@ impl RuntimeSupervisor {
         timing: SensorTimingHealth,
         watchdog: ControlWatchdogHealth,
     ) {
-        if !matches!(self.state, OperatingState::CaptureWindow | OperatingState::Balancing | OperatingState::MomentumLimited) {
+        if !matches!(
+            self.state,
+            OperatingState::CaptureWindow
+                | OperatingState::Balancing
+                | OperatingState::MomentumLimited
+        ) {
             return;
         }
-        if timing == SensorTimingHealth::Timeout { self.latch_fault(RuntimeFaults::SENSOR_TIMEOUT); }
-        if watchdog == ControlWatchdogHealth::Timeout { self.latch_fault(RuntimeFaults::CONTROL_WATCHDOG_TIMEOUT); }
+        if timing == SensorTimingHealth::Timeout {
+            self.latch_fault(RuntimeFaults::SENSOR_TIMEOUT);
+        }
+        if watchdog == ControlWatchdogHealth::Timeout {
+            self.latch_fault(RuntimeFaults::CONTROL_WATCHDOG_TIMEOUT);
+        }
     }
 
     pub fn observe_control_health(
@@ -173,17 +223,26 @@ impl RuntimeSupervisor {
         estimate_validity: StateValidity,
         reaction_wheel_authority: ReactionWheelAuthority,
     ) {
-        if !matches!(self.state, OperatingState::Balancing | OperatingState::MomentumLimited) { return; }
+        if !matches!(
+            self.state,
+            OperatingState::Balancing | OperatingState::MomentumLimited
+        ) {
+            return;
+        }
         if estimate_validity != StateValidity::Valid {
             self.latch_fault(RuntimeFaults::ESTIMATE_INVALID);
             return;
         }
         match reaction_wheel_authority {
             ReactionWheelAuthority::Nominal => {
-                if self.state == OperatingState::MomentumLimited { self.state = OperatingState::Balancing; }
+                if self.state == OperatingState::MomentumLimited {
+                    self.state = OperatingState::Balancing;
+                }
             }
             ReactionWheelAuthority::Warning => self.state = OperatingState::MomentumLimited,
-            ReactionWheelAuthority::Exhausted => self.latch_fault(RuntimeFaults::REACTION_WHEEL_EXHAUSTED),
+            ReactionWheelAuthority::Exhausted => {
+                self.latch_fault(RuntimeFaults::REACTION_WHEEL_EXHAUSTED)
+            }
         }
     }
 }
@@ -220,17 +279,26 @@ mod tests {
         let mut watchdog = ControlWatchdog::new(15_000, 100_000).unwrap();
         assert_eq!(watchdog.poll(110_000), ControlWatchdogHealth::Startup);
         assert_eq!(watchdog.poll(115_000), ControlWatchdogHealth::Timeout);
-        assert_eq!(watchdog.observe_control_completion(116_000), ControlWatchdogHealth::Healthy);
+        assert_eq!(
+            watchdog.observe_control_completion(116_000),
+            ControlWatchdogHealth::Healthy
+        );
         assert_eq!(watchdog.poll(120_000), ControlWatchdogHealth::Healthy);
     }
 
     #[test]
     fn timeout_faults_are_latched_and_do_not_self_clear() {
         let mut supervisor = active_supervisor();
-        supervisor.observe_independent_health(SensorTimingHealth::Timeout, ControlWatchdogHealth::Healthy);
+        supervisor.observe_independent_health(
+            SensorTimingHealth::Timeout,
+            ControlWatchdogHealth::Healthy,
+        );
         assert_eq!(supervisor.state(), OperatingState::Fault);
         assert!(supervisor.faults().contains(RuntimeFaults::SENSOR_TIMEOUT));
-        supervisor.observe_independent_health(SensorTimingHealth::Healthy, ControlWatchdogHealth::Healthy);
+        supervisor.observe_independent_health(
+            SensorTimingHealth::Healthy,
+            ControlWatchdogHealth::Healthy,
+        );
         assert_eq!(supervisor.state(), OperatingState::Fault);
     }
 
@@ -243,7 +311,11 @@ mod tests {
         assert_eq!(supervisor.state(), OperatingState::Balancing);
         supervisor.observe_control_health(StateValidity::Valid, ReactionWheelAuthority::Exhausted);
         assert_eq!(supervisor.state(), OperatingState::Fault);
-        assert!(supervisor.faults().contains(RuntimeFaults::REACTION_WHEEL_EXHAUSTED));
+        assert!(
+            supervisor
+                .faults()
+                .contains(RuntimeFaults::REACTION_WHEEL_EXHAUSTED)
+        );
     }
 
     #[test]
@@ -257,6 +329,10 @@ mod tests {
         supervisor.capture_ready().unwrap();
         supervisor.observe_control_health(StateValidity::Invalid, ReactionWheelAuthority::Nominal);
         assert_eq!(supervisor.state(), OperatingState::Fault);
-        assert!(supervisor.faults().contains(RuntimeFaults::ESTIMATE_INVALID));
+        assert!(
+            supervisor
+                .faults()
+                .contains(RuntimeFaults::ESTIMATE_INVALID)
+        );
     }
 }
