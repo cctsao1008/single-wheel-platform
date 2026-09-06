@@ -58,3 +58,5 @@ jobs:
         run: python3 -m unittest discover -s tools/control -p 'test_*.py'
       - name: Link release firmware
         run: cargo build -p swp-stm32f103 --release --target thumbv7m-none-eabi
+      - name: Link control footprint probe
+        run: cargo build -p swp-control-footprint-stm32f103 --release --target thumbv7m-none-eabi
