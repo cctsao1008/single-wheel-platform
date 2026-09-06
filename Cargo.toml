@@ -20,6 +20,7 @@ members = [
     "crates/observation-record",
     "crates/board-one-v2",
     "firmware/stm32f103",
+    "firmware/control-footprint-stm32f103",
 ]
 
 [workspace.package]
