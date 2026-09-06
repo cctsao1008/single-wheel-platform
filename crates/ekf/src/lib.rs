@@ -370,9 +370,9 @@ pub fn nonlinear_measurement(
     let phi = state[4];
     let g = gravity_m_per_s2;
 
-    output[ACCEL_X] += g * (theta - theta.sin());
-    output[ACCEL_Y] += g * (phi.sin() * theta.cos() - phi);
-    output[ACCEL_Z] += g * (phi.cos() * theta.cos() - 1.0);
+    output[ACCEL_X] += g * (theta - libm::sinf(theta));
+    output[ACCEL_Y] += g * (libm::sinf(phi) * libm::cosf(theta) - phi);
+    output[ACCEL_Z] += g * (libm::cosf(phi) * libm::cosf(theta) - 1.0);
     output
 }
 
@@ -386,11 +386,11 @@ pub fn nonlinear_measurement_jacobian(
     let phi = state[4];
     let g = gravity_m_per_s2;
 
-    h[ACCEL_X][2] += g * (1.0 - theta.cos());
-    h[ACCEL_Y][2] += -g * phi.sin() * theta.sin();
-    h[ACCEL_Y][4] += g * (phi.cos() * theta.cos() - 1.0);
-    h[ACCEL_Z][2] += -g * phi.cos() * theta.sin();
-    h[ACCEL_Z][4] += -g * phi.sin() * theta.cos();
+    h[ACCEL_X][2] += g * (1.0 - libm::cosf(theta));
+    h[ACCEL_Y][2] += -g * libm::sinf(phi) * libm::sinf(theta);
+    h[ACCEL_Y][4] += g * (libm::cosf(phi) * libm::cosf(theta) - 1.0);
+    h[ACCEL_Z][2] += -g * libm::cosf(phi) * libm::sinf(theta);
+    h[ACCEL_Z][4] += -g * libm::sinf(phi) * libm::cosf(theta);
     h
 }
 
