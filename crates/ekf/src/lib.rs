@@ -5,8 +5,8 @@ use swp_measurement_model::{
     ACCEL_X, ACCEL_Y, ACCEL_Z, UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel,
 };
 use swp_plant_model::{
-    DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT,
-    ReducedBalanceState, ReferencePlantInput,
+    DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT, ReducedBalanceState,
+    ReferencePlantInput,
 };
 use swp_robot_domain::StateValidity;
 use swp_state_estimator::{
@@ -308,8 +308,8 @@ impl ExtendedKalmanFilter {
         for row in 0..REDUCED_BALANCE_STATE_COUNT {
             p_h[row] = dot_f32(&self.covariance[row], &h);
         }
-        let innovation_variance = dot_f32(&h, &p_h)
-            + self.design.noise.measurement_variance[channel];
+        let innovation_variance =
+            dot_f32(&h, &p_h) + self.design.noise.measurement_variance[channel];
         if !innovation_variance.is_finite() || innovation_variance <= MIN_INNOVATION_VARIANCE {
             self.validity = StateValidity::Invalid;
             return Err(EstimateError::NumericalFault);
@@ -322,8 +322,7 @@ impl ExtendedKalmanFilter {
             self.state[index] += gain[index] * innovation;
         }
 
-        let mut i_minus_kh =
-            [[0.0; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT];
+        let mut i_minus_kh = [[0.0; REDUCED_BALANCE_STATE_COUNT]; REDUCED_BALANCE_STATE_COUNT];
         for row in 0..REDUCED_BALANCE_STATE_COUNT {
             for col in 0..REDUCED_BALANCE_STATE_COUNT {
                 i_minus_kh[row][col] = if row == col { 1.0 } else { 0.0 } - gain[row] * h[col];
@@ -345,7 +344,8 @@ impl ExtendedKalmanFilter {
         let r = self.design.noise.measurement_variance[channel];
         for row in 0..REDUCED_BALANCE_STATE_COUNT {
             for col in 0..REDUCED_BALANCE_STATE_COUNT {
-                joseph[row][col] = dot_f32(&left[row], &i_minus_kh[col]) + gain[row] * r * gain[col];
+                joseph[row][col] =
+                    dot_f32(&left[row], &i_minus_kh[col]) + gain[row] * r * gain[col];
             }
         }
         self.covariance = symmetrize(joseph);
@@ -464,8 +464,11 @@ mod tests {
             plant,
             measurement,
             9.80665,
-            EkfNoise::new([1.0e-5; REDUCED_BALANCE_STATE_COUNT], [1.0e-3; UPRIGHT_MEASUREMENT_COUNT])
-                .unwrap(),
+            EkfNoise::new(
+                [1.0e-5; REDUCED_BALANCE_STATE_COUNT],
+                [1.0e-3; UPRIGHT_MEASUREMENT_COUNT],
+            )
+            .unwrap(),
             all,
             all,
         )
