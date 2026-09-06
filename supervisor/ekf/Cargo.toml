@@ -1,0 +1,21 @@
+[package]
+name = "swp-ekf"
+version = "0.1.0"
+description = "Production-capable nonlinear estimator implementation for the single-wheel platform"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+libm = "0.2"
+swp-dsp-kernel = { path = "../../infrastructure/dsp-kernel" }
+swp-measurement-model = { path = "../../plant/measurement-model" }
+swp-plant-model = { path = "../../plant/plant-model" }
+swp-robot-domain = { path = "../../plant/robot-domain" }
+swp-state-estimator = { path = "../state-estimator" }
+
+[lints.clippy]
+needless_range_loop = "allow"
+
+[lib]
+path = "src/lib.rs"

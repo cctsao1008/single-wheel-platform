@@ -1,14 +1,13 @@
 [package]
-name = "swp-stm32f103-electrical-output"
+name = "swp-one-v2-electrical-output"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
-stm32f1xx-hal.workspace = true
-swp-one-v2-electrical-output = { path = "../one-v2-electrical-output" }
 swp-runtime-state = { path = "../../supervisor/runtime-state" }
+
+[dev-dependencies]
+swp-actuator-model = { path = "../../plant/actuator-model" }
+swp-robot-domain = { path = "../../plant/robot-domain" }

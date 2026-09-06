@@ -1,0 +1,14 @@
+[package]
+name = "swp-state-feedback"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-dsp-kernel = { path = "../../infrastructure/dsp-kernel" }
+swp-plant-model = { path = "../../plant/plant-model" }
+swp-robot-domain = { path = "../../plant/robot-domain" }
+
+[lib]
+path = "src/lib.rs"

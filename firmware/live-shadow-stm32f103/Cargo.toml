@@ -12,17 +12,17 @@ heapless.workspace = true
 panic-halt.workspace = true
 rtic.workspace = true
 stm32f1xx-hal.workspace = true
-swp-actuator-model = { path = "../../crates/actuator-model" }
-swp-board-one-v2 = { path = "../../crates/board-one-v2" }
-swp-control-profile-record = { path = "../../crates/control-profile-record" }
-swp-frame-transform = { path = "../../crates/frame-transform" }
-swp-measurement-model = { path = "../../crates/measurement-model" }
-swp-mpu6050 = { path = "../../crates/mpu6050" }
-swp-plant-model = { path = "../../crates/plant-model" }
-swp-plant-observation = { path = "../../crates/plant-observation" }
-swp-robot-domain = { path = "../../crates/robot-domain" }
-swp-runtime-state = { path = "../../crates/runtime-state" }
-swp-sensor-calibration = { path = "../../crates/sensor-calibration" }
-swp-software-i2c = { path = "../../crates/software-i2c" }
-swp-state-estimator = { path = "../../crates/state-estimator" }
-swp-state-feedback = { path = "../../crates/state-feedback" }
+swp-actuator-model = { path = "../../plant/actuator-model" }
+swp-board-one-v2 = { path = "../board-one-v2" }
+swp-control-profile-record = { path = "../../infrastructure/control-profile-record" }
+swp-frame-transform = { path = "../frame-transform" }
+swp-measurement-model = { path = "../../plant/measurement-model" }
+swp-mpu6050 = { path = "../mpu6050" }
+swp-plant-model = { path = "../../plant/plant-model" }
+swp-plant-observation = { path = "../../plant/plant-observation" }
+swp-robot-domain = { path = "../../plant/robot-domain" }
+swp-runtime-state = { path = "../../supervisor/runtime-state" }
+swp-sensor-calibration = { path = "../sensor-calibration" }
+swp-software-i2c = { path = "../software-i2c" }
+swp-state-estimator = { path = "../../supervisor/state-estimator" }
+swp-state-feedback = { path = "../../control/state-feedback" }

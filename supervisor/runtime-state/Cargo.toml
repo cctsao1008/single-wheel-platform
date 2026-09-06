@@ -1,0 +1,13 @@
+[package]
+name = "swp-runtime-state"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+swp-actuator-model = { path = "../../plant/actuator-model" }
+swp-robot-domain = { path = "../../plant/robot-domain" }
+
+[lib]
+path = "src/lib.rs"

@@ -12,9 +12,9 @@ heapless.workspace = true
 panic-halt.workspace = true
 rtic.workspace = true
 stm32f1xx-hal.workspace = true
-swp-board-one-v2 = { path = "../../crates/board-one-v2" }
-swp-mpu6050 = { path = "../../crates/mpu6050" }
-swp-observation-record = { path = "../../crates/observation-record" }
-swp-plant-observation = { path = "../../crates/plant-observation" }
-swp-runtime-state = { path = "../../crates/runtime-state" }
-swp-software-i2c = { path = "../../crates/software-i2c" }
+swp-board-one-v2 = { path = "../board-one-v2" }
+swp-mpu6050 = { path = "../mpu6050" }
+swp-observation-record = { path = "../../infrastructure/observation-record" }
+swp-plant-observation = { path = "../../plant/plant-observation" }
+swp-runtime-state = { path = "../../supervisor/runtime-state" }
+swp-software-i2c = { path = "../software-i2c" }

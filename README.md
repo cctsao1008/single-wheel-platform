@@ -1,307 +1,172 @@
 # Self-Balancing Single-Wheel Platform
 
-A Rust `no_std` embedded control platform for a reaction-wheel-stabilized single-wheel robot.
+A Rust `no_std` control platform for a reaction-wheel-stabilized single-wheel robot.
 
-The platform separates physical modeling, sensing, estimation, state feedback, actuator semantics, runtime authority, electrical output, and commissioning infrastructure. Reference-backed nominal parameters may instantiate the initial system; local measurement and system identification progressively replace those assumptions.
-
-## Architecture
+The repository has four architectural domains. They describe ownership and dependency, not execution order or directory depth.
 
 ```text
-Physical Robot
-      |
-      v
-RawObservation
-      |
-      v
-Sensor Transfer / Calibration / Body Frame
-      |
-      v
-EstimatorMeasurement
-      |
-      v
+                  CONTROL
+                     ▲
+                     │
+                 SUPERVISOR
+                  ▲      ▲
+                  │      │
+                PLANT    │
+                  ▲      │
+                  └──┬───┘
+                     │
+                 FIRMWARE
+              STM32 / RP2350
+```
+
+## Domains
+
+### Plant
+
+`plant/` defines the physical system and the semantics that describe it:
+
+```text
+robot-domain
+plant-model
+measurement-model
+plant-observation
+actuator-model
+```
+
+It owns physical state, measurements, torque demand, actuator behavior, and model equations. It does not own MCU peripherals, scheduling, or control policy.
+
+### Control
+
+`control/` defines desired closed-loop behavior from estimated state and reference:
+
+```text
+EstimatedState + Reference
+            |
+            v
+        LQR / LQI
+            |
+            v
+    GeneralizedDemand
+```
+
+Control does not own sensors, operating-state policy, authority, or electrical output.
+
+### Supervisor
+
+`supervisor/` owns the robot's runtime belief and authority:
+
+```text
+measurement
+    |
+    v
 StateEstimator
-  /      |       \
-linear  lightweight  EKF
-observer  fusion
-  \      |       /
-      EstimatedState
-           |
-           v
-       LQR / LQI
-           |
-           v
- GeneralizedDemand [N m]
-           |
-           v
-Actuator Model / Inverse Model
-           |
-           v
-   RuntimeAuthority
-     /           \
- denied       authorized
-   |              |
-no output   AuthorizedActuation
-                  |
-                  v
-          Electrical Output
-                  |
-                  v
-             PWM / DIR
-                  |
-                  v
-          Physical Actuators
+    |
+    v
+EstimatedState
+    |
+    +------> Control
+    |           |
+    |       requested demand
+    |           |
+    v           v
+operating state / timing / limits
+            |
+            v
+      RuntimeAuthority
+            |
+            v
+   AuthorizedActuation
 ```
 
-The estimator boundary is canonical; EKF is a production-capable implementation, not an architectural requirement. Estimator complexity is selected from measured state quality, disturbance rejection, operating envelope, and real-time cost.
+This includes state estimation, operating state, sensor timing health, reaction-wheel headroom, actuator constraints, integrator-hold policy, and orchestration of one control opportunity.
 
-## Balance model
+### Firmware
 
-The reduced upright state is
+`firmware/` makes the portable system real on hardware. It owns device transfer, board binding, peripheral ownership, scheduling, telemetry, and electrical actuation.
 
-```text
-x = [
-    forward displacement,
-    forward velocity,
-    pitch,
-    pitch rate,
-    roll,
-    roll rate,
-    reaction-wheel relative rate,
-]^T
-```
-
-with physical input
+Current STM32F103 resources include:
 
 ```text
-u = [drive-wheel torque, reaction-wheel torque]^T
-```
-
-The nonlinear plant contract is
-
-```text
-M(q, p) q_ddot
-+ c(q, q_dot, p)
-+ g(q, p)
-+ d(q_dot, p)
-= B(p) u
-```
-
-Roll and pitch are not assumed globally decoupled. Any local pitch/drive and roll/reaction-wheel structure must emerge from the upright model.
-
-## Measurement model
-
-The estimator consumes physical observations through
-
-```text
-y = h(x, u, p)
-```
-
-with the current measurement channels
-
-```text
-accel_x, accel_y, accel_z
-gyro_x, gyro_y, gyro_z
-drive_encoder_relative_angle
-reaction_wheel_relative_rate
-```
-
-Accelerometer output is modeled as specific force, including gravity, translational acceleration, angular acceleration at the IMU lever arm, rotational terms, and actuator feedthrough.
-
-## Estimation and control
-
-Available estimator implementations include:
-
-```text
-swp-state-estimator   fixed-gain discrete linear observer
-swp-ekf               nonlinear covariance-based estimator
-```
-
-A lightweight complementary-class estimator is also a valid production strategy where measured performance justifies it.
-
-State feedback is
-
-```text
-u = u_ff - K (x_hat - x_ref)
-```
-
-with optional LQI integral coordinates. Runtime authority owns integrator hold semantics when actuation is constrained or denied.
-
-The executable control causality is
-
-```text
-measurement[k]
-      |
-      v
-StateEstimator using applied u[k-1]
-      |
-      v
-EstimatedState[k]
-      |
-      v
-LQR / LQI
-      |
-      v
-requested torque[k]
-      |
-      v
-Actuator inverse model
-      |
-      v
-bounded command[k]
-      |
-      v
-RuntimeAuthority
-      |
-      v
-physical applied input[k]
-      |
-      +------> estimator[k+1]
-```
-
-Requested torque, bounded command, authorized actuation, and electrical output remain distinct semantics.
-
-## Runtime authority
-
-`RuntimeAuthority` is the semantic boundary that creates `AuthorizedActuation`.
-
-Authority considers:
-
-```text
-operating state
-sensor timing health
-estimated-state validity
-reaction-wheel momentum / speed headroom
-actuator saturation
-```
-
-A denied step cannot reach physical output. Constrained operation remains explicit and holds LQI integration.
-
-The ONE V2 electrical-output path accepts only `AuthorizedActuation`, maps the installed drive/reaction roles to the vendor-evidenced PWM/DIR line encoding, and binds concrete mutation to TIM3_CH1/TIM3_CH4 plus PA4/PB11. Observation and live-shadow firmware do not instantiate this owner.
-
-## Reference-backed parameters
-
-Physical provenance is explicit:
-
-```text
-measured
-identified
-datasheet
-reference-platform
-literature
-derived
-nominal
-unknown
-```
-
-Architecture does not wait for every parameter to become locally measured. A nominal/reference value may instantiate the initial model when its source and confidence are explicit. Local measured or identified values supersede lower-confidence assumptions.
-
-External platforms are used for model structure, estimator/controller methods, initial parameter ranges, and commissioning workflow; their gains and physical parameters are not copied blindly.
-
-Useful references include:
-
-- [Mini-Wheelbot](https://github.com/wheelbot/Mini-Wheelbot): nonlinear dynamics, complementary-class estimation, upright LQR, system identification, measured datasets.
-- Wheel-E: nonlinear Lagrangian model, friction model, Kalman/LQG evaluation, STM32 real-time architecture.
-
-## Numerical boundary
-
-```text
-HOST
-  model derivation
-  system identification
-  exact ZOH
-  observer / EKF design quantities
-  LQR / LQI synthesis
-  correlation
-        |
-        v
-STM32F103
-  deterministic sensor processing
-  estimator execution
-  state feedback
-  actuator inversion
-  runtime authority
-  electrical output
-```
-
-Cortex-M fixed-size numerical kernels use `swp-dsp-kernel` backed by CMSIS-DSP. The MCU does not solve Riccati equations or matrix exponentials at runtime.
-
-## Real-time target
-
-Reference MCU: `STM32F103C8T6`.
-
-```text
-MPU6050 DATA_RDY / PC13 EXTI13   500 Hz control opportunity
+MPU6050 DATA_RDY / PC13 EXTI13   500 Hz primary control opportunity
 TIM1                              1 kHz timing-health supervisor
 TIM2                              Encoder_1 QEI
 TIM4                              Encoder_2 QEI
 ADC1 / PA5                        battery observation
-USART2 TX / DMA1 CH7              telemetry transport
-TIM3_CH1 / PA6 + PA4 DIR          DriveWheel electrical output sink
-TIM3_CH4 / PB1 + PB11 DIR         ReactionWheel electrical output sink
+USART2 TX / DMA1 CH7              telemetry
+TIM3_CH1 / PA6 + PA4 DIR          DriveWheel output
+TIM3_CH4 / PB1 + PB11 DIR         ReactionWheel output
 ```
 
-The TIM3 sink exists as an authority-gated target component. It is not instantiated by the current observation or live-shadow firmware.
+The firmware boundary is also where another target such as RP2350 plugs into the same Plant / Supervisor / Control contracts.
 
-There is no catch-up control. One DATA_RDY event creates at most one physical control opportunity.
+## Runtime loop
 
-## Commissioning modes
-
-Observation and shadow-control are commissioning modes, not the identity of the platform.
+The runtime is a feedback loop rather than a linear layer stack:
 
 ```text
-observation
-    acquire and record physical sensor evidence
-
-live-shadow
-    execute the full control computation without motor electrical ownership
-
-closed-loop
-    StateEstimator -> LQR/LQI -> RuntimeAuthority -> AuthorizedActuation
-                   -> ElectricalOutput -> PWM / DIR
+Physical Plant
+     |
+ observation
+     v
+Supervisor / Estimator
+     |
+ estimated state
+     v
+Control
+     |
+ physical demand
+     v
+Supervisor / Authority
+     |
+ AuthorizedActuation
+     v
+Firmware
+     |
+ electrical actuation
+     +--------------------> Physical Plant
 ```
 
-## Repository structure
+The semantic path remains typed:
 
 ```text
-crates/
-  robot-domain/
-  plant-model/
-  measurement-model/
-  dsp-kernel/
-  state-estimator/
-  ekf/
-  estimator-input/
-  state-feedback/
-  control-runtime/
-  actuator-model/
-  one-v2-electrical-output/
-  runtime-state/
-  plant-observation/
-  sensor-calibration/
-  frame-transform/
-  reference-assembly/
-  observation-record/
-  control-profile-record/
-  mpu6050/
-  software-i2c/
-  board-one-v2/
+RawObservation
+  -> EstimatorMeasurement
+  -> EstimatedState
+  -> GeneralizedDemand
+  -> BoundedActuatorCommand
+  -> AuthorizedActuation
+  -> ElectricalActuation
+  -> Physical Output
+```
 
+Requested effort, bounded command, authorized actuation, and electrical output are distinct meanings.
+
+## Infrastructure
+
+`infrastructure/` contains horizontal mechanisms that support the four domains without becoming another control layer:
+
+```text
+dsp-kernel
+observation-record
+control-profile-record
+```
+
+Host-side engineering remains under `tools/` for model derivation, system identification, control synthesis, recording, replay, and correlation.
+
+## Repository
+
+```text
+plant/
+control/
+supervisor/
 firmware/
-  stm32f103/
-  stm32f103-electrical-output/
-  live-shadow-stm32f103/
-  control-footprint-stm32f103/
-
+infrastructure/
 parameters/
-  reference-assembly.json
-
 tools/
-  model/
-  control/
-  actuator/
-  recording/
-  wireless/
+docs/
 ```
+
+The old flat `crates/` layout is intentionally removed. Git history preserves the previous structure; `main` represents the current architecture.
 
 ## Reference assembly
 
@@ -319,7 +184,21 @@ Body frame:
 +Z = up
 ```
 
-Board channel identity, installed assembly role, and robot-control semantics remain separate.
+## Safety boundary
+
+Physical output can only be reached through:
+
+```text
+RuntimeAuthority
+       |
+       v
+AuthorizedActuation
+       |
+       v
+Electrical Output
+```
+
+Observation and live-shadow firmware do not instantiate the motor electrical-output owner.
 
 ## Build
 
@@ -327,13 +206,4 @@ Board channel identity, installed assembly role, and robot-control semantics rem
 cargo fw
 ```
 
-Architecture details:
-
-- [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
-- [`docs/architecture/state_estimation_and_control.md`](docs/architecture/state_estimation_and_control.md)
-- [`docs/architecture/estimator_input.md`](docs/architecture/estimator_input.md)
-- [`docs/architecture/control_runtime.md`](docs/architecture/control_runtime.md)
-- [`docs/architecture/plant_model.md`](docs/architecture/plant_model.md)
-- [`docs/architecture/measurement_model.md`](docs/architecture/measurement_model.md)
-- [`docs/architecture/runtime_authority.md`](docs/architecture/runtime_authority.md)
-- [`docs/architecture/electrical_output.md`](docs/architecture/electrical_output.md)
+Architecture: [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
