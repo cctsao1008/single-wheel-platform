@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod encoder;
+
 use swp_dsp_kernel::dot_f32;
 use swp_mpu6050::{
     Config as MpuConfig, accel_raw_to_mps2, gyro_raw_to_rad_per_sec, temperature_raw_to_celsius,
