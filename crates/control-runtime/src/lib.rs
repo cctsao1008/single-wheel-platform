@@ -4,7 +4,7 @@ use swp_actuator_model::{
     ActuatorModelError, ActuatorPairCommand, ActuatorPairModel, ActuatorPairOperatingPoint,
 };
 use swp_plant_model::{ReducedBalanceState, ReferencePlantInput};
-use swp_robot_domain::{AngularRateRadPerSec, GeneralizedDemand, StateValidity, TorqueNm};
+use swp_robot_domain::{AngularRateRadPerSec, GeneralizedDemand};
 use swp_runtime_state::{
     ActuationAuthority, AuthorityContext, AuthorityDecision, AuthorityOutcome, AuthorizedActuation,
     OperatingState, ReactionWheelSpeedLimits, RuntimeAuthority, SensorTimingHealth,
@@ -283,6 +283,7 @@ mod tests {
     use swp_plant_model::{
         DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT,
     };
+    use swp_robot_domain::{StateValidity, TorqueNm};
     use swp_runtime_state::AuthorityReasons;
     use swp_state_estimator::{MeasurementMask, ObserverDesign, ObserverGain};
     use swp_state_feedback::{IntegralBounds, IntegralGain, IntegralProjection, StateFeedbackGain};
