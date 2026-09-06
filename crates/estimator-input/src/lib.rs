@@ -63,7 +63,9 @@ impl EstimatorInputBuilder {
         let imu_usable = measurement_usable(imu.quality);
         let imu_timing_valid = imu_usable
             && imu.quality.contains(MeasurementQuality::TIMING_VALID)
-            && imu.quality.contains(MeasurementQuality::FRESHNESS_VERIFIED);
+            && imu
+                .quality
+                .contains(MeasurementQuality::FRESHNESS_VERIFIED);
 
         if imu_usable {
             values[ACCEL_X] = imu.acceleration.0[0];
@@ -79,7 +81,8 @@ impl EstimatorInputBuilder {
             }
         }
 
-        let (drive_encoder_status, drive_sample) = observe_encoder(&mut self.drive_encoder, drive_encoder);
+        let (drive_encoder_status, drive_sample) =
+            observe_encoder(&mut self.drive_encoder, drive_encoder);
         if let Some(sample) = drive_sample {
             if sample.relative_angle_rad.is_finite() {
                 values[DRIVE_ENCODER_RELATIVE_ANGLE] = sample.relative_angle_rad;
@@ -134,11 +137,9 @@ mod tests {
     use swp_frame_transform::{FrameEvidence, FrameEvidenceBasis};
     use swp_plant_observation::TimestampEvidence;
     use swp_sensor_calibration::{
-        AccelerationVectorMps2, AngularRateVectorRadPerSec, CalibrationBasis,
-        CalibrationEvidence, TemperatureCelsius,
-        encoder::{
-            EncoderPositiveDirection, EncoderTransferBasis, EncoderTransferEvidence,
-        },
+        AccelerationVectorMps2, AngularRateVectorRadPerSec, CalibrationBasis, CalibrationEvidence,
+        TemperatureCelsius,
+        encoder::{EncoderPositiveDirection, EncoderTransferBasis, EncoderTransferEvidence},
     };
 
     fn transfer() -> EncoderTransfer {
@@ -268,11 +269,7 @@ mod tests {
         );
         let mut failed = raw_encoder(210, 3_000);
         failed.quality = MeasurementQuality::AVAILABLE | MeasurementQuality::IO_ERROR;
-        let frame = builder.build(
-            imu(healthy_imu_quality()),
-            raw_encoder(110, 3_000),
-            failed,
-        );
+        let frame = builder.build(imu(healthy_imu_quality()), raw_encoder(110, 3_000), failed);
 
         assert_eq!(
             frame.reaction_encoder_status,
