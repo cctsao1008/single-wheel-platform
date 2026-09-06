@@ -63,7 +63,7 @@ state-feedback
     u = u_ff - K (x_hat - x_ref)
 ```
 
-Numerical discretization and Riccati synthesis are host-side engineering operations. The STM32 executes fixed-size deterministic matrices; it does not solve matrix exponentials or Riccati equations at runtime.
+Numerical discretization and Riccati synthesis are host-side engineering operations. The STM32 executes fixed-size deterministic matrices; it does not solve matrix exponentials or Riccati equations at runtime. Cortex-M real-time matrix/vector products are routed through `swp-dsp-kernel` to CMSIS-DSP; the STM32F103 does not retain a separate scalar control backend.
 
 Observation and control remain independent from transport and user interfaces:
 
@@ -128,6 +128,9 @@ plant-model
 measurement-model
     physical sensor equation and local observability structure
 
+dsp-kernel
+    CMSIS-DSP numerical execution boundary on Cortex-M
+
 state-estimator
     deterministic discrete predictor/corrector execution
 
@@ -144,6 +147,7 @@ Rust no_std
 embedded-hal 1.0
 stm32f1xx-hal
 RTIC 2.x
+CMSIS-DSP
 ```
 
 The primary acquisition boundary is MPU6050 DATA_RDY at 500 Hz through PC13 / EXTI13. TIM1 independently supervises that sensor clock at 1 kHz so missing DATA_RDY cannot silently stop the future control path.
@@ -298,6 +302,8 @@ GeneralizedDemand
 
 The current reference-assembly allocation is numerically identity because one installed actuator owns each of those two plant inputs. The allocation boundary remains explicit so controller semantics never collapse into PCB channel identity or PWM duty.
 
+The Cortex-M numerical execution path is CMSIS-DSP through `swp-dsp-kernel`. It owns the fixed-size products used by the measurement model, observer, LQR, and LQI. Non-ARM builds use a host-only semantic emulator for deterministic tests; that code is not an embedded fallback.
+
 The reference firmware does **not** instantiate numeric observer/controller gains yet. The synthesis path refuses to fabricate missing masses, inertias, geometry, IMU placement, noise levels, encoder scaling, or actuator torque evidence.
 
 ## Control Synthesis
@@ -374,6 +380,7 @@ The host checks sequence continuity, CRC validity, firmware-reported dropped rec
 crates/
   robot-domain/          Robot state and physical actuator-domain types
   plant-model/           Physical plant coordinates, parameters, and dynamics
+  dsp-kernel/            CMSIS-DSP numerical backend for Cortex-M control math
   measurement-model/     Sensor equation and local observability model
   state-estimator/       Fixed-rate discrete predictor/corrector
   state-feedback/        LQR/LQI physical state-feedback execution
@@ -410,7 +417,7 @@ Install a current stable Rust toolchain with the `thumbv7m-none-eabi` target.
 cargo fw
 ```
 
-CI checks formatting, Cortex-M workspace compilation, Clippy, plant/measurement/estimator/controller tests, protocol/replay tests, host-tool syntax, and the release firmware link.
+CI checks formatting, Cortex-M workspace compilation, Clippy, the CMSIS-DSP numerical boundary, plant/measurement/estimator/controller tests, protocol/replay tests, host-tool syntax, and the release firmware link.
 
 ## Documentation
 
