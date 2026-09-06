@@ -56,6 +56,10 @@ pub struct ControlProfileSample {
     pub authority_reasons: u16,
     pub status: ControlProfileStatus,
     pub dropped_records: u16,
+    /// DWT cycles between this DATA_RDY edge and the previous edge. Zero on the
+    /// first event. This ratio-level timing evidence does not depend on the HSE
+    /// frequency assumption used to convert cycles into microseconds.
+    pub event_period_cycles: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,7 +96,8 @@ impl ControlProfileSample {
         put_u16(&mut out, 66, self.authority_reasons);
         put_u16(&mut out, 68, self.status.bits());
         put_u16(&mut out, 70, self.dropped_records);
-        // Bytes 72..78 are reserved for forward-compatible profiler fields.
+        put_u32(&mut out, 72, self.event_period_cycles);
+        // Bytes 76..78 remain reserved for forward-compatible profiler fields.
         let crc = crc16_ccitt_false(&out[..CRC_OFFSET]);
         put_u16(&mut out, CRC_OFFSET, crc);
         out
@@ -133,6 +138,7 @@ impl ControlProfileSample {
             authority_reasons: get_u16(bytes, 66),
             status: ControlProfileStatus(get_u16(bytes, 68)),
             dropped_records: get_u16(bytes, 70),
+            event_period_cycles: get_u32(bytes, 72),
         })
     }
 }
@@ -215,6 +221,7 @@ mod tests {
             status: ControlProfileStatus::SYNTHETIC_NUMERICS
                 .with(ControlProfileStatus::ESTIMATOR_OK),
             dropped_records: 5,
+            event_period_cycles: 143_912,
         };
         let encoded = sample.encode();
         assert_eq!(ControlProfileSample::decode(&encoded), Ok(sample));
