@@ -1,5 +1,6 @@
 #![no_std]
 
+use swp_dsp_kernel::dot_f32;
 use swp_plant_model::{REDUCED_BALANCE_STATE_COUNT, ReducedBalanceState};
 use swp_robot_domain::{GeneralizedDemand, TorqueNm};
 
@@ -45,6 +46,9 @@ impl LqrController {
     ///
     /// `u = u_ff - K (x - x_ref)`.
     ///
+    /// The fixed-size matrix-vector products are executed through
+    /// `swp-dsp-kernel`; the Cortex-M production backend is CMSIS-DSP.
+    ///
     /// The result is intentionally unconstrained. Allocation, actuator limits,
     /// momentum headroom, and electrical mapping remain downstream authority
     /// concerns rather than hidden controller behavior.
@@ -57,8 +61,9 @@ impl LqrController {
         let error = state_error(state, reference)?;
         require_finite_demand(feedforward)?;
 
-        let drive = feedforward.drive_wheel_torque.0 - dot(self.gain.k[0], error);
-        let reaction = feedforward.reaction_wheel_torque.0 - dot(self.gain.k[1], error);
+        let drive = feedforward.drive_wheel_torque.0 - dot_f32(&self.gain.k[0], &error);
+        let reaction =
+            feedforward.reaction_wheel_torque.0 - dot_f32(&self.gain.k[1], &error);
         demand_from_values(drive, reaction)
     }
 }
@@ -169,18 +174,18 @@ impl LqiController {
 
         if integrator_update == IntegratorUpdate::Integrate {
             for (row, integral) in self.integral_state.iter_mut().enumerate() {
-                let delta = self.sample_period_s * dot(self.projection.c_i[row], error);
+                let delta = self.sample_period_s * dot_f32(&self.projection.c_i[row], &error);
                 let bound = self.bounds.max_abs[row];
                 *integral = (*integral + delta).clamp(-bound, bound);
             }
         }
 
         let drive = feedforward.drive_wheel_torque.0
-            - dot(self.state_gain.k[0], error)
-            - dot_integral(self.integral_gain.k_i[0], self.integral_state);
+            - dot_f32(&self.state_gain.k[0], &error)
+            - dot_f32(&self.integral_gain.k_i[0], &self.integral_state);
         let reaction = feedforward.reaction_wheel_torque.0
-            - dot(self.state_gain.k[1], error)
-            - dot_integral(self.integral_gain.k_i[1], self.integral_state);
+            - dot_f32(&self.state_gain.k[1], &error)
+            - dot_f32(&self.integral_gain.k_i[1], &self.integral_state);
         demand_from_values(drive, reaction)
     }
 }
@@ -225,20 +230,6 @@ fn demand_from_values(drive: f32, reaction: f32) -> Result<GeneralizedDemand, Co
     } else {
         Err(ControlError::NumericalFault)
     }
-}
-
-fn dot(row: [f32; REDUCED_BALANCE_STATE_COUNT], vector: [f32; REDUCED_BALANCE_STATE_COUNT]) -> f32 {
-    row.iter()
-        .zip(vector.iter())
-        .map(|(lhs, rhs)| lhs * rhs)
-        .sum()
-}
-
-fn dot_integral(row: [f32; INTEGRAL_STATE_COUNT], vector: [f32; INTEGRAL_STATE_COUNT]) -> f32 {
-    row.iter()
-        .zip(vector.iter())
-        .map(|(lhs, rhs)| lhs * rhs)
-        .sum()
 }
 
 #[cfg(test)]
