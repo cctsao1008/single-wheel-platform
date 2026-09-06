@@ -62,8 +62,7 @@ impl LqrController {
         require_finite_demand(feedforward)?;
 
         let drive = feedforward.drive_wheel_torque.0 - dot_f32(&self.gain.k[0], &error);
-        let reaction =
-            feedforward.reaction_wheel_torque.0 - dot_f32(&self.gain.k[1], &error);
+        let reaction = feedforward.reaction_wheel_torque.0 - dot_f32(&self.gain.k[1], &error);
         demand_from_values(drive, reaction)
     }
 }
