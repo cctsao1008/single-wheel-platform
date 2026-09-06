@@ -26,6 +26,8 @@ jobs:
         run: cargo test -p swp-measurement-model --target x86_64-unknown-linux-gnu
       - name: State estimator tests
         run: cargo test -p swp-state-estimator --target x86_64-unknown-linux-gnu
+      - name: EKF tests
+        run: cargo test -p swp-ekf --target x86_64-unknown-linux-gnu
       - name: Estimator input tests
         run: cargo test -p swp-estimator-input --target x86_64-unknown-linux-gnu
       - name: State feedback tests
