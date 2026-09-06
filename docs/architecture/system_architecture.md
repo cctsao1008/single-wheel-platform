@@ -1,6 +1,6 @@
 # System Architecture
 
-The platform is organized around semantic transitions and physical ownership.
+The platform is a complete embedded self-balancing control system. Observation, replay, and shadow-control are commissioning modes around the same canonical sensing, estimation, control, authority, and electrical-output architecture.
 
 ## Terminology
 
@@ -21,21 +21,19 @@ reference-assembly
     installed hardware and board-channel-to-role mapping
 ```
 
-`platform`, `robot`, and `plant` are related but not interchangeable. The repository is a platform; the controlled physical system is a robot; control and estimation operate on its plant dynamics.
-
-## Core dataflow
+## Canonical runtime
 
 ```text
-Physical Plant
+Physical Robot
       |
       v
 RawObservation
       |
-      | device transfer functions
+      | device transfer
       v
 ScaledObservation
       |
-      | measured calibration
+      | calibration
       v
 CalibratedObservation
       |
@@ -43,177 +41,64 @@ CalibratedObservation
       v
 BodyObservation
       |
+      | encoder semantic projection
+      v
+EstimatorMeasurement
+      |
+      v
+StateEstimator
+      |
       v
 EstimatedState
       |
       v
-State-Space Control Law
+LQR / LQI
       |
       v
 GeneralizedDemand
       |
       v
-ActuatorAllocation
+Actuator Model / Inverse Model
+      |
+      v
+Bounded Actuator Command
       |
       v
 RuntimeAuthority
-      |
-      v
-ElectricalOutput
-      |
-      v
-Physical Actuators
+   /             \
+denied          authorized
+  |                 |
+no output    AuthorizedActuation
+                    |
+                    v
+             ElectricalOutput
+                    |
+                    v
+               PWM / DIR
+                    |
+                    v
+            Physical Actuators
 ```
 
-The estimator and controller are bounded by explicit plant and measurement models:
+Only `RuntimeAuthority` may create `AuthorizedActuation`. Electrical output is downstream of that type boundary.
+
+## Estimator boundary
+
+`StateEstimator` is the architecture boundary. The implementation may be selected independently of the controller:
 
 ```text
-plant-model
-    x_dot = f(x, u, p)
-
-measurement-model
-    y = h(x, u, p)
-
-state-estimator
-    x_pred = A_d x_hat + B_d u
-    x_hat  = x_pred + L (y - y0 - C x_pred - D u)
-
-state-feedback
-    u = u_ff - K (x_hat - x_ref)
+linear observer
+lightweight complementary-class fusion
+extended Kalman filter
 ```
 
-Recording is a branch from the raw-observation boundary:
+The fixed-gain observer is useful for local-upright verification. `swp-ekf` provides a nonlinear covariance-based production-capable path. A lightweight estimator remains valid where measured performance is sufficient.
 
-```text
-RawObservation
-   |\
-   | +--> semantic/control path
-   |
-   +--> RecordedObservation --> transport/storage --> replay
-```
+The architecture does not encode “EKF is always better”; estimator complexity is justified by measured state quality, innovation behavior, disturbance rejection, operating envelope, and execution cost.
 
-## Semantic ownership
+## Plant boundary
 
-```text
-plant-model
-    full robot configuration, reduced balance coordinates,
-    physical parameters, nonlinear/linear plant contracts
-
-measurement-model
-    physical sensor equation, IMU lever-arm semantics,
-    encoder kinematics, local observability structure
-
-dsp-kernel
-    canonical Cortex-M numerical execution boundary;
-    CMSIS-DSP matrix/vector primitives
-
-state-estimator
-    discrete predictor/corrector execution, measurement masks,
-    estimate validity
-
-state-feedback
-    physical-state LQR/LQI execution and integrator state
-
-tools/control
-    exact ZOH discretization, Riccati synthesis,
-    generated numeric design matrices
-
-plant-observation
-    raw values, timing, quality, acquisition status
-
-mpu6050
-    device protocol and nominal transfer functions
-
-sensor-calibration
-    measured sensor-frame correction
-
-frame-transform
-    sensor-frame to robot-body rotation
-
-robot-domain
-    robot state, physical control demand, actuator roles
-
-reference-assembly
-    installed actuator roles and demand-to-plant-input allocation
-
-runtime-state
-    operating state, sensor timing health, limits,
-    physical-output authority
-```
-
-## Plant-model boundary
-
-The physical robot and the balance controller use different model scopes.
-
-The full robot configuration retains planar pose, yaw, body attitude, and motor-relative wheel coordinates:
-
-```text
-q_full = [world x, world y, yaw, pitch, roll,
-          drive-wheel relative angle, reaction-wheel relative angle]^T
-```
-
-The single-wheel ground contact is nonholonomic, so the full configuration does not imply independent generalized velocities.
-
-The current upright / straight-line balance reduction is:
-
-```text
-q_b = [forward displacement, pitch, roll, reaction-wheel relative angle]^T
-u_ref = [drive torque, reaction-wheel torque]^T
-```
-
-with the drive-wheel relative coordinate eliminated by the local pure-rolling relation.
-
-The reduced nonlinear model is represented as
-
-```text
-M(q_b, p) q_b_ddot
-+ c(q_b, q_b_dot, p)
-+ g(q_b, p)
-+ d(q_b_dot, p)
-=
-B(p) u_ref
-```
-
-Roll and pitch are not assumed decoupled. Any reduction or decoupling must emerge from model structure, operating-region analysis, or physical correlation.
-
-Yaw remains part of the full robot model even though it is not currently part of the reduced balance state. Turning, path following, and finite-speed gyroscopic coupling belong to the wider nonholonomic mobility problem rather than being hidden inside ad-hoc balance terms.
-
-See [`plant_model.md`](plant_model.md).
-
-## Measurement-model boundary
-
-The estimator does not treat calibrated sensor values as if they were state variables. It compares physical body-frame observations against
-
-```text
-y = h(x, u, p)
-```
-
-or the stationary-upright local form
-
-```text
-y = y_0 + C x + D u
-```
-
-The current measurement model includes:
-
-```text
-body-frame accelerometer specific force
-body-frame gyroscope angular rate
-drive-wheel relative encoder angle
-reaction-wheel relative encoder rate
-```
-
-The accelerometer equation includes gravity, translational acceleration, angular acceleration at the IMU lever arm, and direct actuator feedthrough. Accelerometer output is therefore not promoted to a geometric tilt angle before estimation.
-
-The ideal local seven-state balance plant is structurally observable from encoder/gyro channels alone. This does not remove the accelerometer from the estimator: real bias, scale, timing, noise, vibration, and model error make independent specific-force evidence valuable.
-
-Encoder scale/sign and IMU placement remain physical evidence requirements. Until measured, raw counts and an assumed lever arm are not promoted into the numeric measurement model.
-
-See [`measurement_model.md`](measurement_model.md).
-
-## Estimation and control boundary
-
-The current reduced controller state is
+The full robot configuration retains planar pose, yaw, body attitude, drive-wheel motion, and reaction-wheel motion. The reduced upright control state is
 
 ```text
 x = [
@@ -227,41 +112,100 @@ x = [
 ]^T
 ```
 
-The real-time observer uses the exact discrete plant generated for the configured sample period:
+with plant input
 
 ```text
-x_pred[k] = A_d x_hat[k-1] + B_d u[k-1]
-
-innovation[k]
-    = y[k] - y_0 - C x_pred[k] - D u[k]
-
-x_hat[k] = x_pred[k] + L innovation[k]
+u = [drive-wheel torque, reaction-wheel torque]^T
 ```
 
-Prediction input and measurement-feedthrough input remain separate arguments because they refer to different physical intervals.
-
-The state-feedback boundary is
+The nonlinear plant contract is
 
 ```text
-u[k] = u_ff[k] - K (x_hat[k] - x_ref[k])
+M(q, p) q_ddot
++ c(q, q_dot, p)
++ g(q, p)
++ d(q_dot, p)
+= B(p) u
 ```
 
-with optional LQI integral state when tracking requires it. LQI integration can be explicitly held when runtime authority denies or constrains actuation.
+Roll and pitch are not assumed globally decoupled. The stationary-upright model may expose local pitch/drive and roll/reaction-wheel structure; any such decoupling is a model result rather than a platform axiom.
 
-`GeneralizedDemand` is expressed in physical torque units for the two populated plant inputs:
+## Measurement boundary
+
+The estimator compares physical body-frame observations against
 
 ```text
-drive-wheel torque
-reaction-wheel torque
+y = h(x, u, p)
 ```
 
-It is not PWM, duty, timer compare, or motor-driver polarity. The current reference assembly maps those two semantic efforts one-to-one into the plant input vector, while board/electrical mapping remains downstream.
+or its local upright form
 
-Numeric `A_d`, `B_d`, `L`, `K`, and optional LQI matrices are synthesized on the host from evidenced physical parameters. The STM32 executes those matrices deterministically and does not solve matrix exponentials or Riccati equations at runtime.
+```text
+y = y_0 + C x + D u
+```
 
-All Cortex-M fixed-size products used by the measurement model, observer, LQR, and LQI are routed through `swp-dsp-kernel` to CMSIS-DSP. There is no parallel scalar production implementation. The non-ARM backend exists only to preserve semantic unit testing on hosts that cannot link an ARM CMSIS-DSP archive.
+The current measurement channels are body accelerometer specific force, body gyroscope rate, drive-wheel relative encoder angle, and reaction-wheel relative encoder rate.
 
-See [`state_estimation_and_control.md`](state_estimation_and_control.md).
+The accelerometer model includes gravity, translational acceleration, IMU lever-arm angular acceleration, rotational terms, and actuator feedthrough. Raw acceleration is not silently promoted into a geometric tilt angle by the architecture.
+
+## Control causality
+
+One physical control opportunity is
+
+```text
+measurement[k]
+      |
+      v
+StateEstimator using applied u[k-1]
+      |
+      v
+EstimatedState[k]
+      |
+      v
+LQR / LQI
+      |
+      v
+requested torque[k]
+      |
+      v
+Actuator inverse model
+      |
+      v
+bounded command[k]
+      |
+      v
+RuntimeAuthority
+      |
+      v
+applied input[k]
+      |
+      +------> estimator[k+1]
+```
+
+Requested torque, bounded actuator command, authorized actuation, and physical electrical output are distinct meanings.
+
+LQI integration advances only when the candidate actuation remains authorized and unconstrained. Runtime authority therefore owns anti-windup permission rather than hidden controller saturation.
+
+## Parameter provenance
+
+Reference-backed nominal values are valid initial engineering inputs. Evidence changes confidence and correlation quality; it does not gate the existence of the software architecture.
+
+Supported provenance classes are
+
+```text
+measured
+identified
+datasheet
+reference-platform
+literature
+derived
+nominal
+unknown
+```
+
+A value may move from nominal/reference to measured/identified without changing its physical meaning or software interface.
+
+External platforms are used for method and range evidence, not blind gain copying. The Mini-Wheelbot is a useful executable reference for nonlinear Wheelbot dynamics, complementary-class estimation, upright LQR, and nonlinear system identification. Wheel-E is useful literature evidence for nonlinear Lagrangian modeling, friction modeling, Kalman/LQG evaluation, and STM32 real-time architecture.
 
 ## Hardware ownership
 
@@ -272,21 +216,19 @@ board-one-v2
 reference-assembly
     installed hardware and board-channel-to-role mapping
 
-firmware/stm32f103
-    concrete STM32 peripheral ownership and RTIC execution
+firmware
+    concrete STM32 peripheral ownership and real-time execution
 ```
 
-The current reference assembly has two populated balance actuators:
+Reference assembly:
 
 ```text
 BLDC_1 / Encoder_1 -> ReactionWheel
 BLDC_2 / Encoder_2 -> DriveWheel
-BLDC_3             -> unused by the reference assembly
+BLDC_3             -> unused
 ```
 
-Board capability, assembly population, and robot semantics remain separate types of information.
-
-## Body frame
+Body frame:
 
 ```text
 +X = forward
@@ -294,89 +236,89 @@ Board capability, assembly population, and robot semantics remain separate types
 +Z = up
 ```
 
-Roll, pitch, and yaw follow the right-hand rule about +X, +Y, and +Z respectively.
+## Real-time boundary
 
-## Measurement timing and quality
-
-Physical source-sample time, DATA_RDY event service time, peripheral capture time, readout completion time, and transmission time are distinct.
-
-The MPU6050 INT pin is routed to PC13 / EXTI13 and the current runtime enables DATA_RDY. Successful interrupt-triggered reads are freshness-verified. EXTI task entry is timestamped with DWT, but that timestamp is not the MPU6050 internal sensing instant; `source_sample_at_us` therefore remains `Unknown` and sensor-filter delay remains explicit.
-
-DATA_RDY drives the 500 Hz acquisition boundary, while TIM1 independently supervises it at 1 kHz. `SensorTimingMonitor` requires an observed inter-event cadence before declaring the boundary healthy, then classifies elapsed DATA_RDY time as `Healthy`, `Late`, or `Timeout`. A sensor interrupt cannot be responsible for detecting its own disappearance.
-
-`MeasurementQuality` carries independent availability, I/O, timing, freshness, saturation, staleness, and retry state. `AcquisitionStatus` exposes DATA_RDY presence and timing-health state. A mathematically valid sensor model does not make stale or mistimed data valid.
-
-The state estimator accepts explicit timing validity and required-measurement availability. Invalid timing, missing required channels, non-finite input, or numerical failure invalidates the estimate instead of fabricating continuity.
-
-## Runtime authority
-
-The operating-state model is:
+Reference target: STM32F103C8T6.
 
 ```text
-Boot
-  -> HardwareCheck
-  -> Standby
-  -> CaptureWindow
-  -> Balancing
-       |-> MomentumLimited
-       |-> Fault
+PC13 / EXTI13   MPU6050 DATA_RDY -> 500 Hz control opportunity
+TIM1            1 kHz sensor-timing watchdog
+TIM2            Encoder_1 QEI
+TIM4            Encoder_2 QEI
+ADC1 / PA5      battery observation
+USART2 / DMA    asynchronous telemetry transport
 ```
 
-Only authorized closed-loop states may reach physical outputs. Reaction-wheel speed/headroom and primary sensor timing are independent authority constraints. `Balancing` or `MomentumLimited` may receive closed-loop authority only when primary sensor timing is `Healthy`; `Startup`, `Late`, and `Timeout` deny physical output authority.
+Control never blocks on BLE, UART, display, storage, or host traffic. One DATA_RDY event creates at most one control opportunity; missed periods are not replayed as catch-up control.
 
-Estimated-state validity is also a required physical-output condition before control is instantiated in firmware. The estimator core already exposes `Valid` / `Invalid`; physical actuation remains disabled until runtime composition connects that validity into the authority boundary together with measured actuator limits.
+The MPU6050 path remains raw DATA_RDY acquisition. Vendor DMP output is not part of the canonical estimator interface.
 
-The current firmware remains observation-only, so these contracts are established before motor output exists rather than added after balancing is enabled.
-
-## Real-time runtime
-
-The STM32F103 target uses Rust `no_std`, `embedded-hal` 1.0, `stm32f1xx-hal`, RTIC, and CMSIS-DSP.
-
-The target composition is:
+## Commissioning modes
 
 ```text
-DWT            monotonic acquisition timing
-PB8/PB9        software I2C -> MPU6050
-PC13/EXTI13    MPU6050 DATA_RDY -> 500 Hz acquisition task
-TIM1           independent 1 kHz sensor-timing watchdog
-TIM2           Encoder_1 QEI
-TIM4           Encoder_2 QEI
-ADC1 / PA5     battery ADC
-USART2_TX      ECB02S2 wireless record transport
-DMA1 channel 7 USART2 TX record transfer
-USART1         wired engineering interface
-PB4/PB5        OLED status interface
+observation
+    sensor acquisition and evidence recording
+
+live-shadow
+    full estimator/control/authority computation with motor electrical ownership absent
+
+closed-loop
+    estimator -> control -> authority -> electrical output
 ```
 
-Task priority follows control relevance:
+These are operating modes around one architecture, not separate platform identities.
+
+## Host / MCU split
+
+Host engineering owns:
 
 ```text
-TIM1 timing health     priority 3
-MPU DATA_RDY / EXTI13  priority 2
-USART2 TX DMA complete priority 1
+symbolic / nonlinear model derivation
+system identification
+parameter correlation
+exact zero-order-hold discretization
+observer / EKF design quantities
+LQR / LQI synthesis
+closed-loop analysis
 ```
 
-Control/acquisition work does not block on UART, BLE, display rendering, storage, or host traffic. The previous per-byte USART2 TXE interrupt path is replaced by DMA1 channel 7; an 80-byte record is transferred without 80 CPU service interrupts.
-
-DMA is used where the hardware request topology creates a real reduction in CPU service work. MPU acquisition remains software I2C because the board routes PB8/PB9 opposite the STM32F103 I2C1-remap SCL/SDA assignment. DMA is not treated as a goal independent of hardware semantics.
-
-The canonical IMU path is raw 500 Hz DATA_RDY acquisition. Vendor DMP output is not part of the control architecture.
-
-The `state-estimator` and `state-feedback` crates are implemented, but numeric reference-platform gains are not instantiated in firmware until the parameter/calibration/actuator evidence required by synthesis is available.
-
-## Interface roles
+STM32 execution owns:
 
 ```text
-USART2 + ECB02S2
-    wireless `RecordedObservation` transport for the mobile platform
-
-USART1
-    wired bench / engineering interface
-
-OLED
-    optional local status interface
+sensor semantics
+state estimation
+state feedback
+actuator inversion
+runtime authority
+electrical output
 ```
 
-The host-side BLE observer reassembles the byte stream independently of BLE packet boundaries and preserves the canonical binary records for decode and replay. DMA boundaries are likewise not record semantics.
+Fixed-size Cortex-M numerical kernels use `swp-dsp-kernel` backed by CMSIS-DSP. The MCU does not solve Riccati equations or matrix exponentials at runtime.
 
-Transport and UI components may observe state or submit validated requests; they do not own physical semantics or bypass runtime authority.
+## Engineering loop
+
+```text
+reference / datasheet / literature
+              |
+              v
+       nominal parameter set
+              |
+              v
+       executable model
+              |
+              v
+ estimator + controller + authority
+              |
+              v
+        physical robot
+              |
+              v
+ measurement / system identification
+              |
+              v
+       model correlation
+              |
+              +--------> replace nominal assumptions
+```
+
+The architecture is complete first; physical evidence progressively improves the model, estimator, controller, and authority envelope.
