@@ -108,7 +108,8 @@ impl StaticActuatorModel {
             required_motor_torque / self.parameters.torque_per_effective_command_nm;
         let saturated = required_effective.abs() > 1.0;
         let bounded_effective = required_effective.clamp(-1.0, 1.0);
-        let raw_command = inverse_effective_command(bounded_effective, self.parameters.command_deadzone);
+        let raw_command =
+            inverse_effective_command(bounded_effective, self.parameters.command_deadzone);
         let command = NormalizedCommand::new(raw_command).expect("bounded inverse command");
         let predicted_torque_nm = self.torque_from_command(command, operating_point)?;
 
@@ -195,10 +196,8 @@ mod tests {
     use super::*;
 
     fn model() -> StaticActuatorModel {
-        StaticActuatorModel::new(
-            ActuatorParameters::new(0.2, 0.1, 0.001, 0.01, 0.5).unwrap(),
-        )
-        .unwrap()
+        StaticActuatorModel::new(ActuatorParameters::new(0.2, 0.1, 0.001, 0.01, 0.5).unwrap())
+            .unwrap()
     }
 
     #[test]
@@ -206,7 +205,9 @@ mod tests {
         let torque = model()
             .torque_from_command(
                 NormalizedCommand::new(0.05).unwrap(),
-                ActuatorOperatingPoint { speed_rad_per_s: 0.0 },
+                ActuatorOperatingPoint {
+                    speed_rad_per_s: 0.0,
+                },
             )
             .unwrap();
         assert_eq!(torque, TorqueNm(0.0));
@@ -214,7 +215,9 @@ mod tests {
 
     #[test]
     fn inverse_model_recovers_requested_torque_inside_authority() {
-        let operating_point = ActuatorOperatingPoint { speed_rad_per_s: 10.0 };
+        let operating_point = ActuatorOperatingPoint {
+            speed_rad_per_s: 10.0,
+        };
         let command = model()
             .command_for_torque(TorqueNm(0.08), operating_point)
             .unwrap();
@@ -227,7 +230,9 @@ mod tests {
         let command = model()
             .command_for_torque(
                 TorqueNm(1.0),
-                ActuatorOperatingPoint { speed_rad_per_s: 0.0 },
+                ActuatorOperatingPoint {
+                    speed_rad_per_s: 0.0,
+                },
             )
             .unwrap();
         assert!(command.saturated);
