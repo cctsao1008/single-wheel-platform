@@ -1,11 +1,7 @@
 #![no_std]
 
 use stm32f1xx_hal::{
-    gpio::{
-        Output, PushPull,
-        gpioa::PA4,
-        gpiob::PB11,
-    },
+    gpio::{Output, PushPull, gpioa::PA4, gpiob::PB11},
     pac,
     timer::{C1, C4, PwmChannel},
 };
