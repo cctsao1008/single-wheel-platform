@@ -1,0 +1,36 @@
+name: Fix EKF no-std trig
+
+on:
+  push:
+    branches: [production-ekf-control]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: production-ekf-control
+      - name: Replace core-incompatible f32 trig
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('crates/ekf/src/lib.rs')
+          s = p.read_text()
+          s = s.replace('theta.sin()', 'libm::sinf(theta)')
+          s = s.replace('theta.cos()', 'libm::cosf(theta)')
+          s = s.replace('phi.sin()', 'libm::sinf(phi)')
+          s = s.replace('phi.cos()', 'libm::cosf(phi)')
+          p.write_text(s)
+          PY
+          rm .github/workflows/fix-ekf-no-std-trig.yml
+      - name: Commit fix
+        run: |
+          git config user.name Cheng
+          git config user.email chiacheng.tsao@gmail.com
+          git add -A
+          git commit -m "Use libm for no_std EKF trigonometry"
+          git push origin HEAD:production-ekf-control
