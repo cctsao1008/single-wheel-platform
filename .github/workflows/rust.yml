@@ -28,6 +28,8 @@ jobs:
         run: cargo test -p swp-state-estimator --target x86_64-unknown-linux-gnu
       - name: State feedback tests
         run: cargo test -p swp-state-feedback --target x86_64-unknown-linux-gnu
+      - name: Control runtime tests
+        run: cargo test -p swp-control-runtime --target x86_64-unknown-linux-gnu
       - name: Actuator model tests
         run: cargo test -p swp-actuator-model --target x86_64-unknown-linux-gnu
       - name: Reference assembly mapping tests
