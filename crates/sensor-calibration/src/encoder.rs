@@ -259,7 +259,8 @@ mod tests {
 
     #[test]
     fn first_sample_defines_relative_zero_without_inventing_rate() {
-        let mut tracker = EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
+        let mut tracker =
+            EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
         let first = tracker.observe(raw(12_345, 1_000)).unwrap();
         assert_eq!(first.relative_angle_rad, 0.0);
         assert_eq!(first.relative_rate_rad_per_s, None);
@@ -267,12 +268,14 @@ mod tests {
 
     #[test]
     fn counter_wrap_is_unwrapped_in_both_directions() {
-        let mut forward = EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
+        let mut forward =
+            EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
         forward.observe(raw(65_534, 1_000)).unwrap();
         let next = forward.observe(raw(2, 3_000)).unwrap();
         assert!((next.relative_angle_rad - 4.0 * TAU / 1_000.0).abs() < 1.0e-6);
 
-        let mut reverse = EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
+        let mut reverse =
+            EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
         reverse.observe(raw(2, 1_000)).unwrap();
         let next = reverse.observe(raw(65_534, 3_000)).unwrap();
         assert!((next.relative_angle_rad + 4.0 * TAU / 1_000.0).abs() < 1.0e-6);
@@ -280,7 +283,8 @@ mod tests {
 
     #[test]
     fn mechanical_sign_is_explicit() {
-        let mut tracker = EncoderTracker::new(transfer(EncoderPositiveDirection::CounterDecreasing));
+        let mut tracker =
+            EncoderTracker::new(transfer(EncoderPositiveDirection::CounterDecreasing));
         tracker.observe(raw(100, 1_000)).unwrap();
         let next = tracker.observe(raw(110, 3_000)).unwrap();
         assert!(next.relative_angle_rad < 0.0);
@@ -289,7 +293,8 @@ mod tests {
 
     #[test]
     fn delta_beyond_physical_unwrap_contract_is_rejected_without_advancing_state() {
-        let mut tracker = EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
+        let mut tracker =
+            EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
         tracker.observe(raw(100, 1_000)).unwrap();
         assert_eq!(
             tracker.observe(raw(250, 3_000)),
@@ -304,7 +309,8 @@ mod tests {
 
     #[test]
     fn unknown_or_nonmonotonic_time_is_rejected() {
-        let mut tracker = EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
+        let mut tracker =
+            EncoderTracker::new(transfer(EncoderPositiveDirection::CounterIncreasing));
         let mut sample = raw(10, 1_000);
         sample.captured_at_us = TimestampEvidence::Unknown;
         assert_eq!(
