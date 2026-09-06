@@ -27,6 +27,7 @@ members = [
     "firmware/targets/stm32f103/one-v2-pwm-dir",
     "firmware/targets/stm32f103/control-footprint",
     "firmware/targets/stm32f103/live-shadow",
+    "firmware/targets/stm32f103/control-shadow",
 ]
 
 [workspace.package]

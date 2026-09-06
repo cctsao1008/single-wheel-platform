@@ -68,3 +68,5 @@ jobs:
         run: cargo build -p swp-control-footprint-stm32f103 --release --target thumbv7m-none-eabi
       - name: Link live shadow-control profiler
         run: cargo build -p swp-live-shadow-stm32f103 --release --target thumbv7m-none-eabi
+      - name: Link non-actuating control shadow runtime
+        run: cargo build -p swp-control-shadow-stm32f103 --release --target thumbv7m-none-eabi
