@@ -41,7 +41,7 @@ mod app {
     struct Local {}
 
     #[init]
-    fn init(mut ctx: init::Context) -> (Shared, Local) {
+    fn init(ctx: init::Context) -> (Shared, Local) {
         let mut dcb = ctx.core.DCB;
         let mut dwt = ctx.core.DWT;
         dcb.enable_trace();
@@ -50,7 +50,7 @@ mod app {
         // DWT makes the fixture data runtime-dependent so LTO cannot fold the
         // complete control path into a compile-time constant.
         let seed = DWT::cycle_count();
-        core::hint::black_box(run_probe(seed));
+        let _ = core::hint::black_box(run_probe(seed));
 
         (Shared {}, Local {})
     }
