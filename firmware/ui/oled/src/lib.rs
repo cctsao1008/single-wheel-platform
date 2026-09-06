@@ -236,8 +236,8 @@ fn write_signed(row: &mut [u8; OLED_TEXT_COLUMNS], label: &[u8], value: i32) {
 
 fn write_hex32(row: &mut [u8; OLED_TEXT_COLUMNS], label: &[u8], value: u32) {
     write_bytes(row, 0, label);
-    let mut cursor = label.len();
-    for shift in (0..8).rev() {
+    for (offset, shift) in (0..8).rev().enumerate() {
+        let cursor = label.len() + offset;
         if cursor >= row.len() {
             break;
         }
@@ -247,7 +247,6 @@ fn write_hex32(row: &mut [u8; OLED_TEXT_COLUMNS], label: &[u8], value: u32) {
         } else {
             b'A' + nibble - 10
         };
-        cursor += 1;
     }
 }
 
