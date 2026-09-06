@@ -1,0 +1,28 @@
+[package]
+name = "swp-live-shadow-stm32f103"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+cortex-m.workspace = true
+heapless.workspace = true
+panic-halt.workspace = true
+rtic.workspace = true
+stm32f1xx-hal.workspace = true
+swp-actuator-model = { path = "../../crates/actuator-model" }
+swp-board-one-v2 = { path = "../../crates/board-one-v2" }
+swp-control-profile-record = { path = "../../crates/control-profile-record" }
+swp-frame-transform = { path = "../../crates/frame-transform" }
+swp-measurement-model = { path = "../../crates/measurement-model" }
+swp-mpu6050 = { path = "../../crates/mpu6050" }
+swp-plant-model = { path = "../../crates/plant-model" }
+swp-plant-observation = { path = "../../crates/plant-observation" }
+swp-robot-domain = { path = "../../crates/robot-domain" }
+swp-runtime-state = { path = "../../crates/runtime-state" }
+swp-sensor-calibration = { path = "../../crates/sensor-calibration" }
+swp-software-i2c = { path = "../../crates/software-i2c" }
+swp-state-estimator = { path = "../../crates/state-estimator" }
+swp-state-feedback = { path = "../../crates/state-feedback" }
