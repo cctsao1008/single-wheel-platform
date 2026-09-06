@@ -34,6 +34,8 @@ jobs:
         run: cargo test -p swp-control-runtime --target x86_64-unknown-linux-gnu
       - name: Actuator model tests
         run: cargo test -p swp-actuator-model --target x86_64-unknown-linux-gnu
+      - name: Control profile record tests
+        run: cargo test -p swp-control-profile-record --target x86_64-unknown-linux-gnu
       - name: Reference assembly mapping tests
         run: cargo test -p swp-reference-assembly --target x86_64-unknown-linux-gnu
       - name: Sensor transfer and calibration tests
@@ -60,3 +62,5 @@ jobs:
         run: cargo build -p swp-stm32f103 --release --target thumbv7m-none-eabi
       - name: Link control footprint probe
         run: cargo build -p swp-control-footprint-stm32f103 --release --target thumbv7m-none-eabi
+      - name: Link live shadow-control profiler
+        run: cargo build -p swp-live-shadow-stm32f103 --release --target thumbv7m-none-eabi

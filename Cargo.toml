@@ -9,6 +9,7 @@ members = [
     "crates/state-feedback",
     "crates/control-runtime",
     "crates/actuator-model",
+    "crates/control-profile-record",
     "crates/reference-assembly",
     "crates/plant-observation",
     "crates/sensor-calibration",
@@ -21,6 +22,7 @@ members = [
     "crates/board-one-v2",
     "firmware/stm32f103",
     "firmware/control-footprint-stm32f103",
+    "firmware/live-shadow-stm32f103",
 ]
 
 [workspace.package]
