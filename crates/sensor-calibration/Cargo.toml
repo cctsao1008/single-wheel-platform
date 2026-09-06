@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+swp-dsp-kernel = { path = "../dsp-kernel" }
 swp-mpu6050 = { path = "../mpu6050" }
 swp-plant-observation = { path = "../plant-observation" }
 

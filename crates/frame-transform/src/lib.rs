@@ -1,5 +1,6 @@
 #![no_std]
 
+use swp_dsp_kernel::dot_f32;
 use swp_plant_observation::{MeasurementQuality, TimestampEvidence};
 use swp_sensor_calibration::{
     AccelerationVectorMps2, AngularRateVectorRadPerSec, CalibratedImuObservation,
@@ -53,14 +54,14 @@ impl SensorToBodyRotation {
 
         let rows = matrix;
         for row in rows {
-            if (dot(row, row) - 1.0).abs() > Self::ORTHONORMAL_TOLERANCE {
+            if (dot_f32(&row, &row) - 1.0).abs() > Self::ORTHONORMAL_TOLERANCE {
                 return None;
             }
         }
 
-        if dot(rows[0], rows[1]).abs() > Self::ORTHONORMAL_TOLERANCE
-            || dot(rows[0], rows[2]).abs() > Self::ORTHONORMAL_TOLERANCE
-            || dot(rows[1], rows[2]).abs() > Self::ORTHONORMAL_TOLERANCE
+        if dot_f32(&rows[0], &rows[1]).abs() > Self::ORTHONORMAL_TOLERANCE
+            || dot_f32(&rows[0], &rows[2]).abs() > Self::ORTHONORMAL_TOLERANCE
+            || dot_f32(&rows[1], &rows[2]).abs() > Self::ORTHONORMAL_TOLERANCE
         {
             return None;
         }
@@ -78,9 +79,9 @@ impl SensorToBodyRotation {
 
     pub fn apply(self, sensor_vector: [f32; 3]) -> [f32; 3] {
         [
-            dot(self.matrix[0], sensor_vector),
-            dot(self.matrix[1], sensor_vector),
-            dot(self.matrix[2], sensor_vector),
+            dot_f32(&self.matrix[0], &sensor_vector),
+            dot_f32(&self.matrix[1], &sensor_vector),
+            dot_f32(&self.matrix[2], &sensor_vector),
         ]
     }
 }
@@ -127,10 +128,6 @@ pub fn map_calibrated_imu_to_body(
         calibration_evidence,
         frame_evidence,
     })
-}
-
-fn dot(lhs: [f32; 3], rhs: [f32; 3]) -> f32 {
-    lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2]
 }
 
 fn determinant(matrix: [[f32; 3]; 3]) -> f32 {
