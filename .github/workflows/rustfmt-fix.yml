@@ -1,0 +1,35 @@
+name: One-shot rustfmt fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/rustfmt-fix.yml
+      - control/velocity-loop/**
+      - supervisor/runtime-supervisor/**
+      - infrastructure/runtime-observation-record/**
+      - firmware/targets/stm32f103/runtime-shadow/**
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: rustup show
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Commit formatting if needed
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Format runtime supervision"
+          git push
