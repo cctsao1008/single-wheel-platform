@@ -37,6 +37,7 @@ members = [
     "firmware/targets/stm32f103/control-shadow",
     "firmware/targets/stm32f103/runtime-shadow",
     "firmware/targets/stm32f103/io-shadow",
+    "tools/sitl",
 ]
 
 [workspace.package]
