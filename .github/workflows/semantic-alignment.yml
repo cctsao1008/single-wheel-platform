@@ -50,25 +50,35 @@ jobs:
           test -f firmware/recording/control-profile-record/Cargo.toml
           test ! -e infrastructure
 
-          git grep -Ilz \
+          matches="$(git grep -Il \
             -e 'plant-model' \
             -e 'plant_model' \
-            -- . ':(exclude).github/workflows/**' \
-            | xargs -0 -r sed -i \
+            -- . ':(exclude).github/workflows/**' || true)"
+          if [ -n "$matches" ]; then
+            while IFS= read -r file; do
+              sed -i \
                 -e 's#plant-model#dynamics-model#g' \
-                -e 's#plant_model#dynamics_model#g'
+                -e 's#plant_model#dynamics_model#g' \
+                "$file"
+            done <<< "$matches"
+          fi
 
-          git grep -Ilz \
+          matches="$(git grep -Il \
             -e 'infrastructure/dsp-kernel' \
             -e 'infrastructure/observation-record' \
             -e 'infrastructure/runtime-observation-record' \
             -e 'infrastructure/control-profile-record' \
-            -- . ':(exclude).github/workflows/**' \
-            | xargs -0 -r sed -i \
+            -- . ':(exclude).github/workflows/**' || true)"
+          if [ -n "$matches" ]; then
+            while IFS= read -r file; do
+              sed -i \
                 -e 's#infrastructure/dsp-kernel#support/dsp-kernel#g' \
                 -e 's#infrastructure/observation-record#firmware/recording/observation-record#g' \
                 -e 's#infrastructure/runtime-observation-record#firmware/recording/runtime-observation-record#g' \
-                -e 's#infrastructure/control-profile-record#firmware/recording/control-profile-record#g'
+                -e 's#infrastructure/control-profile-record#firmware/recording/control-profile-record#g' \
+                "$file"
+            done <<< "$matches"
+          fi
 
           sed -i \
             -e 's#path = "../../plant/#path = "../../../plant/#g' \
