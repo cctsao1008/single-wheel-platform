@@ -3,7 +3,9 @@ pub mod scenario;
 pub mod scheduler;
 pub mod virtual_time;
 
-use evidence::{Manifest, SITL_SCHEMA_VERSION, Summary, TraceRecord, append_json_line, pretty_json};
+use evidence::{
+    Manifest, SITL_SCHEMA_VERSION, Summary, TraceRecord, append_json_line, pretty_json,
+};
 use scenario::Scenario;
 use scheduler::{DeterministicScheduler, SemanticPhase};
 use serde_json::json;
