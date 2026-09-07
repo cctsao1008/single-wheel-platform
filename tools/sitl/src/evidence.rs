@@ -11,6 +11,9 @@ pub struct Manifest<'a> {
     pub scenario: &'a str,
     pub seed: u64,
     pub duration_us: u64,
+    pub sensor_period_us: u64,
+    pub runtime_period_us: u64,
+    pub missed_runtime_at_us: &'a [u64],
     pub production_model_configuration: Value,
     pub virtual_physical_truth_configuration: Value,
 }
@@ -30,9 +33,12 @@ pub struct Summary<'a> {
     pub schema_version: u32,
     pub scenario: &'a str,
     pub pass: bool,
+    pub scheduled_sensor_samples: u64,
+    pub delivered_observations: u64,
     pub scheduled_control_opportunities: u64,
     pub admitted_control_opportunities: u64,
     pub missed_control_opportunities: u64,
+    pub actuation_commits: u64,
 }
 
 pub fn pretty_json<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
