@@ -164,11 +164,7 @@ impl DeterministicScheduler {
         self.now = at;
 
         let mut events = vec![first];
-        while self
-            .queue
-            .peek()
-            .is_some_and(|event| event.0.at == at)
-        {
+        while self.queue.peek().is_some_and(|event| event.0.at == at) {
             events.push(self.queue.pop().expect("peeked event must exist").0);
         }
         events.sort_by_key(|event| (event.phase, event.insertion_sequence));
@@ -221,10 +217,7 @@ mod tests {
             .schedule(VirtualTime::from_micros(5_000), EventKind::SensorSample)
             .unwrap();
         scheduler
-            .schedule(
-                VirtualTime::from_micros(10_000),
-                EventKind::SensorSample,
-            )
+            .schedule(VirtualTime::from_micros(10_000), EventKind::SensorSample)
             .unwrap();
 
         let first = scheduler.next_slice().unwrap();
