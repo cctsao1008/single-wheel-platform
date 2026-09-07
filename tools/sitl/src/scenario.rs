@@ -1,24 +1,164 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+use std::fs;
+use std::path::Path;
+
+use serde::Deserialize;
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Scenario {
-    pub name: &'static str,
+    pub id: String,
     pub duration_us: u64,
-    pub opportunity_period_us: u64,
     pub seed: u64,
-    pub missed_control_at_us: Option<u64>,
+    pub sensor_period_us: u64,
+    pub runtime_period_us: u64,
+    #[serde(default)]
+    pub missed_runtime_at_us: Vec<u64>,
+}
+
+#[derive(Debug)]
+pub enum ScenarioError {
+    Io(std::io::Error),
+    Parse(toml::de::Error),
+    EmptyId,
+    ZeroSensorPeriod,
+    ZeroRuntimePeriod,
+    MissedRuntimeOutOfRange(u64),
+    MissedRuntimeOffGrid(u64),
+    MissedRuntimeNotStrictlyIncreasing,
+}
+
+impl Display for ScenarioError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "failed to read scenario: {error}"),
+            Self::Parse(error) => write!(formatter, "failed to parse scenario: {error}"),
+            Self::EmptyId => write!(formatter, "scenario id must not be empty"),
+            Self::ZeroSensorPeriod => write!(formatter, "sensor period must be greater than zero"),
+            Self::ZeroRuntimePeriod => write!(formatter, "runtime period must be greater than zero"),
+            Self::MissedRuntimeOutOfRange(at) => write!(
+                formatter,
+                "missed runtime opportunity {at} us exceeds scenario duration"
+            ),
+            Self::MissedRuntimeOffGrid(at) => write!(
+                formatter,
+                "missed runtime opportunity {at} us is not aligned to the runtime period"
+            ),
+            Self::MissedRuntimeNotStrictlyIncreasing => write!(
+                formatter,
+                "missed runtime opportunities must be unique and strictly increasing"
+            ),
+        }
+    }
+}
+
+impl Error for ScenarioError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            Self::Parse(error) => Some(error),
+            _ => None,
+        }
+    }
 }
 
 impl Scenario {
-    pub const fn deterministic_baseline() -> Self {
-        Self {
-            name: "deterministic-baseline",
-            duration_us: 100_000,
-            opportunity_period_us: 5_000,
-            seed: 0x5357_5001,
-            missed_control_at_us: Some(50_000),
+    pub fn load(path: &Path) -> Result<Self, ScenarioError> {
+        let source = fs::read_to_string(path).map_err(ScenarioError::Io)?;
+        let scenario: Self = toml::from_str(&source).map_err(ScenarioError::Parse)?;
+        scenario.validate()?;
+        Ok(scenario)
+    }
+
+    pub fn validate(&self) -> Result<(), ScenarioError> {
+        if self.id.trim().is_empty() {
+            return Err(ScenarioError::EmptyId);
+        }
+        if self.sensor_period_us == 0 {
+            return Err(ScenarioError::ZeroSensorPeriod);
+        }
+        if self.runtime_period_us == 0 {
+            return Err(ScenarioError::ZeroRuntimePeriod);
+        }
+
+        let mut previous = None;
+        for &at in &self.missed_runtime_at_us {
+            if at > self.duration_us {
+                return Err(ScenarioError::MissedRuntimeOutOfRange(at));
+            }
+            if at % self.runtime_period_us != 0 {
+                return Err(ScenarioError::MissedRuntimeOffGrid(at));
+            }
+            if previous.is_some_and(|value| value >= at) {
+                return Err(ScenarioError::MissedRuntimeNotStrictlyIncreasing);
+            }
+            previous = Some(at);
+        }
+
+        Ok(())
+    }
+
+    pub fn runtime_is_missed(&self, at_us: u64) -> bool {
+        self.missed_runtime_at_us.binary_search(&at_us).is_ok()
+    }
+
+    pub const fn sensor_sample_count(&self) -> u64 {
+        self.duration_us / self.sensor_period_us + 1
+    }
+
+    pub const fn runtime_opportunity_count(&self) -> u64 {
+        self.duration_us / self.runtime_period_us + 1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scenario() -> Scenario {
+        Scenario {
+            id: "test".to_owned(),
+            duration_us: 20_000,
+            seed: 1,
+            sensor_period_us: 5_000,
+            runtime_period_us: 10_000,
+            missed_runtime_at_us: vec![10_000],
         }
     }
 
-    pub fn opportunity_count(self) -> u64 {
-        self.duration_us / self.opportunity_period_us + 1
+    #[test]
+    fn separate_sensor_and_runtime_cadence_counts_are_explicit() {
+        let scenario = scenario();
+        assert_eq!(scenario.sensor_sample_count(), 5);
+        assert_eq!(scenario.runtime_opportunity_count(), 3);
+    }
+
+    #[test]
+    fn aligned_missed_runtime_slots_are_valid() {
+        let scenario = scenario();
+        assert!(scenario.validate().is_ok());
+        assert!(scenario.runtime_is_missed(10_000));
+        assert!(!scenario.runtime_is_missed(20_000));
+    }
+
+    #[test]
+    fn missed_runtime_slots_must_be_strictly_increasing() {
+        let mut scenario = scenario();
+        scenario.missed_runtime_at_us = vec![10_000, 10_000];
+        assert!(matches!(
+            scenario.validate(),
+            Err(ScenarioError::MissedRuntimeNotStrictlyIncreasing)
+        ));
+    }
+
+    #[test]
+    fn missed_runtime_slots_must_match_runtime_grid() {
+        let mut scenario = scenario();
+        scenario.missed_runtime_at_us = vec![5_000];
+        assert!(matches!(
+            scenario.validate(),
+            Err(ScenarioError::MissedRuntimeOffGrid(5_000))
+        ));
     }
 }
