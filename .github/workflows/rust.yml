@@ -15,9 +15,19 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Workspace check
-        run: cargo check --workspace --target thumbv7m-none-eabi
+        run: cargo check --workspace --exclude swp-sitl --target thumbv7m-none-eabi
       - name: Clippy
-        run: cargo clippy --workspace --target thumbv7m-none-eabi -- -D warnings
+        run: cargo clippy --workspace --exclude swp-sitl --target thumbv7m-none-eabi -- -D warnings
+      - name: SITL host tests
+        run: cargo test -p swp-sitl --target x86_64-unknown-linux-gnu
+      - name: SITL deterministic evidence check
+        run: |
+          rm -rf /tmp/sitl-a /tmp/sitl-b
+          cargo run -p swp-sitl --target x86_64-unknown-linux-gnu -- --output /tmp/sitl-a
+          cargo run -p swp-sitl --target x86_64-unknown-linux-gnu -- --output /tmp/sitl-b
+          cmp /tmp/sitl-a/manifest.json /tmp/sitl-b/manifest.json
+          cmp /tmp/sitl-a/trace.jsonl /tmp/sitl-b/trace.jsonl
+          cmp /tmp/sitl-a/summary.json /tmp/sitl-b/summary.json
       - name: DSP kernel tests
         run: cargo test -p swp-dsp-kernel --target x86_64-unknown-linux-gnu
       - name: Plant model tests
