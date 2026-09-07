@@ -1,4 +1,5 @@
 /target/
+/sitl-output/
 **/*.rs.bk
 
 .vscode/
