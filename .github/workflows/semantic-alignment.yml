@@ -1,0 +1,94 @@
+name: Repository semantic alignment
+
+on:
+  push:
+    branches: [repo-semantic-alignment]
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: repo-semantic-alignment
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Align dynamics-model naming
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git mv plant/plant-model plant/dynamics-model
+
+          git grep -Ilz \
+            -e 'plant/plant-model' \
+            -e 'swp-plant-model' \
+            -e 'swp_plant_model' \
+            -- . ':(exclude).github/workflows/semantic-alignment.yml' \
+            | xargs -0 -r sed -i \
+                -e 's#plant/plant-model#plant/dynamics-model#g' \
+                -e 's#swp-plant-model#swp-dynamics-model#g' \
+                -e 's#swp_plant_model#swp_dynamics_model#g'
+
+          sed -i 's/name: Plant model tests/name: Dynamics model tests/' .github/workflows/rust.yml
+
+          rm .github/workflows/semantic-alignment.yml
+
+          if git grep -n \
+            -e 'plant/plant-model' \
+            -e 'swp-plant-model' \
+            -e 'swp_plant_model' -- .; then
+            echo 'Legacy dynamics-model naming remains in tracked text.' >&2
+            exit 1
+          fi
+
+          test -f plant/dynamics-model/Cargo.toml
+          test -f plant/dynamics-model/src/lib.rs
+          test ! -e plant/plant-model
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Workspace check
+        run: cargo check --workspace --exclude swp-sitl --target thumbv7m-none-eabi
+
+      - name: Clippy
+        run: cargo clippy --workspace --exclude swp-sitl --target thumbv7m-none-eabi -- -D warnings
+
+      - name: Affected host tests
+        run: |
+          cargo test -p swp-dynamics-model --target x86_64-unknown-linux-gnu
+          cargo test -p swp-state-feedback --target x86_64-unknown-linux-gnu
+          cargo test -p swp-velocity-loop --target x86_64-unknown-linux-gnu
+          cargo test -p swp-state-estimator --target x86_64-unknown-linux-gnu
+          cargo test -p swp-ekf --target x86_64-unknown-linux-gnu
+          cargo test -p swp-control-runtime --target x86_64-unknown-linux-gnu
+          cargo test -p swp-sitl --target x86_64-unknown-linux-gnu
+
+      - name: Firmware link checks
+        run: |
+          cargo build -p swp-stm32f103-observation --release --target thumbv7m-none-eabi
+          cargo build -p swp-control-footprint-stm32f103 --release --target thumbv7m-none-eabi
+          cargo build -p swp-live-shadow-stm32f103 --release --target thumbv7m-none-eabi
+          cargo build -p swp-control-shadow-stm32f103 --release --target thumbv7m-none-eabi
+          cargo build -p swp-runtime-shadow-stm32f103 --release --target thumbv7m-none-eabi
+          cargo build -p swp-io-shadow-stm32f103 --release --target thumbv7m-none-eabi
+
+      - name: Commit aligned tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git commit -m "Align dynamics model repository naming"
+          git push origin HEAD:repo-semantic-alignment
