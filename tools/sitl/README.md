@@ -23,12 +23,12 @@ The scheduler advances from the previous timestamp to the next timestamp before 
 ```text
 current time = t0
     -> next timestamp = t1
-    -> physical-world advance boundary [t0, t1)
+    -> PhysicalTimeAdvance [t0, t1)
     -> dispatch events at t1
 ```
 
 Plant integration is therefore a time-transition operation, not a queued event at `t1`.
-Stage 2 installs the Virtual Plant integration hook at that boundary.
+The runner exposes a `PhysicalTimeAdvance` hook and uses a no-op implementation in Stage 1. Stage 2 replaces that no-op with the project-specific Virtual Plant integration while preserving the same scheduler semantics.
 
 Events at one timestamp are ordered by:
 
@@ -89,7 +89,7 @@ virtual_physical_truth_configuration
 
 The last two fields intentionally remain distinct so future production-model assumptions and simulated physical truth can differ without losing reproducibility.
 
-`trace.jsonl` records deterministic event order. `summary.json` records sensor, runtime, missed-opportunity, and actuation-commit counts plus pass/fail.
+`trace.jsonl` records deterministic event order. `summary.json` records time slices, physical-time advances, sensor/runtime counts, missed opportunities, actuation commits, and pass/fail.
 
 CI runs the same scenario twice and requires all three evidence files to be byte-identical.
 
