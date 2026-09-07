@@ -51,8 +51,10 @@ jobs:
           test -f plant/dynamics-model/src/lib.rs
           test ! -e plant/plant-model
 
-      - name: Formatting
-        run: cargo fmt --all -- --check
+      - name: Normalize and verify formatting
+        run: |
+          cargo fmt --all
+          cargo fmt --all -- --check
 
       - name: Workspace check
         run: cargo check --workspace --exclude swp-sitl --target thumbv7m-none-eabi
