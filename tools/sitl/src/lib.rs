@@ -3,11 +3,12 @@ pub mod scenario;
 pub mod scheduler;
 pub mod virtual_time;
 
-use evidence::{
-    Manifest, SITL_SCHEMA_VERSION, Summary, TraceRecord, append_json_line, pretty_json,
-};
-use scenario::Scenario;
-use scheduler::{DeterministicScheduler, SemanticPhase};
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+
+use evidence::{Manifest, SITL_SCHEMA_VERSION, Summary, TraceRecord, append_json_line, pretty_json};
+use scenario::{Scenario, ScenarioError};
+use scheduler::{DeterministicScheduler, EventKind, ScheduleError};
 use serde_json::json;
 use virtual_time::VirtualTime;
 
@@ -18,102 +19,188 @@ pub struct RunArtifacts {
     pub summary_json: Vec<u8>,
 }
 
+#[derive(Debug)]
+pub enum RunError {
+    Scenario(ScenarioError),
+    Schedule(ScheduleError),
+    Evidence(serde_json::Error),
+    VirtualTimeOverflow,
+}
+
+impl Display for RunError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Scenario(error) => write!(formatter, "invalid SITL scenario: {error}"),
+            Self::Schedule(error) => write!(formatter, "SITL scheduling failed: {error}"),
+            Self::Evidence(error) => write!(formatter, "SITL evidence serialization failed: {error}"),
+            Self::VirtualTimeOverflow => write!(formatter, "SITL virtual time overflow"),
+        }
+    }
+}
+
+impl Error for RunError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Scenario(error) => Some(error),
+            Self::Schedule(error) => Some(error),
+            Self::Evidence(error) => Some(error),
+            Self::VirtualTimeOverflow => None,
+        }
+    }
+}
+
+impl From<ScenarioError> for RunError {
+    fn from(error: ScenarioError) -> Self {
+        Self::Scenario(error)
+    }
+}
+
+impl From<ScheduleError> for RunError {
+    fn from(error: ScheduleError) -> Self {
+        Self::Schedule(error)
+    }
+}
+
+impl From<serde_json::Error> for RunError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Evidence(error)
+    }
+}
+
 pub fn run_scenario(
     system_identifier: &str,
     git_commit: &str,
-    scenario: Scenario,
-) -> Result<RunArtifacts, serde_json::Error> {
-    assert!(scenario.opportunity_period_us > 0);
+    scenario: &Scenario,
+) -> Result<RunArtifacts, RunError> {
+    scenario.validate()?;
 
     let manifest = Manifest {
         schema_version: SITL_SCHEMA_VERSION,
         system_identifier,
         git_commit,
-        scenario: scenario.name,
+        scenario: &scenario.id,
         seed: scenario.seed,
         duration_us: scenario.duration_us,
-        production_model_configuration: json!({"mode": "not-materialized"}),
-        virtual_physical_truth_configuration: json!({"mode": "not-materialized"}),
+        sensor_period_us: scenario.sensor_period_us,
+        runtime_period_us: scenario.runtime_period_us,
+        missed_runtime_at_us: &scenario.missed_runtime_at_us,
+        production_model_configuration: json!({
+            "status": "not-materialized",
+            "stage": 1
+        }),
+        virtual_physical_truth_configuration: json!({
+            "status": "not-materialized",
+            "stage": 1
+        }),
     };
 
     let mut scheduler = DeterministicScheduler::default();
-    let mut at_us = 0_u64;
-    loop {
-        let at = VirtualTime::from_micros(at_us);
-        for phase in [
-            SemanticPhase::IntegratePlantTo,
-            SemanticPhase::PhysicalOrFaultEvent,
-            SemanticPhase::SensorSample,
-            SemanticPhase::ObservationDelivery,
-            SemanticPhase::ProductionRuntime,
-            SemanticPhase::ActuationCommit,
-        ] {
-            scheduler.schedule(at, phase);
-        }
+    scheduler.schedule(VirtualTime::ZERO, EventKind::ScenarioStart)?;
 
-        if scenario.duration_us - at_us < scenario.opportunity_period_us {
-            break;
-        }
-        at_us += scenario.opportunity_period_us;
-    }
+    schedule_periodic(
+        &mut scheduler,
+        scenario.duration_us,
+        scenario.sensor_period_us,
+        |scheduler, at| {
+            scheduler.schedule(at, EventKind::SensorSample)?;
+            scheduler.schedule(at, EventKind::ObservationDelivery)?;
+            Ok(())
+        },
+    )?;
+
+    schedule_periodic(
+        &mut scheduler,
+        scenario.duration_us,
+        scenario.runtime_period_us,
+        |scheduler, at| {
+            if scenario.runtime_is_missed(at.as_micros()) {
+                scheduler.schedule(at, EventKind::RuntimeOpportunityMissed)?;
+            } else {
+                scheduler.schedule(at, EventKind::ProductionRuntime)?;
+                scheduler.schedule(at, EventKind::ActuationCommit)?;
+            }
+            Ok(())
+        },
+    )?;
 
     let mut trace = Vec::new();
     let mut event_sequence = 0_u64;
-    let mut scheduled_control_opportunities = 0_u64;
+    let mut scheduled_sensor_samples = 0_u64;
+    let mut delivered_observations = 0_u64;
     let mut admitted_control_opportunities = 0_u64;
     let mut missed_control_opportunities = 0_u64;
+    let mut actuation_commits = 0_u64;
+    let mut physical_time = VirtualTime::ZERO;
 
-    while let Some(event) = scheduler.pop_next() {
-        let missed_here = scenario.missed_control_at_us == Some(event.at.as_micros());
-        let (record_kind, opportunity_status) = match event.phase {
-            SemanticPhase::IntegratePlantTo => ("integrate_plant_to", None),
-            SemanticPhase::PhysicalOrFaultEvent => ("physical_or_fault_phase", None),
-            SemanticPhase::SensorSample => ("sensor_sample", None),
-            SemanticPhase::ObservationDelivery => ("observation_delivery", None),
-            SemanticPhase::ProductionRuntime => {
-                scheduled_control_opportunities += 1;
-                if missed_here {
-                    missed_control_opportunities += 1;
-                    ("missed_opportunity", Some("missed"))
-                } else {
+    while let Some(slice) = scheduler.next_slice() {
+        debug_assert_eq!(slice.advance.from, physical_time);
+        debug_assert!(slice.advance.to >= slice.advance.from);
+
+        // Stage 2 installs the Virtual Plant integration hook exactly here:
+        // advance physical truth over [slice.advance.from, slice.advance.to)
+        // using the previously committed simulated physical input. This is a
+        // time-transition boundary, not a queued event at slice.advance.to.
+        physical_time = slice.advance.to;
+
+        for event in slice.events {
+            let opportunity_status = match event.kind {
+                EventKind::ProductionRuntime => {
                     admitted_control_opportunities += 1;
-                    ("control_opportunity", Some("admitted"))
+                    Some("admitted")
                 }
-            }
-            SemanticPhase::ActuationCommit => {
-                if missed_here {
-                    ("actuation_hold", None)
-                } else {
-                    ("actuation_commit", None)
+                EventKind::RuntimeOpportunityMissed => {
+                    missed_control_opportunities += 1;
+                    Some("missed")
                 }
-            }
-        };
+                EventKind::SensorSample => {
+                    scheduled_sensor_samples += 1;
+                    None
+                }
+                EventKind::ObservationDelivery => {
+                    delivered_observations += 1;
+                    None
+                }
+                EventKind::ActuationCommit => {
+                    actuation_commits += 1;
+                    None
+                }
+                EventKind::ScenarioStart => None,
+            };
 
-        append_json_line(
-            &mut trace,
-            &TraceRecord {
-                schema_version: SITL_SCHEMA_VERSION,
-                event_sequence,
-                virtual_time_us: event.at.as_micros(),
-                record_kind,
-                semantic_phase: event.phase.as_str(),
-                opportunity_status,
-            },
-        )?;
-        event_sequence += 1;
+            append_json_line(
+                &mut trace,
+                &TraceRecord {
+                    schema_version: SITL_SCHEMA_VERSION,
+                    event_sequence,
+                    virtual_time_us: event.at.as_micros(),
+                    record_kind: event.kind.record_kind(),
+                    semantic_phase: event.phase.as_str(),
+                    opportunity_status,
+                },
+            )?;
+            event_sequence = event_sequence
+                .checked_add(1)
+                .ok_or(RunError::VirtualTimeOverflow)?;
+        }
     }
 
-    let pass = scheduled_control_opportunities == scenario.opportunity_count()
-        && scheduled_control_opportunities
-            == admitted_control_opportunities + missed_control_opportunities;
+    let scheduled_control_opportunities =
+        admitted_control_opportunities + missed_control_opportunities;
+    let pass = scheduled_sensor_samples == scenario.sensor_sample_count()
+        && delivered_observations == scheduled_sensor_samples
+        && scheduled_control_opportunities == scenario.runtime_opportunity_count()
+        && actuation_commits == admitted_control_opportunities;
 
     let summary = Summary {
         schema_version: SITL_SCHEMA_VERSION,
-        scenario: scenario.name,
+        scenario: &scenario.id,
         pass,
+        scheduled_sensor_samples,
+        delivered_observations,
         scheduled_control_opportunities,
         admitted_control_opportunities,
         missed_control_opportunities,
+        actuation_commits,
     };
 
     Ok(RunArtifacts {
@@ -123,31 +210,110 @@ pub fn run_scenario(
     })
 }
 
+fn schedule_periodic<F>(
+    scheduler: &mut DeterministicScheduler,
+    duration_us: u64,
+    period_us: u64,
+    mut schedule: F,
+) -> Result<(), RunError>
+where
+    F: FnMut(&mut DeterministicScheduler, VirtualTime) -> Result<(), ScheduleError>,
+{
+    let mut at = VirtualTime::ZERO;
+    loop {
+        schedule(scheduler, at)?;
+        let Some(next) = at.checked_add_micros(period_us) else {
+            return Err(RunError::VirtualTimeOverflow);
+        };
+        if next.as_micros() > duration_us {
+            break;
+        }
+        at = next;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn scenario() -> Scenario {
+        Scenario {
+            id: "deterministic-test".to_owned(),
+            duration_us: 20_000,
+            seed: 0x5357_5001,
+            sensor_period_us: 5_000,
+            runtime_period_us: 10_000,
+            missed_runtime_at_us: vec![10_000],
+        }
+    }
+
     #[test]
     fn same_configuration_produces_byte_identical_evidence() {
-        let scenario = Scenario::deterministic_baseline();
-        let first = run_scenario("single-wheel-platform", "test-commit", scenario).unwrap();
-        let second = run_scenario("single-wheel-platform", "test-commit", scenario).unwrap();
+        let scenario = scenario();
+        let first = run_scenario("single-wheel-platform", "test-commit", &scenario).unwrap();
+        let second = run_scenario("single-wheel-platform", "test-commit", &scenario).unwrap();
         assert_eq!(first, second);
     }
 
     #[test]
-    fn missed_control_opportunity_is_not_replayed() {
-        let scenario = Scenario::deterministic_baseline();
-        let artifacts = run_scenario("single-wheel-platform", "test-commit", scenario).unwrap();
+    fn separate_sensor_and_runtime_cadences_are_preserved() {
+        let scenario = scenario();
+        let artifacts = run_scenario("single-wheel-platform", "test-commit", &scenario).unwrap();
         let summary: serde_json::Value = serde_json::from_slice(&artifacts.summary_json).unwrap();
 
-        assert_eq!(summary["scheduled_control_opportunities"], 21);
-        assert_eq!(summary["admitted_control_opportunities"], 20);
+        assert_eq!(summary["scheduled_sensor_samples"], 5);
+        assert_eq!(summary["delivered_observations"], 5);
+        assert_eq!(summary["scheduled_control_opportunities"], 3);
+        assert_eq!(summary["admitted_control_opportunities"], 2);
         assert_eq!(summary["missed_control_opportunities"], 1);
+        assert_eq!(summary["actuation_commits"], 2);
         assert_eq!(summary["pass"], true);
+    }
 
-        let trace = String::from_utf8(artifacts.trace_jsonl).unwrap();
-        assert_eq!(trace.matches("\"missed_opportunity\"").count(), 1);
-        assert_eq!(trace.matches("\"control_opportunity\"").count(), 20);
+    #[test]
+    fn missed_control_opportunity_is_not_replayed() {
+        let scenario = scenario();
+        let artifacts = run_scenario("single-wheel-platform", "test-commit", &scenario).unwrap();
+        let records: Vec<serde_json::Value> = artifacts
+            .trace_jsonl
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| serde_json::from_slice(line).unwrap())
+            .collect();
+        let at_missed_time: Vec<_> = records
+            .iter()
+            .filter(|record| record["virtual_time_us"] == 10_000)
+            .collect();
+
+        assert!(
+            at_missed_time
+                .iter()
+                .any(|record| record["record_kind"] == "missed_opportunity")
+        );
+        assert!(
+            !at_missed_time
+                .iter()
+                .any(|record| record["record_kind"] == "control_opportunity")
+        );
+        assert!(
+            !at_missed_time
+                .iter()
+                .any(|record| record["record_kind"] == "actuation_commit")
+        );
+    }
+
+    #[test]
+    fn manifest_keeps_production_and_virtual_truth_provenance_distinct() {
+        let scenario = scenario();
+        let artifacts = run_scenario("single-wheel-platform", "abc123", &scenario).unwrap();
+        let manifest: serde_json::Value = serde_json::from_slice(&artifacts.manifest_json).unwrap();
+
+        assert_eq!(manifest["system_identifier"], "single-wheel-platform");
+        assert_eq!(manifest["git_commit"], "abc123");
+        assert_eq!(manifest["sensor_period_us"], 5_000);
+        assert_eq!(manifest["runtime_period_us"], 10_000);
+        assert!(manifest["production_model_configuration"].is_object());
+        assert!(manifest["virtual_physical_truth_configuration"].is_object());
     }
 }
