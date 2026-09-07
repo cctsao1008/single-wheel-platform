@@ -31,23 +31,18 @@ jobs:
           git mv plant/plant-model plant/dynamics-model
 
           git grep -Ilz \
-            -e 'plant/plant-model' \
-            -e 'swp-plant-model' \
-            -e 'swp_plant_model' \
+            -e 'plant-model' \
+            -e 'plant_model' \
             -- . ':(exclude).github/workflows/semantic-alignment.yml' \
             | xargs -0 -r sed -i \
-                -e 's#plant/plant-model#plant/dynamics-model#g' \
-                -e 's#swp-plant-model#swp-dynamics-model#g' \
-                -e 's#swp_plant_model#swp_dynamics_model#g'
+                -e 's#plant-model#dynamics-model#g' \
+                -e 's#plant_model#dynamics_model#g'
 
           sed -i 's/name: Plant model tests/name: Dynamics model tests/' .github/workflows/rust.yml
 
           rm .github/workflows/semantic-alignment.yml
 
-          if git grep -n \
-            -e 'plant/plant-model' \
-            -e 'swp-plant-model' \
-            -e 'swp_plant_model' -- .; then
+          if git grep -n -e 'plant-model' -e 'plant_model' -- .; then
             echo 'Legacy dynamics-model naming remains in tracked text.' >&2
             exit 1
           fi
