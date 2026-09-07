@@ -33,6 +33,8 @@ pub struct Summary<'a> {
     pub schema_version: u32,
     pub scenario: &'a str,
     pub pass: bool,
+    pub time_slices: u64,
+    pub physical_time_advances: u64,
     pub scheduled_sensor_samples: u64,
     pub delivered_observations: u64,
     pub scheduled_control_opportunities: u64,
