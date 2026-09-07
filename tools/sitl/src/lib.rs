@@ -85,7 +85,9 @@ impl Display for RunError {
             Self::Evidence(error) => {
                 write!(formatter, "SITL evidence serialization failed: {error}")
             }
-            Self::PhysicalAdvance(error) => write!(formatter, "SITL physical advance failed: {error}"),
+            Self::PhysicalAdvance(error) => {
+                write!(formatter, "SITL physical advance failed: {error}")
+            }
             Self::CounterOverflow => write!(formatter, "SITL execution counter overflow"),
             Self::VirtualTimeOverflow => write!(formatter, "SITL virtual time overflow"),
         }
@@ -193,7 +195,9 @@ pub fn run_scenario_with_time_advance<A: PhysicalTimeAdvance>(
     let mut actuation_commits = 0_u64;
 
     while let Some(slice) = scheduler.next_slice() {
-        time_slices = time_slices.checked_add(1).ok_or(RunError::CounterOverflow)?;
+        time_slices = time_slices
+            .checked_add(1)
+            .ok_or(RunError::CounterOverflow)?;
 
         if slice.advance.to > slice.advance.from {
             physical_time
