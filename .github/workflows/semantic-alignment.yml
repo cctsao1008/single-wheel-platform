@@ -20,7 +20,7 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Align dynamics-model naming
+      - name: Align repository semantics
         shell: bash
         run: |
           set -euo pipefail
@@ -28,7 +28,27 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git mv plant/plant-model plant/dynamics-model
+          if [ -d plant/plant-model ]; then
+            git mv plant/plant-model plant/dynamics-model
+          fi
+          test -f plant/dynamics-model/Cargo.toml
+          test -f plant/dynamics-model/src/lib.rs
+          test ! -e plant/plant-model
+
+          if [ -d infrastructure/dsp-kernel ]; then
+            mkdir -p support firmware/recording
+            git mv infrastructure/dsp-kernel support/dsp-kernel
+            git mv infrastructure/observation-record firmware/recording/observation-record
+            git mv infrastructure/runtime-observation-record firmware/recording/runtime-observation-record
+            git mv infrastructure/control-profile-record firmware/recording/control-profile-record
+            rmdir infrastructure
+          fi
+
+          test -f support/dsp-kernel/Cargo.toml
+          test -f firmware/recording/observation-record/Cargo.toml
+          test -f firmware/recording/runtime-observation-record/Cargo.toml
+          test -f firmware/recording/control-profile-record/Cargo.toml
+          test ! -e infrastructure
 
           git grep -Ilz \
             -e 'plant-model' \
@@ -38,17 +58,55 @@ jobs:
                 -e 's#plant-model#dynamics-model#g' \
                 -e 's#plant_model#dynamics_model#g'
 
+          git grep -Ilz \
+            -e 'infrastructure/dsp-kernel' \
+            -e 'infrastructure/observation-record' \
+            -e 'infrastructure/runtime-observation-record' \
+            -e 'infrastructure/control-profile-record' \
+            -- . ':(exclude).github/workflows/**' \
+            | xargs -0 -r sed -i \
+                -e 's#infrastructure/dsp-kernel#support/dsp-kernel#g' \
+                -e 's#infrastructure/observation-record#firmware/recording/observation-record#g' \
+                -e 's#infrastructure/runtime-observation-record#firmware/recording/runtime-observation-record#g' \
+                -e 's#infrastructure/control-profile-record#firmware/recording/control-profile-record#g'
+
+          sed -i \
+            -e 's#path = "../../plant/#path = "../../../plant/#g' \
+            -e 's#path = "../../supervisor/#path = "../../../supervisor/#g' \
+            firmware/recording/observation-record/Cargo.toml \
+            firmware/recording/runtime-observation-record/Cargo.toml
+
+          cat > support/README.md <<'EOF'
+          # Support
+
+          Cross-domain implementation support used by production-domain crates lives here.
+
+          `support/` is not a fifth production architecture domain. The production architecture remains exactly Plant, Control, Supervisor, and Firmware.
+
+          - `dsp-kernel/` provides the canonical real-time DSP implementation boundary used by Control and Supervisor while preserving a deterministic host semantic emulator for verification.
+          EOF
+
+          cat > firmware/recording/README.md <<'EOF'
+          # Recording
+
+          Firmware-owned binary recording contracts live here. They encode production semantic observations and profiling evidence for transport, capture, replay, and host decoding without changing the ownership of the underlying Plant, Control, or Supervisor semantics.
+
+          - `observation-record/` encodes `RawObservation` evidence.
+          - `runtime-observation-record/` encodes canonical runtime observations.
+          - `control-profile-record/` encodes control-path timing/profile evidence.
+          EOF
+
           if git grep -n \
             -e 'plant-model' \
             -e 'plant_model' \
+            -e 'infrastructure/dsp-kernel' \
+            -e 'infrastructure/observation-record' \
+            -e 'infrastructure/runtime-observation-record' \
+            -e 'infrastructure/control-profile-record' \
             -- . ':(exclude).github/workflows/**'; then
-            echo 'Legacy dynamics-model naming remains outside workflow files.' >&2
+            echo 'Legacy repository naming remains outside workflow files.' >&2
             exit 1
           fi
-
-          test -f plant/dynamics-model/Cargo.toml
-          test -f plant/dynamics-model/src/lib.rs
-          test ! -e plant/plant-model
 
       - name: Normalize and verify formatting
         run: |
@@ -64,6 +122,10 @@ jobs:
       - name: Affected host tests
         run: |
           cargo test -p swp-dynamics-model --target x86_64-unknown-linux-gnu
+          cargo test -p swp-dsp-kernel --target x86_64-unknown-linux-gnu
+          cargo test -p swp-observation-record --target x86_64-unknown-linux-gnu
+          cargo test -p swp-runtime-observation-record --target x86_64-unknown-linux-gnu
+          cargo test -p swp-control-profile-record --target x86_64-unknown-linux-gnu
           cargo test -p swp-state-feedback --target x86_64-unknown-linux-gnu
           cargo test -p swp-velocity-loop --target x86_64-unknown-linux-gnu
           cargo test -p swp-state-estimator --target x86_64-unknown-linux-gnu
@@ -87,5 +149,5 @@ jobs:
           rm -f Cargo.lock
           git add -A -- ':!.github/workflows/**'
           git diff --cached --check
-          git commit -m "Align dynamics model repository naming"
+          git commit -m "Align recording and support repository ownership"
           git push origin HEAD:repo-semantic-alignment
