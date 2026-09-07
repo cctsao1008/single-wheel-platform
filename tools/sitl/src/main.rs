@@ -66,9 +66,8 @@ fn parse_cli() -> Result<Cli, Box<dyn Error>> {
     }
 
     Ok(Cli {
-        scenario: scenario.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "missing --scenario")
-        })?,
+        scenario: scenario
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing --scenario"))?,
         output: output.unwrap_or_else(|| PathBuf::from("sitl-output")),
     })
 }
