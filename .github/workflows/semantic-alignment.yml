@@ -33,17 +33,16 @@ jobs:
           git grep -Ilz \
             -e 'plant-model' \
             -e 'plant_model' \
-            -- . ':(exclude).github/workflows/semantic-alignment.yml' \
+            -- . ':(exclude).github/workflows/**' \
             | xargs -0 -r sed -i \
                 -e 's#plant-model#dynamics-model#g' \
                 -e 's#plant_model#dynamics_model#g'
 
-          sed -i 's/name: Plant model tests/name: Dynamics model tests/' .github/workflows/rust.yml
-
-          rm .github/workflows/semantic-alignment.yml
-
-          if git grep -n -e 'plant-model' -e 'plant_model' -- .; then
-            echo 'Legacy dynamics-model naming remains in tracked text.' >&2
+          if git grep -n \
+            -e 'plant-model' \
+            -e 'plant_model' \
+            -- . ':(exclude).github/workflows/**'; then
+            echo 'Legacy dynamics-model naming remains outside workflow files.' >&2
             exit 1
           fi
 
@@ -85,7 +84,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add -A
+          rm -f Cargo.lock
+          git add -A -- ':!.github/workflows/**'
           git diff --cached --check
           git commit -m "Align dynamics model repository naming"
           git push origin HEAD:repo-semantic-alignment
