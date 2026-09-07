@@ -6,7 +6,9 @@ pub mod virtual_time;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use evidence::{Manifest, SITL_SCHEMA_VERSION, Summary, TraceRecord, append_json_line, pretty_json};
+use evidence::{
+    Manifest, SITL_SCHEMA_VERSION, Summary, TraceRecord, append_json_line, pretty_json,
+};
 use scenario::{Scenario, ScenarioError};
 use scheduler::{DeterministicScheduler, EventKind, ScheduleError};
 use serde_json::json;
@@ -32,7 +34,9 @@ impl Display for RunError {
         match self {
             Self::Scenario(error) => write!(formatter, "invalid SITL scenario: {error}"),
             Self::Schedule(error) => write!(formatter, "SITL scheduling failed: {error}"),
-            Self::Evidence(error) => write!(formatter, "SITL evidence serialization failed: {error}"),
+            Self::Evidence(error) => {
+                write!(formatter, "SITL evidence serialization failed: {error}")
+            }
             Self::VirtualTimeOverflow => write!(formatter, "SITL virtual time overflow"),
         }
     }
