@@ -11,7 +11,7 @@ use evidence::{
 };
 use scenario::{Scenario, ScenarioError};
 use scheduler::{DeterministicScheduler, EventKind, ScheduleError};
-use serde_json::json;
+use serde_json::{Value, json};
 use virtual_time::VirtualTime;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -21,11 +21,59 @@ pub struct RunArtifacts {
     pub summary_json: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunContext {
+    pub system_identifier: String,
+    pub git_commit: String,
+    pub production_model_configuration: Value,
+    pub virtual_physical_truth_configuration: Value,
+}
+
+impl RunContext {
+    pub fn stage1(system_identifier: impl Into<String>, git_commit: impl Into<String>) -> Self {
+        Self {
+            system_identifier: system_identifier.into(),
+            git_commit: git_commit.into(),
+            production_model_configuration: json!({
+                "status": "not-materialized",
+                "stage": 1
+            }),
+            virtual_physical_truth_configuration: json!({
+                "status": "not-materialized",
+                "stage": 1
+            }),
+        }
+    }
+}
+
+pub trait PhysicalTimeAdvance {
+    fn advance(
+        &mut self,
+        from: VirtualTime,
+        to: VirtualTime,
+    ) -> Result<(), Box<dyn Error + 'static>>;
+}
+
+#[derive(Debug, Default)]
+pub struct NoopPhysicalTimeAdvance;
+
+impl PhysicalTimeAdvance for NoopPhysicalTimeAdvance {
+    fn advance(
+        &mut self,
+        _from: VirtualTime,
+        _to: VirtualTime,
+    ) -> Result<(), Box<dyn Error + 'static>> {
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub enum RunError {
     Scenario(ScenarioError),
     Schedule(ScheduleError),
     Evidence(serde_json::Error),
+    PhysicalAdvance(Box<dyn Error + 'static>),
+    CounterOverflow,
     VirtualTimeOverflow,
 }
 
@@ -37,6 +85,8 @@ impl Display for RunError {
             Self::Evidence(error) => {
                 write!(formatter, "SITL evidence serialization failed: {error}")
             }
+            Self::PhysicalAdvance(error) => write!(formatter, "SITL physical advance failed: {error}"),
+            Self::CounterOverflow => write!(formatter, "SITL execution counter overflow"),
             Self::VirtualTimeOverflow => write!(formatter, "SITL virtual time overflow"),
         }
     }
@@ -48,7 +98,8 @@ impl Error for RunError {
             Self::Scenario(error) => Some(error),
             Self::Schedule(error) => Some(error),
             Self::Evidence(error) => Some(error),
-            Self::VirtualTimeOverflow => None,
+            Self::PhysicalAdvance(error) => Some(error.as_ref()),
+            Self::CounterOverflow | Self::VirtualTimeOverflow => None,
         }
     }
 }
@@ -76,26 +127,30 @@ pub fn run_scenario(
     git_commit: &str,
     scenario: &Scenario,
 ) -> Result<RunArtifacts, RunError> {
+    let context = RunContext::stage1(system_identifier, git_commit);
+    let mut physical_time = NoopPhysicalTimeAdvance;
+    run_scenario_with_time_advance(&context, scenario, &mut physical_time)
+}
+
+pub fn run_scenario_with_time_advance<A: PhysicalTimeAdvance>(
+    context: &RunContext,
+    scenario: &Scenario,
+    physical_time: &mut A,
+) -> Result<RunArtifacts, RunError> {
     scenario.validate()?;
 
     let manifest = Manifest {
         schema_version: SITL_SCHEMA_VERSION,
-        system_identifier,
-        git_commit,
+        system_identifier: &context.system_identifier,
+        git_commit: &context.git_commit,
         scenario: &scenario.id,
         seed: scenario.seed,
         duration_us: scenario.duration_us,
         sensor_period_us: scenario.sensor_period_us,
         runtime_period_us: scenario.runtime_period_us,
         missed_runtime_at_us: &scenario.missed_runtime_at_us,
-        production_model_configuration: json!({
-            "status": "not-materialized",
-            "stage": 1
-        }),
-        virtual_physical_truth_configuration: json!({
-            "status": "not-materialized",
-            "stage": 1
-        }),
+        production_model_configuration: context.production_model_configuration.clone(),
+        virtual_physical_truth_configuration: context.virtual_physical_truth_configuration.clone(),
     };
 
     let mut scheduler = DeterministicScheduler::default();
@@ -129,22 +184,25 @@ pub fn run_scenario(
 
     let mut trace = Vec::new();
     let mut event_sequence = 0_u64;
+    let mut time_slices = 0_u64;
+    let mut physical_time_advances = 0_u64;
     let mut scheduled_sensor_samples = 0_u64;
     let mut delivered_observations = 0_u64;
     let mut admitted_control_opportunities = 0_u64;
     let mut missed_control_opportunities = 0_u64;
     let mut actuation_commits = 0_u64;
-    let mut physical_time = VirtualTime::ZERO;
 
     while let Some(slice) = scheduler.next_slice() {
-        debug_assert_eq!(slice.advance.from, physical_time);
-        debug_assert!(slice.advance.to >= slice.advance.from);
+        time_slices = time_slices.checked_add(1).ok_or(RunError::CounterOverflow)?;
 
-        // Stage 2 installs the Virtual Plant integration hook exactly here:
-        // advance physical truth over [slice.advance.from, slice.advance.to)
-        // using the previously committed simulated physical input. This is a
-        // time-transition boundary, not a queued event at slice.advance.to.
-        physical_time = slice.advance.to;
+        if slice.advance.to > slice.advance.from {
+            physical_time
+                .advance(slice.advance.from, slice.advance.to)
+                .map_err(RunError::PhysicalAdvance)?;
+            physical_time_advances = physical_time_advances
+                .checked_add(1)
+                .ok_or(RunError::CounterOverflow)?;
+        }
 
         for event in slice.events {
             let opportunity_status = match event.kind {
@@ -184,7 +242,7 @@ pub fn run_scenario(
             )?;
             event_sequence = event_sequence
                 .checked_add(1)
-                .ok_or(RunError::VirtualTimeOverflow)?;
+                .ok_or(RunError::CounterOverflow)?;
         }
     }
 
@@ -193,12 +251,15 @@ pub fn run_scenario(
     let pass = scheduled_sensor_samples == scenario.sensor_sample_count()
         && delivered_observations == scheduled_sensor_samples
         && scheduled_control_opportunities == scenario.runtime_opportunity_count()
-        && actuation_commits == admitted_control_opportunities;
+        && actuation_commits == admitted_control_opportunities
+        && physical_time_advances == time_slices.saturating_sub(1);
 
     let summary = Summary {
         schema_version: SITL_SCHEMA_VERSION,
         scenario: &scenario.id,
         pass,
+        time_slices,
+        physical_time_advances,
         scheduled_sensor_samples,
         delivered_observations,
         scheduled_control_opportunities,
@@ -266,6 +327,8 @@ mod tests {
         let artifacts = run_scenario("single-wheel-platform", "test-commit", &scenario).unwrap();
         let summary: serde_json::Value = serde_json::from_slice(&artifacts.summary_json).unwrap();
 
+        assert_eq!(summary["time_slices"], 5);
+        assert_eq!(summary["physical_time_advances"], 4);
         assert_eq!(summary["scheduled_sensor_samples"], 5);
         assert_eq!(summary["delivered_observations"], 5);
         assert_eq!(summary["scheduled_control_opportunities"], 3);
@@ -310,14 +373,64 @@ mod tests {
     #[test]
     fn manifest_keeps_production_and_virtual_truth_provenance_distinct() {
         let scenario = scenario();
-        let artifacts = run_scenario("single-wheel-platform", "abc123", &scenario).unwrap();
+        let mut context = RunContext::stage1("single-wheel-platform", "abc123");
+        context.production_model_configuration = json!({"model": "production-assumption"});
+        context.virtual_physical_truth_configuration = json!({"plant": "simulated-truth"});
+        let mut physical_time = NoopPhysicalTimeAdvance;
+        let artifacts =
+            run_scenario_with_time_advance(&context, &scenario, &mut physical_time).unwrap();
         let manifest: serde_json::Value = serde_json::from_slice(&artifacts.manifest_json).unwrap();
 
         assert_eq!(manifest["system_identifier"], "single-wheel-platform");
         assert_eq!(manifest["git_commit"], "abc123");
         assert_eq!(manifest["sensor_period_us"], 5_000);
         assert_eq!(manifest["runtime_period_us"], 10_000);
-        assert!(manifest["production_model_configuration"].is_object());
-        assert!(manifest["virtual_physical_truth_configuration"].is_object());
+        assert_eq!(
+            manifest["production_model_configuration"]["model"],
+            "production-assumption"
+        );
+        assert_eq!(
+            manifest["virtual_physical_truth_configuration"]["plant"],
+            "simulated-truth"
+        );
+    }
+
+    #[derive(Default)]
+    struct TimeAdvanceProbe {
+        intervals: Vec<(u64, u64)>,
+    }
+
+    impl PhysicalTimeAdvance for TimeAdvanceProbe {
+        fn advance(
+            &mut self,
+            from: VirtualTime,
+            to: VirtualTime,
+        ) -> Result<(), Box<dyn Error + 'static>> {
+            self.intervals.push((from.as_micros(), to.as_micros()));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn physical_world_advances_between_slices_not_as_a_queued_event() {
+        let scenario = scenario();
+        let context = RunContext::stage1("single-wheel-platform", "test-commit");
+        let mut probe = TimeAdvanceProbe::default();
+        let artifacts = run_scenario_with_time_advance(&context, &scenario, &mut probe).unwrap();
+
+        assert_eq!(
+            probe.intervals,
+            vec![
+                (0, 5_000),
+                (5_000, 10_000),
+                (10_000, 15_000),
+                (15_000, 20_000)
+            ]
+        );
+        assert!(
+            !String::from_utf8(artifacts.trace_jsonl)
+                .unwrap()
+                .contains("integrate_plant_to")
+        );
     }
 }
