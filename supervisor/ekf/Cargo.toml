@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 libm = "0.2"
-swp-dsp-kernel = { path = "../../infrastructure/dsp-kernel" }
+swp-dsp-kernel = { path = "../../support/dsp-kernel" }
 swp-measurement-model = { path = "../../plant/measurement-model" }
 swp-dynamics-model = { path = "../../plant/dynamics-model" }
 swp-robot-domain = { path = "../../plant/robot-domain" }

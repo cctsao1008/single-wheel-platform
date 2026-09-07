@@ -14,7 +14,7 @@ rtic.workspace = true
 stm32f1xx-hal.workspace = true
 swp-actuator-model = { path = "../../../../plant/actuator-model" }
 swp-board-one-v2 = { path = "../../../boards/one-v2" }
-swp-control-profile-record = { path = "../../../../infrastructure/control-profile-record" }
+swp-control-profile-record = { path = "../../../../firmware/recording/control-profile-record" }
 swp-frame-transform = { path = "../../../adapters/frame-transform" }
 swp-measurement-model = { path = "../../../../plant/measurement-model" }
 swp-mpu6050 = { path = "../../../sensors/mpu6050" }

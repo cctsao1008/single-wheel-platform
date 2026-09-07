@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-swp-plant-observation = { path = "../../plant/plant-observation" }
+swp-plant-observation = { path = "../../../plant/plant-observation" }
 
 [lib]
 path = "src/lib.rs"

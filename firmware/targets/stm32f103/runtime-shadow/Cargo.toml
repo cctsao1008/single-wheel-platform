@@ -20,7 +20,7 @@ swp-one-v2-pwm-dir = { path = "../../../actuators/one-v2-pwm-dir" }
 swp-dynamics-model = { path = "../../../../plant/dynamics-model" }
 swp-plant-observation = { path = "../../../../plant/plant-observation" }
 swp-robot-domain = { path = "../../../../plant/robot-domain" }
-swp-runtime-observation-record = { path = "../../../../infrastructure/runtime-observation-record" }
+swp-runtime-observation-record = { path = "../../../../firmware/recording/runtime-observation-record" }
 swp-runtime-state = { path = "../../../../supervisor/runtime-state" }
 swp-runtime-supervisor = { path = "../../../../supervisor/runtime-supervisor" }
 swp-sensor-calibration = { path = "../../../adapters/sensor-calibration" }

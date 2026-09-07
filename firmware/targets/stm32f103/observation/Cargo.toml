@@ -14,7 +14,7 @@ rtic.workspace = true
 stm32f1xx-hal.workspace = true
 swp-board-one-v2 = { path = "../../../boards/one-v2" }
 swp-mpu6050 = { path = "../../../sensors/mpu6050" }
-swp-observation-record = { path = "../../../../infrastructure/observation-record" }
+swp-observation-record = { path = "../../../../firmware/recording/observation-record" }
 swp-plant-observation = { path = "../../../../plant/plant-observation" }
 swp-runtime-state = { path = "../../../../supervisor/runtime-state" }
 swp-software-i2c = { path = "../../../buses/software-i2c" }

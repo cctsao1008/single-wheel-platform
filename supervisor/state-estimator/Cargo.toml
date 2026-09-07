@@ -7,7 +7,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-swp-dsp-kernel = { path = "../../infrastructure/dsp-kernel" }
+swp-dsp-kernel = { path = "../../support/dsp-kernel" }
 swp-dynamics-model = { path = "../../plant/dynamics-model" }
 swp-measurement-model = { path = "../../plant/measurement-model" }
 swp-robot-domain = { path = "../../plant/robot-domain" }
