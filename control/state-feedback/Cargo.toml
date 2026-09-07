@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 swp-dsp-kernel = { path = "../../infrastructure/dsp-kernel" }
-swp-plant-model = { path = "../../plant/plant-model" }
+swp-dynamics-model = { path = "../../plant/dynamics-model" }
 swp-robot-domain = { path = "../../plant/robot-domain" }
 
 [lib]

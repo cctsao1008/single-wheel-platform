@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-swp-plant-model = { path = "../../plant/plant-model" }
+swp-dynamics-model = { path = "../../plant/dynamics-model" }
 
 [lib]
 path = "src/lib.rs"

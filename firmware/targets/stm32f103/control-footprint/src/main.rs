@@ -22,11 +22,11 @@ mod app {
         ControlRuntime, ControlRuntimeError, ControlStepInput, ControlStepResult,
         StateFeedbackController,
     };
-    use swp_measurement_model::{UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel};
-    use swp_plant_model::{
+    use swp_dynamics_model::{
         DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT,
         ReducedBalanceState,
     };
+    use swp_measurement_model::{UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel};
     use swp_robot_domain::GeneralizedDemand;
     use swp_runtime_state::{OperatingState, ReactionWheelSpeedLimits, SensorTimingHealth};
     use swp_state_estimator::{

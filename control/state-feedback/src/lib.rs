@@ -1,7 +1,7 @@
 #![no_std]
 
 use swp_dsp_kernel::dot_f32;
-use swp_plant_model::{REDUCED_BALANCE_STATE_COUNT, ReducedBalanceState};
+use swp_dynamics_model::{REDUCED_BALANCE_STATE_COUNT, ReducedBalanceState};
 use swp_robot_domain::{GeneralizedDemand, TorqueNm};
 
 pub const INTEGRAL_STATE_COUNT: usize = 2;

@@ -1,7 +1,7 @@
 #![no_std]
 
 use swp_board_one_v2::{EncoderChannel, MotorChannel};
-use swp_plant_model::ReferencePlantInput;
+use swp_dynamics_model::ReferencePlantInput;
 use swp_robot_domain::{Actuator, GeneralizedDemand};
 
 /// Physical population state of one PCB motor interface in the inspected unit.

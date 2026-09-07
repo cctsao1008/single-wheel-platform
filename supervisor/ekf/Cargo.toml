@@ -10,7 +10,7 @@ publish = false
 libm = "0.2"
 swp-dsp-kernel = { path = "../../infrastructure/dsp-kernel" }
 swp-measurement-model = { path = "../../plant/measurement-model" }
-swp-plant-model = { path = "../../plant/plant-model" }
+swp-dynamics-model = { path = "../../plant/dynamics-model" }
 swp-robot-domain = { path = "../../plant/robot-domain" }
 swp-state-estimator = { path = "../state-estimator" }
 

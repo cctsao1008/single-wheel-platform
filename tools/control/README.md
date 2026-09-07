@@ -101,7 +101,7 @@ The generated Rust file contains only matrices and the required-measurement bit 
 ## Design ownership
 
 ```text
-plant-model
+dynamics-model
     physical equations and state/input definition
 
 measurement-model

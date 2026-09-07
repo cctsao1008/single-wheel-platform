@@ -1,7 +1,7 @@
 #![no_std]
 
 use swp_dsp_kernel::dot_f32;
-use swp_plant_model::{
+use swp_dynamics_model::{
     PlantParameters, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT,
     linearize_stationary_upright,
 };

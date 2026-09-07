@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 swp-actuator-model = { path = "../../plant/actuator-model" }
-swp-plant-model = { path = "../../plant/plant-model" }
+swp-dynamics-model = { path = "../../plant/dynamics-model" }
 swp-robot-domain = { path = "../../plant/robot-domain" }
 swp-runtime-state = { path = "../../supervisor/runtime-state" }
 swp-runtime-supervisor = { path = "../../supervisor/runtime-supervisor" }

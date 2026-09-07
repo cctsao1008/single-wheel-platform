@@ -35,6 +35,6 @@ u = [tau_drive, tau_reaction]^T
 
 `psi_r` is the reaction-wheel angle relative to the robot body.
 
-The derivation corresponds to [`docs/architecture/plant_model.md`](../../docs/architecture/plant_model.md). If the physical model changes, the document and symbolic source change together; Git preserves the history.
+The derivation corresponds to [`docs/architecture/dynamics_model.md`](../../docs/architecture/dynamics_model.md). If the physical model changes, the document and symbolic source change together; Git preserves the history.
 
 Numeric parameter fitting, correlation, estimator synthesis, and controller synthesis belong downstream of this symbolic contract.

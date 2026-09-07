@@ -1,12 +1,12 @@
 #![no_std]
 
 use swp_dsp_kernel::dot_f32;
-use swp_measurement_model::{
-    ACCEL_X, ACCEL_Y, ACCEL_Z, UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel,
-};
-use swp_plant_model::{
+use swp_dynamics_model::{
     DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT, ReducedBalanceState,
     ReferencePlantInput,
+};
+use swp_measurement_model::{
+    ACCEL_X, ACCEL_Y, ACCEL_Z, UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel,
 };
 use swp_robot_domain::StateValidity;
 use swp_state_estimator::{

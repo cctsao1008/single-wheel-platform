@@ -1,6 +1,6 @@
 #![no_std]
 
-use swp_plant_model::ReducedBalanceState;
+use swp_dynamics_model::ReducedBalanceState;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VelocityLoopParameters {

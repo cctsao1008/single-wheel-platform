@@ -1,7 +1,7 @@
 #![no_std]
 
 use swp_actuator_model::{ActuatorPairCommand, BoundedActuatorCommand};
-use swp_plant_model::ReducedBalanceState;
+use swp_dynamics_model::ReducedBalanceState;
 use swp_robot_domain::{GeneralizedDemand, NormalizedCommand, StateValidity, TorqueNm};
 use swp_runtime_state::{OperatingState, SensorTimingHealth};
 use swp_runtime_supervisor::{ControlWatchdogHealth, RuntimeFaults};

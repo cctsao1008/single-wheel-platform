@@ -2,12 +2,12 @@ use swp_actuator_model::{
     ActuatorPairModel, ActuatorPairOperatingPoint, ActuatorParameters, StaticActuatorModel,
 };
 use swp_control_runtime::{ControlRuntime, ControlStepInput, StateFeedbackController};
-use swp_ekf::{EkfDesign, EkfNoise, ExtendedKalmanFilter};
-use swp_measurement_model::{UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel};
-use swp_plant_model::{
+use swp_dynamics_model::{
     DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT, ReducedBalanceState,
     ReferencePlantInput,
 };
+use swp_ekf::{EkfDesign, EkfNoise, ExtendedKalmanFilter};
+use swp_measurement_model::{UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel};
 use swp_robot_domain::{GeneralizedDemand, StateValidity};
 use swp_runtime_state::{
     ActuationAuthority, OperatingState, ReactionWheelSpeedLimits, SensorTimingHealth,

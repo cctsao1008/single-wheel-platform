@@ -45,16 +45,16 @@ mod app {
         ActuatorPairModel, ActuatorPairOperatingPoint, ActuatorParameters, StaticActuatorModel,
     };
     use swp_board_one_v2 as board;
+    use swp_dynamics_model::{
+        DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT,
+        ReducedBalanceState, ReferencePlantInput,
+    };
     use swp_measurement_model::{
         ACCEL_X, ACCEL_Y, ACCEL_Z, DRIVE_ENCODER_RELATIVE_ANGLE, GYRO_X, GYRO_Y, GYRO_Z,
         REACTION_WHEEL_RELATIVE_RATE, UPRIGHT_MEASUREMENT_COUNT, UprightMeasurementModel,
     };
     use swp_mpu6050::{AccelRange, Config as MpuConfig, Dlpf, GyroRange, Mpu6050, RawSample};
     use swp_one_v2_pwm_dir::{ElectricalActuation, OneV2PwmDirAdapter};
-    use swp_plant_model::{
-        DiscreteLinearPlant, REDUCED_BALANCE_STATE_COUNT, REFERENCE_INPUT_COUNT,
-        ReducedBalanceState, ReferencePlantInput,
-    };
     use swp_plant_observation::{
         AcquisitionStatus, MeasurementQuality, RawEncoderObservation, RawImuObservation,
         RawObservation, TimestampEvidence,

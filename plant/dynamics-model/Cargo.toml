@@ -1,5 +1,5 @@
 [package]
-name = "swp-plant-model"
+name = "swp-dynamics-model"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true

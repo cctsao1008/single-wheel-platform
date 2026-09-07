@@ -37,7 +37,7 @@ Current code:
 
 ```text
 plant/robot-domain
-plant/plant-model
+plant/dynamics-model
 plant/measurement-model
 plant/plant-observation
 plant/actuator-model
