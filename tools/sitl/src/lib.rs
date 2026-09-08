@@ -1,6 +1,7 @@
 pub mod evidence;
 pub mod scenario;
 pub mod scheduler;
+pub mod simulation_world;
 pub mod virtual_time;
 
 use std::error::Error;
