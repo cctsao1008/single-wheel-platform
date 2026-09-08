@@ -20,9 +20,7 @@ use swp_runtime_state::{
 };
 use swp_runtime_supervisor::{RuntimeFaults, RuntimeSupervisor, RuntimeTransitionError};
 use swp_sensor_calibration::encoder::EncoderTransfer;
-use swp_sensor_calibration::{
-    CalibrationError, ImuCalibration, calibrate_imu, scale_mpu6050,
-};
+use swp_sensor_calibration::{CalibrationError, ImuCalibration, calibrate_imu, scale_mpu6050};
 use swp_state_estimator::LinearObserver;
 use swp_velocity_loop::{
     VelocityIntegratorUpdate, VelocityLoop, VelocityLoopError, VelocityTarget,
@@ -125,23 +123,38 @@ impl Display for ClosedLoopError {
                 write!(formatter, "runtime supervisor transition failed: {error:?}")
             }
             Self::SensorSampleAlreadyPending => {
-                write!(formatter, "new virtual sensor sample arrived before prior delivery")
+                write!(
+                    formatter,
+                    "new virtual sensor sample arrived before prior delivery"
+                )
             }
             Self::ObservationDeliveryWithoutSample => {
-                write!(formatter, "observation delivery occurred without a sampled observation")
+                write!(
+                    formatter,
+                    "observation delivery occurred without a sampled observation"
+                )
             }
             Self::RuntimeWithoutObservation => {
-                write!(formatter, "production runtime occurred without a delivered observation")
+                write!(
+                    formatter,
+                    "production runtime occurred without a delivered observation"
+                )
             }
             Self::RuntimeWithoutFreshObservation(sample_index) => write!(
                 formatter,
                 "production runtime attempted to reuse observation sample {sample_index}"
             ),
             Self::EncoderRejected => {
-                write!(formatter, "production encoder adapter rejected virtual sensor evidence")
+                write!(
+                    formatter,
+                    "production encoder adapter rejected virtual sensor evidence"
+                )
             }
             Self::ActuationCommitWithoutRuntime => {
-                write!(formatter, "actuation commit occurred without a runtime decision")
+                write!(
+                    formatter,
+                    "actuation commit occurred without a runtime decision"
+                )
             }
         }
     }
@@ -292,8 +305,8 @@ impl ClosedLoopSimulation {
             .pending_raw
             .take()
             .ok_or(ClosedLoopError::ObservationDeliveryWithoutSample)?;
-        let scaled = scale_mpu6050(raw.imu, self.config.mpu)
-            .map_err(ClosedLoopError::Calibration)?;
+        let scaled =
+            scale_mpu6050(raw.imu, self.config.mpu).map_err(ClosedLoopError::Calibration)?;
         let calibrated = calibrate_imu(scaled, self.config.imu_calibration);
         let body = map_calibrated_imu_to_body(
             calibrated,
@@ -345,8 +358,7 @@ impl ClosedLoopSimulation {
             delivered.frame.reaction_encoder_status,
             EncoderChannelStatus::Ready
         ) {
-            self.skipped_unready_observations =
-                self.skipped_unready_observations.saturating_add(1);
+            self.skipped_unready_observations = self.skipped_unready_observations.saturating_add(1);
             self.pending_actuation = Some(PendingActuation::Revoke);
             return Ok(());
         }
@@ -375,9 +387,12 @@ impl ClosedLoopSimulation {
         self.last_estimate = result.estimate.state;
         self.latest_authority = Some(result.authority);
 
-        let reaction_authority = self.config.reaction_wheel_limits.classify(
-            AngularRateRadPerSec(result.estimate.state.reaction_wheel_rate_rad_per_s),
-        );
+        let reaction_authority = self
+            .config
+            .reaction_wheel_limits
+            .classify(AngularRateRadPerSec(
+                result.estimate.state.reaction_wheel_rate_rad_per_s,
+            ));
 
         if self.supervisor.state() == OperatingState::CaptureWindow
             && result.estimate.validity == StateValidity::Valid
@@ -471,10 +486,7 @@ impl PhysicalTimeAdvance for ClosedLoopSimulation {
 }
 
 impl ScenarioExecution for ClosedLoopSimulation {
-    fn dispatch_event(
-        &mut self,
-        event: ScheduledEvent,
-    ) -> Result<(), Box<dyn Error + 'static>> {
+    fn dispatch_event(&mut self, event: ScheduledEvent) -> Result<(), Box<dyn Error + 'static>> {
         self.dispatch(event)
             .map_err(|error| Box::new(error) as Box<dyn Error + 'static>)
     }
@@ -490,16 +502,12 @@ mod tests {
         linearize_stationary_upright,
     };
     use swp_frame_transform::{FrameEvidenceBasis, SensorToBodyRotation};
-    use swp_measurement_model::{
-        ImuPlacement, linearize_stationary_upright_measurement,
-    };
+    use swp_measurement_model::{ImuPlacement, linearize_stationary_upright_measurement};
     use swp_mpu6050::{AccelRange, Dlpf, GyroRange};
     use swp_sensor_calibration::encoder::{
         EncoderPositiveDirection, EncoderTransferBasis, EncoderTransferEvidence,
     };
-    use swp_sensor_calibration::{
-        AffineCalibration3, CalibrationBasis, CalibrationEvidence,
-    };
+    use swp_sensor_calibration::{AffineCalibration3, CalibrationBasis, CalibrationEvidence};
     use swp_state_estimator::{LinearObserver, MeasurementMask, ObserverDesign, ObserverGain};
     use swp_state_feedback::{LqrController, StateFeedbackGain};
     use swp_velocity_loop::VelocityLoopParameters;
@@ -555,21 +563,79 @@ mod tests {
         // Synthetic steady-state observer gain generated independently from the
         // same explicit fixture. It is test evidence, not reference-robot data.
         let l = [
-            [-1.7256453e-3, 0.0, 0.0, 0.0, 1.0308802e-5, 0.0, 4.9912117e-2, 0.0],
-            [-1.6453623e-2, 0.0, 0.0, 0.0, 9.283811e-5, 0.0, 4.9412607e-1, 0.0],
-            [-3.452375e-2, 0.0, 0.0, 0.0, 2.0616585e-4, 0.0, -1.1468928e-3, 0.0],
-            [-1.9492655e-4, 0.0, 0.0, 0.0, 9.4427447e-1, 0.0, 1.0196192e-6, 0.0],
-            [0.0, 3.9227562e-2, 0.0, 3.00559e-4, 0.0, 0.0, 0.0, -7.761855e-6],
-            [0.0, 1.8421731e-4, 0.0, 9.4427395e-1, 0.0, 0.0, 0.0, -6.225035e-8],
-            [0.0, -4.757362e-4, 0.0, -6.225035e-6, 0.0, 0.0, 0.0, 8.284273e-1],
+            [
+                -1.7256453e-3,
+                0.0,
+                0.0,
+                0.0,
+                1.0308802e-5,
+                0.0,
+                4.9912117e-2,
+                0.0,
+            ],
+            [
+                -1.6453623e-2,
+                0.0,
+                0.0,
+                0.0,
+                9.283811e-5,
+                0.0,
+                4.9412607e-1,
+                0.0,
+            ],
+            [
+                -3.452375e-2,
+                0.0,
+                0.0,
+                0.0,
+                2.0616585e-4,
+                0.0,
+                -1.1468928e-3,
+                0.0,
+            ],
+            [
+                -1.9492655e-4,
+                0.0,
+                0.0,
+                0.0,
+                9.4427447e-1,
+                0.0,
+                1.0196192e-6,
+                0.0,
+            ],
+            [
+                0.0,
+                3.9227562e-2,
+                0.0,
+                3.00559e-4,
+                0.0,
+                0.0,
+                0.0,
+                -7.761855e-6,
+            ],
+            [
+                0.0,
+                1.8421731e-4,
+                0.0,
+                9.4427395e-1,
+                0.0,
+                0.0,
+                0.0,
+                -6.225035e-8,
+            ],
+            [
+                0.0,
+                -4.757362e-4,
+                0.0,
+                -6.225035e-6,
+                0.0,
+                0.0,
+                0.0,
+                8.284273e-1,
+            ],
         ];
         let required = MeasurementMask::from_bits(
-            (1_u16 << 0)
-                | (1_u16 << 1)
-                | (1_u16 << 3)
-                | (1_u16 << 4)
-                | (1_u16 << 6)
-                | (1_u16 << 7),
+            (1_u16 << 0) | (1_u16 << 1) | (1_u16 << 3) | (1_u16 << 4) | (1_u16 << 6) | (1_u16 << 7),
         );
         let design = ObserverDesign::new(
             euler_discrete_plant(),
@@ -583,19 +649,24 @@ mod tests {
 
     fn controller() -> StateFeedbackController {
         let k = [
-            [-0.90437967, -1.6302925, -6.2296453, -0.7720527, 0.0, 0.0, 0.0],
+            [
+                -0.90437967,
+                -1.6302925,
+                -6.2296453,
+                -0.7720527,
+                0.0,
+                0.0,
+                0.0,
+            ],
             [0.0, 0.0, 0.0, 0.0, -7.7666373, -0.9868621, -0.009627679],
         ];
-        StateFeedbackController::Lqr(LqrController::new(
-            StateFeedbackGain::new(k).unwrap(),
-        ))
+        StateFeedbackController::Lqr(LqrController::new(StateFeedbackGain::new(k).unwrap()))
     }
 
     fn actuators() -> ActuatorPairModel {
-        let actuator = StaticActuatorModel::new(
-            ActuatorParameters::new(2.0, 0.01, 0.0, 0.0, 0.1).unwrap(),
-        )
-        .unwrap();
+        let actuator =
+            StaticActuatorModel::new(ActuatorParameters::new(2.0, 0.01, 0.0, 0.0, 0.1).unwrap())
+                .unwrap();
         ActuatorPairModel {
             drive: actuator,
             reaction: actuator,
@@ -732,12 +803,9 @@ mod tests {
             ..ReducedBalanceState::default()
         };
         let mut simulation = simulation(initial);
-        let artifacts = run_scenario_with_execution(
-            &context(),
-            &scenario(1_000_000, vec![]),
-            &mut simulation,
-        )
-        .unwrap();
+        let artifacts =
+            run_scenario_with_execution(&context(), &scenario(1_000_000, vec![]), &mut simulation)
+                .unwrap();
         let snapshot = simulation.snapshot();
 
         assert!(snapshot.sensor_samples > 400);
