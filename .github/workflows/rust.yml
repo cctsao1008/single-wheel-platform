@@ -32,6 +32,8 @@ jobs:
           cmp /tmp/sitl-a/manifest.json /tmp/sitl-b/manifest.json
           cmp /tmp/sitl-a/trace.jsonl /tmp/sitl-b/trace.jsonl
           cmp /tmp/sitl-a/summary.json /tmp/sitl-b/summary.json
+      - name: Physical parameter provenance
+        run: python3 tools/model/check_parameter_provenance.py
       - name: Install plant model reference dependencies
         run: python3 -m pip install -r tools/model/requirements.txt
       - name: SimulationWorld reference correlation

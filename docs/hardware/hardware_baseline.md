@@ -111,20 +111,20 @@ The vendor implementation configures PA5 as analog and reads ADC channel 5. A st
 
 The runtime stores the raw ADC conversion. Voltage conversion is applied only through an explicit divider/ADC transfer function.
 
-## Physical reference values
+## Physical parameter status
 
-```text
-vehicle envelope        105 x 70 x 150 mm
-vehicle mass            570 g
-battery nominal         11.1 V
-battery full            12.6 V
-battery mass            107 g
-reaction-wheel motor    12 V / 10 W / 3000 rpm / 0.085 N·m / 1 A stall
-drive-wheel motor       12 V / 3000 rpm / 0.075 N·m / 1 A stall
-encoder specification   100 lines per installed motor
-```
+The electrical and installed-channel topology above is the hardware baseline. Numeric mechanical and actuator quantities become reference-assembly facts only when they are promoted into `parameters/reference-assembly.json`.
 
-`100 lines` is not treated as `100 counts/revolution`; quadrature decoding and mechanical scale are separate configuration values.
+Candidate source claims, conflicts, source hashes, and the evidence required for promotion are maintained in `parameters/reference-assembly-evidence.json`.
+
+The current accepted registry does not yet promote body mass/center-of-mass/inertia, drive-wheel radius/inertia, reaction-wheel mass/inertia/center height, IMU lever arm, encoder mechanical scale/sign, or actuator gain/friction/deadzone/delay.
+
+In particular:
+
+- a documented encoder line count is not STM32 counter counts per mechanical revolution;
+- the documented `140 g` BLDC value is motor mass, not reaction-wheel mass;
+- maximum or rated motor torque is not command-to-torque gain;
+- legacy geometry or tuning values do not become current-unit model parameters without assembly-specific evidence.
 
 ## Reaction-wheel authority
 

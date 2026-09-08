@@ -1,0 +1,221 @@
+{
+  "schema": 1,
+  "assembly": "reference-assembly",
+  "accepted_registry": "parameters/reference-assembly.json",
+  "purpose": "Current provenance boundary for physical parameter claims that are not yet strong enough to populate the accepted registry. This file is not consumed by synthesis.",
+  "promotion_rule": "A claim is promoted only when it resolves to the current reference assembly, matches the registry parameter definition, has reproducible evidence, and has no unresolved conflicting source.",
+  "sources": [
+    {
+      "id": "one-v2-schematic",
+      "artifact": "ONE_V2.0原理图.pdf",
+      "sha256": "bf8b026dc8c619a367f979f250014ef3d3365da0b2fca8a9b12b6b39f33d6f21",
+      "kind": "schematic",
+      "scope": "board topology, MCU/IMU/driver/module identity, connector and signal routing"
+    },
+    {
+      "id": "legacy-introduction",
+      "artifact": "1.独轮机器人介绍.pdf",
+      "sha256": "3af45429e3b42d67515c521f308d5c82050a7547b38e464b7c63b2d4d2fcf00b",
+      "kind": "legacy-mechanical-document",
+      "scope": "system concept and reaction-wheel construction description"
+    },
+    {
+      "id": "legacy-debug-notes",
+      "artifact": "自平衡独轮机器人原理剖析及调试笔记.pdf",
+      "sha256": "2749729d53608159440219c6ad817c59bb75c4b1f058945baad3c09c1db43316",
+      "kind": "legacy-design-and-tuning-document",
+      "scope": "legacy motor, encoder, control, and operating claims"
+    },
+    {
+      "id": "legacy-v2-source",
+      "artifact": "V2.0源代码.zip",
+      "sha256": "607f42ed8e4a23d55f5cb610a2afe2e806aa48a2048c1accd1bca1f0207d60c4",
+      "kind": "legacy-executable-source",
+      "scope": "legacy timer decode, sign conventions, control loop, and MPU6050 register configuration"
+    },
+    {
+      "id": "frame-stl",
+      "artifact": "车架(1).STL",
+      "sha256": "9ed34118a9b0020952166f879e205346258faaf30853d9a9b8ff73c658ec663b",
+      "kind": "mechanical-geometry",
+      "scope": "frame geometry only; no material, component masses, or assembly placement"
+    },
+    {
+      "id": "secondary-product-summary-20260905",
+      "artifact": "prior product-documentation screenshots summarized in project chat",
+      "sha256": null,
+      "kind": "secondary-summary",
+      "scope": "candidate platform dimensions, mass, battery, reaction-wheel geometry, and motor brochure claims",
+      "limitation": "original screenshots are not part of the current reproducible source bundle"
+    }
+  ],
+  "classification": {
+    "known": [],
+    "derived": [],
+    "unknown": [
+      "body.mass_kg",
+      "body.com_height_m",
+      "body.inertia_roll_kg_m2",
+      "body.inertia_pitch_kg_m2",
+      "body.inertia_yaw_kg_m2",
+      "drive_wheel.radius_m",
+      "drive_wheel.mass_kg",
+      "drive_wheel.spin_inertia_kg_m2",
+      "drive_wheel.encoder_counts_per_revolution",
+      "drive_wheel.encoder_positive_sign",
+      "drive_wheel.encoder_max_abs_delta_counts_per_sample",
+      "reaction_wheel.mass_kg",
+      "reaction_wheel.com_height_m",
+      "reaction_wheel.spin_inertia_kg_m2",
+      "reaction_wheel.transverse_inertia_kg_m2",
+      "reaction_wheel.encoder_counts_per_revolution",
+      "reaction_wheel.encoder_positive_sign",
+      "reaction_wheel.encoder_max_abs_delta_counts_per_sample",
+      "imu.forward_x_m",
+      "imu.left_y_m",
+      "imu.up_z_m",
+      "actuator.drive.torque_per_effective_command_nm",
+      "actuator.drive.command_deadzone",
+      "actuator.drive.viscous_friction_nm_per_rad_s",
+      "actuator.drive.coulomb_friction_nm",
+      "actuator.drive.delay_s",
+      "actuator.reaction.torque_per_effective_command_nm",
+      "actuator.reaction.command_deadzone",
+      "actuator.reaction.viscous_friction_nm_per_rad_s",
+      "actuator.reaction.coulomb_friction_nm",
+      "actuator.reaction.delay_s"
+    ]
+  },
+  "candidate_claims": [
+    {
+      "targets": ["body.mass_kg"],
+      "claim": {"value": 0.57, "unit": "kg"},
+      "source": "secondary-product-summary-20260905",
+      "status": "not-promotable",
+      "reason": "secondary-only claim and not verified on the current assembled reference unit"
+    },
+    {
+      "targets": ["drive_wheel.encoder_counts_per_revolution"],
+      "claim": {
+        "encoder_lines": 13,
+        "gear_ratio": 19,
+        "documented_intermediate_pulses_per_revolution": 241,
+        "documented_x4_counts_per_revolution": 964
+      },
+      "source": "legacy-debug-notes",
+      "status": "conflicted",
+      "reason": "13 x 19 = 247, not 241; the document is arithmetically inconsistent and does not unambiguously bind the stated revolution to the current controlled mechanical shaft"
+    },
+    {
+      "targets": ["drive_wheel.encoder_positive_sign"],
+      "claim": {"legacy_runtime_expression": "Encoder_y = -Read_Encoder(2)"},
+      "source": "legacy-v2-source",
+      "status": "not-promotable",
+      "reason": "legacy software sign is not a measurement of the current robot-positive mechanical direction"
+    },
+    {
+      "targets": ["reaction_wheel.encoder_counts_per_revolution"],
+      "claim": {"encoder_lines": 100},
+      "source": "legacy-debug-notes",
+      "status": "not-promotable",
+      "reason": "line count is not STM32 counter counts per mechanical revolution; legacy and current firmware also use different edge/decode semantics"
+    },
+    {
+      "targets": ["reaction_wheel.mass_kg"],
+      "claim": {"value": 0.14, "unit": "kg"},
+      "source": "legacy-debug-notes",
+      "status": "inapplicable",
+      "reason": "the 140 g value is the BLDC motor mass, not the reaction-wheel mass"
+    },
+    {
+      "targets": ["actuator.reaction.torque_per_effective_command_nm"],
+      "claim": {"legacy_motor_max_torque": 0.0385, "unit": "N*m"},
+      "source": "legacy-debug-notes",
+      "status": "not-promotable",
+      "reason": "maximum motor torque is not command-to-torque gain and does not characterize the current unit"
+    },
+    {
+      "targets": ["actuator.reaction.torque_per_effective_command_nm"],
+      "claim": {"secondary_motor_max_torque": 0.085, "unit": "N*m"},
+      "source": "secondary-product-summary-20260905",
+      "status": "conflicted",
+      "reason": "secondary-only claim conflicts with the 0.0385 N*m legacy motor claim and still is not command-to-torque gain"
+    },
+    {
+      "targets": ["actuator.drive.torque_per_effective_command_nm"],
+      "claim": {"secondary_motor_rated_torque": 0.075, "unit": "N*m"},
+      "source": "secondary-product-summary-20260905",
+      "status": "not-promotable",
+      "reason": "rated torque is not command-to-torque gain and the primary product source is not in the current source bundle"
+    }
+  ],
+  "auxiliary_evidence": [
+    {
+      "source": "legacy-introduction",
+      "fact": "reaction wheel is described as custom stainless steel with mass intentionally concentrated toward the perimeter",
+      "use": "qualitative inertia-shape evidence only; insufficient for mass or inertia promotion"
+    },
+    {
+      "source": "legacy-debug-notes",
+      "fact": "BLDC motor is documented as 10 W maximum power, 0.0385 N*m maximum torque, 100-line encoder, 42 mm diameter, 39 mm length, and 140 g motor mass",
+      "use": "component identification candidate only"
+    },
+    {
+      "source": "frame-stl",
+      "derived_geometry": {
+        "bounds_native_units": [[0.0, 0.0, 0.0], [62.0, 114.5, 51.0]],
+        "extents_native_units": [62.0, 114.5, 51.0],
+        "closed_mesh_volume_native_units_cubed": 27063.000738612656,
+        "geometric_centroid_native_units": [32.56432798, 51.66223699, 23.6400057]
+      },
+      "use": "geometry cross-check only; STL units, body-frame registration, material density, and assembly completeness must be established before deriving body mass properties"
+    }
+  ],
+  "unresolved_source_conflicts": [
+    {
+      "topic": "reaction-motor torque",
+      "sources": ["legacy-debug-notes", "secondary-product-summary-20260905"],
+      "claims": ["0.0385 N*m maximum torque", "0.085 N*m maximum torque"],
+      "resolution": "identify the installed motor and obtain primary specification or measure torque"
+    },
+    {
+      "topic": "drive-encoder scale",
+      "sources": ["legacy-debug-notes", "legacy-v2-source"],
+      "claims": [
+        "13 lines, 19:1 ratio, documented 241 pulses/rev and 964 x4 counts/rev",
+        "TIM2 encoder mode performs quadrature counting in executable legacy source"
+      ],
+      "resolution": "measure current STM32 counter delta for one marked mechanical revolution in both directions"
+    },
+    {
+      "topic": "MPU6050 legacy range configuration",
+      "sources": ["legacy-debug-notes", "legacy-v2-source"],
+      "claims": [
+        "prose states gyro +/-2000 deg/s and accelerometer +/-2 g",
+        "executable source writes gyro config 0x10 and accel config 0x09, with comments indicating +/-1000 deg/s and +/-4 g"
+      ],
+      "resolution": "treat executable source as legacy behavior evidence only; current firmware configuration and calibration remain independently defined"
+    },
+    {
+      "topic": "platform envelope",
+      "sources": ["legacy documentation history", "secondary-product-summary-20260905"],
+      "claims": ["120 x 100 x 170 mm legacy design", "105 x 70 x 150 mm secondary product claim"],
+      "resolution": "measure the current assembled reference unit; do not use either envelope to derive inertia"
+    }
+  ],
+  "promotion_requirements": {
+    "body.mass_kg": "weigh the current assembled reference unit using the same mass partition used by the plant model",
+    "body.com_height_m": "measure/derive center of mass relative to the model body origin with the rotating-wheel mass partition explicitly respected",
+    "body.inertia_*": "derive from verified geometry and component masses or identify with a pendulum/inertia experiment on the current assembly",
+    "drive_wheel.radius_m": "measure the model-relevant effective rolling radius on the installed wheel",
+    "drive_wheel.mass_kg": "weigh the drive-wheel component according to the plant mass partition",
+    "drive_wheel.spin_inertia_kg_m2": "derive from verified geometry/mass or identify experimentally",
+    "drive_wheel.encoder_*": "mark the controlled mechanical shaft, rotate exactly one mechanical revolution both directions under the actual runtime decode mode, then establish sign and a speed/sample bound",
+    "reaction_wheel.mass_kg": "weigh the reaction wheel itself, excluding the motor unless the plant partition is explicitly changed",
+    "reaction_wheel.com_height_m": "measure the reaction-wheel center relative to the model body origin on the assembled robot",
+    "reaction_wheel.inertia_*": "derive from verified wheel geometry/mass or identify experimentally",
+    "reaction_wheel.encoder_*": "measure counts per mechanical revolution and sign under the actual runtime decode mode, then derive the anti-alias delta bound from an evidenced speed envelope",
+    "imu.*": "measure the MPU6050 sensing origin relative to the model body origin and register the sensor axes to the body frame",
+    "actuator.*": "use bounded bench/system-identification data with command, battery voltage, encoder state, and timestamps; torque gain requires direct torque evidence or dynamic identification with accepted inertial parameters"
+  }
+}
