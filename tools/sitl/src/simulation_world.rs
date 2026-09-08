@@ -56,20 +56,33 @@ pub enum SimulationWorldError {
     NonFiniteDynamics,
     NonFiniteSensorOutput,
     NonFiniteActuation,
-    TimeReversal { from_us: u64, to_us: u64 },
-    TimeDiscontinuity { expected_us: u64, actual_us: u64 },
-    SampleTimeMismatch { world_time_us: u64, sample_time_us: u64 },
+    TimeReversal {
+        from_us: u64,
+        to_us: u64,
+    },
+    TimeDiscontinuity {
+        expected_us: u64,
+        actual_us: u64,
+    },
+    SampleTimeMismatch {
+        world_time_us: u64,
+        sample_time_us: u64,
+    },
     SampleIndexOverflow,
 }
 
 impl Display for SimulationWorldError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidPlantParameters => write!(formatter, "invalid simulation plant parameters"),
+            Self::InvalidPlantParameters => {
+                write!(formatter, "invalid simulation plant parameters")
+            }
             Self::InvalidEncoderResolution => {
                 write!(formatter, "encoder counts per revolution must be nonzero")
             }
-            Self::NonFiniteInitialState => write!(formatter, "simulation initial state is non-finite"),
+            Self::NonFiniteInitialState => {
+                write!(formatter, "simulation initial state is non-finite")
+            }
             Self::NonFiniteReactionWheelAngle => {
                 write!(formatter, "simulation reaction-wheel angle is non-finite")
             }
@@ -196,8 +209,7 @@ impl SimulationWorld {
         let (gyro_raw, gyro_saturated) =
             quantize_angular_rate(angular_rate, self.config.gyro_range)?;
         let (temperature_raw, temperature_saturated) = quantize_i16(
-            (self.config.imu_temperature_celsius - TEMPERATURE_OFFSET_C)
-                * TEMPERATURE_LSB_PER_C,
+            (self.config.imu_temperature_celsius - TEMPERATURE_OFFSET_C) * TEMPERATURE_LSB_PER_C,
         )?;
 
         let mut imu_quality = healthy_quality();
@@ -301,8 +313,7 @@ impl SimulationWorld {
 
         let mut next = x0;
         for index in 0..next.len() {
-            next[index] +=
-                dt_s / 6.0 * (k1[index] + 2.0 * k2[index] + 2.0 * k3[index] + k4[index]);
+            next[index] += dt_s / 6.0 * (k1[index] + 2.0 * k2[index] + 2.0 * k3[index] + k4[index]);
         }
 
         if !next.iter().all(|value| value.is_finite()) {
@@ -419,8 +430,7 @@ fn body_specific_force(
 
     // R = R_y(theta) R_x(phi). Accelerometer output is specific force.
     let body_x = cos_theta * forward_acceleration_m_per_s2 - sin_theta * gravity_m_per_s2;
-    let after_pitch_z =
-        sin_theta * forward_acceleration_m_per_s2 + cos_theta * gravity_m_per_s2;
+    let after_pitch_z = sin_theta * forward_acceleration_m_per_s2 + cos_theta * gravity_m_per_s2;
 
     [body_x, sin_phi * after_pitch_z, cos_phi * after_pitch_z]
 }
@@ -446,9 +456,7 @@ fn quantize_angular_rate(
     angular_rate_rad_per_s: [f32; 3],
     range: GyroRange,
 ) -> Result<([i16; 3], bool), SimulationWorldError> {
-    quantize_vector(
-        angular_rate_rad_per_s.map(|value| value.to_degrees() * range.lsb_per_dps()),
-    )
+    quantize_vector(angular_rate_rad_per_s.map(|value| value.to_degrees() * range.lsb_per_dps()))
 }
 
 fn quantize_vector(values: [f32; 3]) -> Result<([i16; 3], bool), SimulationWorldError> {
@@ -473,10 +481,7 @@ fn quantize_i16(value: f32) -> Result<(i16, bool), SimulationWorldError> {
     Ok((bounded as i16, saturated))
 }
 
-fn encoder_count(
-    angle_rad: f32,
-    counts_per_revolution: u32,
-) -> Result<u16, SimulationWorldError> {
+fn encoder_count(angle_rad: f32, counts_per_revolution: u32) -> Result<u16, SimulationWorldError> {
     if !angle_rad.is_finite() {
         return Err(SimulationWorldError::NonFiniteSensorOutput);
     }
@@ -534,10 +539,7 @@ mod tests {
         SimulationWorld::new(test_config(), initial_state, 0.0).unwrap()
     }
 
-    fn authorized_actuation(
-        drive_torque_nm: f32,
-        reaction_torque_nm: f32,
-    ) -> AuthorizedActuation {
+    fn authorized_actuation(drive_torque_nm: f32, reaction_torque_nm: f32) -> AuthorizedActuation {
         let command = |torque_nm| BoundedActuatorCommand {
             command: NormalizedCommand::new(0.25).unwrap(),
             saturated: false,
