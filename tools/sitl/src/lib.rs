@@ -1,6 +1,7 @@
 pub mod evidence;
 pub mod scenario;
 pub mod scheduler;
+pub mod simulation_world;
 pub mod virtual_time;
 
 use std::error::Error;
@@ -30,17 +31,18 @@ pub struct RunContext {
 }
 
 impl RunContext {
-    pub fn stage1(system_identifier: impl Into<String>, git_commit: impl Into<String>) -> Self {
+    pub fn scheduler_only(
+        system_identifier: impl Into<String>,
+        git_commit: impl Into<String>,
+    ) -> Self {
         Self {
             system_identifier: system_identifier.into(),
             git_commit: git_commit.into(),
             production_model_configuration: json!({
-                "status": "not-materialized",
-                "stage": 1
+                "status": "not-materialized"
             }),
             virtual_physical_truth_configuration: json!({
-                "status": "not-materialized",
-                "stage": 1
+                "status": "not-materialized"
             }),
         }
     }
@@ -129,7 +131,7 @@ pub fn run_scenario(
     git_commit: &str,
     scenario: &Scenario,
 ) -> Result<RunArtifacts, RunError> {
-    let context = RunContext::stage1(system_identifier, git_commit);
+    let context = RunContext::scheduler_only(system_identifier, git_commit);
     let mut physical_time = NoopPhysicalTimeAdvance;
     run_scenario_with_time_advance(&context, scenario, &mut physical_time)
 }
@@ -377,7 +379,7 @@ mod tests {
     #[test]
     fn manifest_keeps_production_and_virtual_truth_provenance_distinct() {
         let scenario = scenario();
-        let mut context = RunContext::stage1("single-wheel-platform", "abc123");
+        let mut context = RunContext::scheduler_only("single-wheel-platform", "abc123");
         context.production_model_configuration = json!({"model": "production-assumption"});
         context.virtual_physical_truth_configuration = json!({"plant": "simulated-truth"});
         let mut physical_time = NoopPhysicalTimeAdvance;
@@ -418,7 +420,7 @@ mod tests {
     #[test]
     fn physical_world_advances_between_slices_not_as_a_queued_event() {
         let scenario = scenario();
-        let context = RunContext::stage1("single-wheel-platform", "test-commit");
+        let context = RunContext::scheduler_only("single-wheel-platform", "test-commit");
         let mut probe = TimeAdvanceProbe::default();
         let artifacts = run_scenario_with_time_advance(&context, &scenario, &mut probe).unwrap();
 
