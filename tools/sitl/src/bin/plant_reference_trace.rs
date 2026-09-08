@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use swp_actuation_interface::ActuationSink;
 use swp_actuator_model::{
-    ActuatorParameters, ActuatorPairModel, ActuatorPairOperatingPoint, StaticActuatorModel,
+    ActuatorPairModel, ActuatorPairOperatingPoint, ActuatorParameters, StaticActuatorModel,
 };
 use swp_dynamics_model::{PlantParameters, ReducedBalanceState};
 use swp_mpu6050::{AccelRange, GyroRange};
@@ -57,8 +57,7 @@ impl From<PlantFixture> for PlantParameters {
             reaction_wheel_mass_kg: value.reaction_wheel_mass_kg,
             reaction_wheel_com_height_m: value.reaction_wheel_com_height_m,
             reaction_wheel_spin_inertia_kg_m2: value.reaction_wheel_spin_inertia_kg_m2,
-            reaction_wheel_transverse_inertia_kg_m2: value
-                .reaction_wheel_transverse_inertia_kg_m2,
+            reaction_wheel_transverse_inertia_kg_m2: value.reaction_wheel_transverse_inertia_kg_m2,
         }
     }
 }
@@ -188,7 +187,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         samples,
     };
     fs::write(&cli.output, serde_json::to_vec_pretty(&output)?)?;
-    println!("wrote SimulationWorld truth trace to {}", cli.output.display());
+    println!(
+        "wrote SimulationWorld truth trace to {}",
+        cli.output.display()
+    );
     Ok(())
 }
 
