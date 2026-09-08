@@ -56,7 +56,7 @@ impl ProductionPathConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum PendingActuation {
     Apply(AuthorizedActuation),
     Revoke,
@@ -418,12 +418,12 @@ impl ClosedLoopSimulation {
 
     fn miss_runtime_opportunity(&mut self) {
         self.missed_runtime_opportunities = self.missed_runtime_opportunities.saturating_add(1);
-        if let Some(delivered) = self.delivered
-            && self.consumed_sample_index != Some(delivered.sample_index)
-        {
-            self.consumed_sample_index = Some(delivered.sample_index);
-            self.observations_discarded_on_miss =
-                self.observations_discarded_on_miss.saturating_add(1);
+        if let Some(delivered) = self.delivered {
+            if self.consumed_sample_index != Some(delivered.sample_index) {
+                self.consumed_sample_index = Some(delivered.sample_index);
+                self.observations_discarded_on_miss =
+                    self.observations_discarded_on_miss.saturating_add(1);
+            }
         }
     }
 
@@ -491,7 +491,7 @@ mod tests {
     };
     use swp_frame_transform::{FrameEvidenceBasis, SensorToBodyRotation};
     use swp_measurement_model::{
-        ImuPlacement, UPRIGHT_MEASUREMENT_COUNT, linearize_stationary_upright_measurement,
+        ImuPlacement, linearize_stationary_upright_measurement,
     };
     use swp_mpu6050::{AccelRange, Dlpf, GyroRange};
     use swp_sensor_calibration::encoder::{
@@ -593,7 +593,7 @@ mod tests {
 
     fn actuators() -> ActuatorPairModel {
         let actuator = StaticActuatorModel::new(
-            ActuatorParameters::new(2.0, 0.0, 0.0, 0.0, 0.1).unwrap(),
+            ActuatorParameters::new(2.0, 0.01, 0.0, 0.0, 0.1).unwrap(),
         )
         .unwrap();
         ActuatorPairModel {
