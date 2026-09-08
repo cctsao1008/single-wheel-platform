@@ -1,0 +1,52 @@
+{
+  "provenance": "synthetic correlation fixture; not ONE V2 physical parameters",
+  "sample_period_us": 1000,
+  "duration_us": 250000,
+  "plant": {
+    "gravity_m_per_s2": 9.80665,
+    "body_mass_kg": 1.0,
+    "body_com_height_m": 0.1,
+    "body_inertia_roll_kg_m2": 0.01,
+    "body_inertia_pitch_kg_m2": 0.01,
+    "body_inertia_yaw_kg_m2": 0.01,
+    "drive_wheel_mass_kg": 0.1,
+    "drive_wheel_radius_m": 0.05,
+    "drive_wheel_spin_inertia_kg_m2": 0.001,
+    "reaction_wheel_mass_kg": 0.1,
+    "reaction_wheel_com_height_m": 0.1,
+    "reaction_wheel_spin_inertia_kg_m2": 0.001,
+    "reaction_wheel_transverse_inertia_kg_m2": 0.001
+  },
+  "initial_state": [
+    0.0,
+    0.0,
+    0.025,
+    0.0,
+    -0.02,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "input_profile": [
+    {
+      "at_us": 0,
+      "drive_torque_nm": 0.0,
+      "reaction_wheel_torque_nm": 0.0
+    },
+    {
+      "at_us": 50000,
+      "drive_torque_nm": 0.02,
+      "reaction_wheel_torque_nm": -0.001
+    },
+    {
+      "at_us": 120000,
+      "drive_torque_nm": -0.01,
+      "reaction_wheel_torque_nm": 0.0015
+    },
+    {
+      "at_us": 180000,
+      "drive_torque_nm": 0.0,
+      "reaction_wheel_torque_nm": 0.0
+    }
+  ]
+}

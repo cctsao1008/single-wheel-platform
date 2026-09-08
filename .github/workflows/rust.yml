@@ -32,6 +32,19 @@ jobs:
           cmp /tmp/sitl-a/manifest.json /tmp/sitl-b/manifest.json
           cmp /tmp/sitl-a/trace.jsonl /tmp/sitl-b/trace.jsonl
           cmp /tmp/sitl-a/summary.json /tmp/sitl-b/summary.json
+      - name: Install plant model reference dependencies
+        run: python3 -m pip install -r tools/model/requirements.txt
+      - name: SimulationWorld reference correlation
+        run: |
+          cargo run -p swp-sitl --bin plant_reference_trace \
+            --target x86_64-unknown-linux-gnu -- \
+            --fixture tools/model/fixtures/synthetic_correlation.json \
+            --output /tmp/swp-rust-plant-trace.json
+          python3 tools/model/reference_balance.py \
+            --fixture tools/model/fixtures/synthetic_correlation.json \
+            --rust-trace /tmp/swp-rust-plant-trace.json \
+            --summary /tmp/swp-model-correlation-summary.json \
+            --max-abs-error 5e-6
       - name: DSP kernel tests
         run: cargo test -p swp-dsp-kernel --target x86_64-unknown-linux-gnu
       - name: Dynamics model tests
