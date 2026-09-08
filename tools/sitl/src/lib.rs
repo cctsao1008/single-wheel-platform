@@ -31,7 +31,10 @@ pub struct RunContext {
 }
 
 impl RunContext {
-    pub fn scheduler_only(system_identifier: impl Into<String>, git_commit: impl Into<String>) -> Self {
+    pub fn scheduler_only(
+        system_identifier: impl Into<String>,
+        git_commit: impl Into<String>,
+    ) -> Self {
         Self {
             system_identifier: system_identifier.into(),
             git_commit: git_commit.into(),
