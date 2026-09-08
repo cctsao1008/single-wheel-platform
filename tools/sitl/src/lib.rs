@@ -63,10 +63,7 @@ pub trait PhysicalTimeAdvance {
 /// dispatch then materializes sensor sampling, observation delivery, production
 /// runtime, missed opportunities, and actuation commit in semantic order.
 pub trait ScenarioExecution: PhysicalTimeAdvance {
-    fn dispatch_event(
-        &mut self,
-        event: ScheduledEvent,
-    ) -> Result<(), Box<dyn Error + 'static>>;
+    fn dispatch_event(&mut self, event: ScheduledEvent) -> Result<(), Box<dyn Error + 'static>>;
 }
 
 #[derive(Debug, Default)]
@@ -83,10 +80,7 @@ impl PhysicalTimeAdvance for NoopPhysicalTimeAdvance {
 }
 
 impl ScenarioExecution for NoopPhysicalTimeAdvance {
-    fn dispatch_event(
-        &mut self,
-        _event: ScheduledEvent,
-    ) -> Result<(), Box<dyn Error + 'static>> {
+    fn dispatch_event(&mut self, _event: ScheduledEvent) -> Result<(), Box<dyn Error + 'static>> {
         Ok(())
     }
 }
@@ -106,10 +100,7 @@ impl<A: PhysicalTimeAdvance> PhysicalTimeAdvance for TimeAdvanceOnly<'_, A> {
 }
 
 impl<A: PhysicalTimeAdvance> ScenarioExecution for TimeAdvanceOnly<'_, A> {
-    fn dispatch_event(
-        &mut self,
-        _event: ScheduledEvent,
-    ) -> Result<(), Box<dyn Error + 'static>> {
+    fn dispatch_event(&mut self, _event: ScheduledEvent) -> Result<(), Box<dyn Error + 'static>> {
         Ok(())
     }
 }
