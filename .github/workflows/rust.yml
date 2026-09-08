@@ -97,6 +97,8 @@ jobs:
         run: cargo test -p swp-runtime-observation-record --target x86_64-unknown-linux-gnu
       - name: Host recording decoder tests
         run: python3 -m unittest discover -s tools/recording -p 'test_*.py'
+      - name: Host commissioning evidence tests
+        run: python3 -m unittest discover -s tools/commissioning -p 'test_*.py'
       - name: Host wireless observer syntax
         run: python3 -m py_compile tools/wireless/observe.py
       - name: Install control synthesis dependencies
