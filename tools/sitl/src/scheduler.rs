@@ -151,8 +151,8 @@ impl DeterministicScheduler {
     }
 
     /// Advances scheduler time to the next timestamp and returns all events at
-    /// that timestamp in semantic order. `advance` is the Stage-2 boundary at
-    /// which the physical world will be integrated from the previous time to
+    /// that timestamp in semantic order. `advance` is the physical-world
+    /// boundary at which the simulation is integrated from the previous time to
     /// the new time before any event at `to` is dispatched.
     pub fn next_slice(&mut self) -> Option<TimeSlice> {
         let first = self.queue.pop()?.0;

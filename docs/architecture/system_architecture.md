@@ -119,6 +119,7 @@ firmware/
 ├── adapters/
 ├── boards/
 ├── assemblies/
+├── recording/
 └── targets/
 ```
 
@@ -240,6 +241,18 @@ BLDC_3             -> unused
 
 Board identity, actuator protocol, and robot role remain separate facts.
 
+### Recording
+
+Firmware-owned binary evidence formats live under:
+
+```text
+firmware/recording/observation-record
+firmware/recording/runtime-observation-record
+firmware/recording/control-profile-record
+```
+
+These formats serialize production evidence. Host-side decode/correlation tooling remains under `tools/`.
+
 ### Targets
 
 Current STM32F103 target family:
@@ -292,7 +305,7 @@ Firmware target backend
 
 One fresh sensor/control opportunity creates at most one control opportunity. Missed periods are not replayed as catch-up control iterations.
 
-The current non-actuating STM32F103 timing baseline is:
+The current non-actuating STM32F103 timing baseline implemented by `runtime-shadow` is:
 
 ```text
 sensing / estimator / inner balance    200 Hz
@@ -303,6 +316,56 @@ OLED UI framework                       10 Hz
 ```
 
 Telemetry and UI are lower-priority observations of current runtime state. Their drop-on-busy behavior cannot create a queue that changes control causality.
+
+## Software-In-The-Loop
+
+SITL is host engineering under `tools/sitl/`; it is not a fifth production domain. It replaces the physical environment while reusing production semantics.
+
+```text
+Deterministic Scheduler
+        │
+        │ PhysicalTimeAdvance
+        ▼
+SimulationWorld
+        │
+        │ device-like evidence
+        ▼
+RawObservation
+        │
+        ▼
+Firmware sensor calibration
+        │
+        ▼
+Firmware frame transform
+        │
+        ▼
+Firmware estimator-input
+        │
+        ▼
+Supervisor estimator
+        │ EstimatedState
+        ▼
+Control
+        │ GeneralizedDemand
+        ▼
+Plant actuator model
+        │ BoundedActuatorCommand
+        ▼
+Supervisor RuntimeAuthority
+        │ AuthorizedActuation
+        ▼
+ActuationSink
+        │ ideal physical torque in SITL
+        └──────────────────────────────► SimulationWorld
+```
+
+`SimulationWorld` owns the simulated physical truth, physical-time integration, virtual MPU6050/encoder evidence, and currently applied authorized physical input. Its truth state is available only to host evidence/reference correlation and is never passed directly into the production estimator or Control.
+
+The host closed-loop composition reuses production `scale_mpu6050`, calibration, frame transform, `EstimatorInputBuilder`, `ControlRuntime`, state feedback, outer `VelocityLoop`, actuator model, `RuntimeSupervisor`, `RuntimeAuthority`, and `ActuationSink`. The outer loop updates a held balance reference at its configured decimation; it does not bypass the canonical Control boundary.
+
+The first accepted encoder sample primes the production encoder trackers, so no encoder rate is invented. A missed runtime opportunity consumes that fresh observation as missed and does not replay it later. The previously committed physical input remains the zero-order-held input until a later actuation commit changes it.
+
+SITL requires an explicit complete configuration. Repository integration tests use synthetic fixtures for unknown physical/calibration/controller values and make no ONE V2 physical-validity claim.
 
 ## Typed semantic boundaries
 
@@ -337,6 +400,8 @@ They do not rely on a runtime `PWM_ENABLED` flag; the physical motor backend is 
 
 The reusable ECB02/OLED frameworks likewise do not claim physical peripheral integration or verification. Concrete UART/display wiring and throughput/timing evidence belong to later target commissioning.
 
-## Host engineering
+SITL is likewise non-physical: its `AuthorizedActuation` reaches only `SimulationWorld` ideal torque, never the ONE V2 motor backend.
 
-`infrastructure/` remains horizontal support for numerical kernels, records, and profiling. Model derivation, parameter identification, control synthesis, replay, and physical correlation remain host-side under `tools/`. Reference-backed or synthetic commissioning parameters may bootstrap structural execution, but physical validity requires measured/identified evidence.
+## Support and host engineering
+
+`support/` contains non-domain implementation support shared by production domains; `support/dsp-kernel` is the current numerical kernel. Model derivation, parameter identification, control synthesis, SITL, replay, and physical correlation remain host-side under `tools/`. Reference-backed or synthetic commissioning parameters may bootstrap structural execution, but physical validity requires measured/identified evidence.

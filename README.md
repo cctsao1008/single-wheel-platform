@@ -51,6 +51,7 @@ firmware/
 ├── adapters/         hardware evidence -> platform semantics
 ├── boards/           control-board wiring and peripheral capability
 ├── assemblies/       robot roles -> installed hardware channels
+├── recording/        firmware-owned binary evidence formats
 └── targets/          MCU-specific executable composition and HAL ownership
 ```
 
@@ -97,7 +98,7 @@ The existence of an actuator frame, target backend, PWM peripheral, or GPIO rout
 
 ## Current non-actuating runtime
 
-The canonical STM32F103 runtime baseline is:
+The canonical STM32F103 runtime baseline currently implemented by `runtime-shadow` is:
 
 ```text
 inner sensing / estimation / balance    200 Hz
@@ -112,6 +113,37 @@ OLED UI framework                        10 Hz
 `firmware/targets/stm32f103/io-shadow` materializes the Communications/UI framework at 50 Hz telemetry and 10 Hz OLED update rates using RAM-only shadow transports. Both publishers use latest-value, drop-on-busy semantics: they own no backlog and do not replay missed output opportunities.
 
 The ECB02 and OLED crates therefore define reusable contracts and presentation/transport behavior, but **do not claim verified ONE V2 UART/display wiring, BLE throughput, module configuration, or physical OLED operation**.
+
+## Software-In-The-Loop
+
+Host SITL lives under `tools/sitl/`; it is verification tooling, not a fifth production domain.
+
+```text
+Deterministic Scheduler
+        |
+        | PhysicalTimeAdvance
+        v
+SimulationWorld
+        |
+        | RawObservation
+        v
+production Firmware adapters
+        |
+        v
+production estimator / Control / actuator model / RuntimeAuthority
+        |
+        | AuthorizedActuation
+        v
+ActuationSink
+        |
+        +-----------------------------> SimulationWorld
+```
+
+`SimulationWorld` owns reduced physical truth, deterministic physical-time integration, device-like MPU6050/encoder sensing, and the currently applied authorized ideal torque. Simulation truth is available to host evidence/correlation only and is never passed directly into the production estimator or Control.
+
+The closed-loop SITL composition reuses production sensor scaling/calibration, frame transform, estimator-input, estimator, state feedback, velocity-loop reference generation, actuator model, Supervisor state/authority semantics, and `ActuationSink`. A missed runtime opportunity consumes that observation as missed and is never replayed or caught up.
+
+SITL configurations and repository integration tests use explicitly synthetic values where physical ONE V2 parameters or calibration evidence remain unknown. Simulation evidence is not physical validation.
 
 ## Targets
 
@@ -128,9 +160,9 @@ firmware/targets/stm32f103/
 
 The first six targets are non-actuating integration/profiling targets. `one-v2-pwm-dir` contains the separate physical motor backend; it is not composed into `runtime-shadow` or `io-shadow`.
 
-## Infrastructure and host engineering
+## Support and host engineering
 
-`infrastructure/` contains horizontal numerical and recording mechanisms. Host-side system identification, control synthesis, recording decode/replay, and correlation live under `tools/`.
+`support/` contains non-domain implementation support shared by production domains; `support/dsp-kernel` is the current cross-domain numerical kernel. Firmware-owned recording codecs live under `firmware/recording/`. Host-side system identification, mathematical derivation, control synthesis, SITL, recording decode/replay, and correlation live under `tools/`.
 
 ## Build
 

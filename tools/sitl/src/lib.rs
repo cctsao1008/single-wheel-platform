@@ -1,3 +1,4 @@
+pub mod closed_loop;
 pub mod evidence;
 pub mod scenario;
 pub mod scheduler;
@@ -11,7 +12,7 @@ use evidence::{
     Manifest, SITL_SCHEMA_VERSION, Summary, TraceRecord, append_json_line, pretty_json,
 };
 use scenario::{Scenario, ScenarioError};
-use scheduler::{DeterministicScheduler, EventKind, ScheduleError};
+use scheduler::{DeterministicScheduler, EventKind, ScheduleError, ScheduledEvent};
 use serde_json::{Value, json};
 use virtual_time::VirtualTime;
 
@@ -56,6 +57,15 @@ pub trait PhysicalTimeAdvance {
     ) -> Result<(), Box<dyn Error + 'static>>;
 }
 
+/// Executable system boundary driven by the deterministic scheduler.
+///
+/// Physical time advances before queued events at the new timestamp. Event
+/// dispatch then materializes sensor sampling, observation delivery, production
+/// runtime, missed opportunities, and actuation commit in semantic order.
+pub trait ScenarioExecution: PhysicalTimeAdvance {
+    fn dispatch_event(&mut self, event: ScheduledEvent) -> Result<(), Box<dyn Error + 'static>>;
+}
+
 #[derive(Debug, Default)]
 pub struct NoopPhysicalTimeAdvance;
 
@@ -69,12 +79,39 @@ impl PhysicalTimeAdvance for NoopPhysicalTimeAdvance {
     }
 }
 
+impl ScenarioExecution for NoopPhysicalTimeAdvance {
+    fn dispatch_event(&mut self, _event: ScheduledEvent) -> Result<(), Box<dyn Error + 'static>> {
+        Ok(())
+    }
+}
+
+struct TimeAdvanceOnly<'a, A: PhysicalTimeAdvance> {
+    inner: &'a mut A,
+}
+
+impl<A: PhysicalTimeAdvance> PhysicalTimeAdvance for TimeAdvanceOnly<'_, A> {
+    fn advance(
+        &mut self,
+        from: VirtualTime,
+        to: VirtualTime,
+    ) -> Result<(), Box<dyn Error + 'static>> {
+        self.inner.advance(from, to)
+    }
+}
+
+impl<A: PhysicalTimeAdvance> ScenarioExecution for TimeAdvanceOnly<'_, A> {
+    fn dispatch_event(&mut self, _event: ScheduledEvent) -> Result<(), Box<dyn Error + 'static>> {
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub enum RunError {
     Scenario(ScenarioError),
     Schedule(ScheduleError),
     Evidence(serde_json::Error),
     PhysicalAdvance(Box<dyn Error + 'static>),
+    EventDispatch(Box<dyn Error + 'static>),
     CounterOverflow,
     VirtualTimeOverflow,
 }
@@ -90,6 +127,9 @@ impl Display for RunError {
             Self::PhysicalAdvance(error) => {
                 write!(formatter, "SITL physical advance failed: {error}")
             }
+            Self::EventDispatch(error) => {
+                write!(formatter, "SITL event dispatch failed: {error}")
+            }
             Self::CounterOverflow => write!(formatter, "SITL execution counter overflow"),
             Self::VirtualTimeOverflow => write!(formatter, "SITL virtual time overflow"),
         }
@@ -102,7 +142,7 @@ impl Error for RunError {
             Self::Scenario(error) => Some(error),
             Self::Schedule(error) => Some(error),
             Self::Evidence(error) => Some(error),
-            Self::PhysicalAdvance(error) => Some(error.as_ref()),
+            Self::PhysicalAdvance(error) | Self::EventDispatch(error) => Some(error.as_ref()),
             Self::CounterOverflow | Self::VirtualTimeOverflow => None,
         }
     }
@@ -132,14 +172,25 @@ pub fn run_scenario(
     scenario: &Scenario,
 ) -> Result<RunArtifacts, RunError> {
     let context = RunContext::scheduler_only(system_identifier, git_commit);
-    let mut physical_time = NoopPhysicalTimeAdvance;
-    run_scenario_with_time_advance(&context, scenario, &mut physical_time)
+    let mut execution = NoopPhysicalTimeAdvance;
+    run_scenario_with_execution(&context, scenario, &mut execution)
 }
 
 pub fn run_scenario_with_time_advance<A: PhysicalTimeAdvance>(
     context: &RunContext,
     scenario: &Scenario,
     physical_time: &mut A,
+) -> Result<RunArtifacts, RunError> {
+    let mut execution = TimeAdvanceOnly {
+        inner: physical_time,
+    };
+    run_scenario_with_execution(context, scenario, &mut execution)
+}
+
+pub fn run_scenario_with_execution<E: ScenarioExecution>(
+    context: &RunContext,
+    scenario: &Scenario,
+    execution: &mut E,
 ) -> Result<RunArtifacts, RunError> {
     scenario.validate()?;
 
@@ -202,7 +253,7 @@ pub fn run_scenario_with_time_advance<A: PhysicalTimeAdvance>(
             .ok_or(RunError::CounterOverflow)?;
 
         if slice.advance.to > slice.advance.from {
-            physical_time
+            execution
                 .advance(slice.advance.from, slice.advance.to)
                 .map_err(RunError::PhysicalAdvance)?;
             physical_time_advances = physical_time_advances
@@ -211,25 +262,39 @@ pub fn run_scenario_with_time_advance<A: PhysicalTimeAdvance>(
         }
 
         for event in slice.events {
+            execution
+                .dispatch_event(event)
+                .map_err(RunError::EventDispatch)?;
+
             let opportunity_status = match event.kind {
                 EventKind::ProductionRuntime => {
-                    admitted_control_opportunities += 1;
+                    admitted_control_opportunities = admitted_control_opportunities
+                        .checked_add(1)
+                        .ok_or(RunError::CounterOverflow)?;
                     Some("admitted")
                 }
                 EventKind::RuntimeOpportunityMissed => {
-                    missed_control_opportunities += 1;
+                    missed_control_opportunities = missed_control_opportunities
+                        .checked_add(1)
+                        .ok_or(RunError::CounterOverflow)?;
                     Some("missed")
                 }
                 EventKind::SensorSample => {
-                    scheduled_sensor_samples += 1;
+                    scheduled_sensor_samples = scheduled_sensor_samples
+                        .checked_add(1)
+                        .ok_or(RunError::CounterOverflow)?;
                     None
                 }
                 EventKind::ObservationDelivery => {
-                    delivered_observations += 1;
+                    delivered_observations = delivered_observations
+                        .checked_add(1)
+                        .ok_or(RunError::CounterOverflow)?;
                     None
                 }
                 EventKind::ActuationCommit => {
-                    actuation_commits += 1;
+                    actuation_commits = actuation_commits
+                        .checked_add(1)
+                        .ok_or(RunError::CounterOverflow)?;
                     None
                 }
                 EventKind::ScenarioStart => None,
@@ -252,8 +317,9 @@ pub fn run_scenario_with_time_advance<A: PhysicalTimeAdvance>(
         }
     }
 
-    let scheduled_control_opportunities =
-        admitted_control_opportunities + missed_control_opportunities;
+    let scheduled_control_opportunities = admitted_control_opportunities
+        .checked_add(missed_control_opportunities)
+        .ok_or(RunError::CounterOverflow)?;
     let pass = scheduled_sensor_samples == scenario.sensor_sample_count()
         && delivered_observations == scheduled_sensor_samples
         && scheduled_control_opportunities == scenario.runtime_opportunity_count()

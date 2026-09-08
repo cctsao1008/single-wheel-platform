@@ -10,11 +10,20 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"
 swp-actuation-interface = { path = "../../firmware/interfaces/actuation" }
+swp-actuator-model = { path = "../../plant/actuator-model" }
+swp-control-runtime = { path = "../../supervisor/control-runtime" }
 swp-dynamics-model = { path = "../../plant/dynamics-model" }
+swp-estimator-input = { path = "../../firmware/adapters/estimator-input" }
+swp-frame-transform = { path = "../../firmware/adapters/frame-transform" }
 swp-mpu6050 = { path = "../../firmware/sensors/mpu6050" }
 swp-plant-observation = { path = "../../plant/plant-observation" }
+swp-robot-domain = { path = "../../plant/robot-domain" }
 swp-runtime-state = { path = "../../supervisor/runtime-state" }
+swp-runtime-supervisor = { path = "../../supervisor/runtime-supervisor" }
+swp-sensor-calibration = { path = "../../firmware/adapters/sensor-calibration" }
+swp-state-estimator = { path = "../../supervisor/state-estimator" }
+swp-velocity-loop = { path = "../../control/velocity-loop" }
 
 [dev-dependencies]
-swp-actuator-model = { path = "../../plant/actuator-model" }
-swp-robot-domain = { path = "../../plant/robot-domain" }
+swp-measurement-model = { path = "../../plant/measurement-model" }
+swp-state-feedback = { path = "../../control/state-feedback" }
