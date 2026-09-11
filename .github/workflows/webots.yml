@@ -1,0 +1,47 @@
+name: Webots simulation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/webots.yml'
+      - 'tools/simulation/webots/**'
+      - 'tools/simulation/validate_webots_trace.py'
+      - 'tools/simulation/test_validate_webots_trace.py'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run pinned Webots R2025a headless smoke test
+        env:
+          WEBOTS_IMAGE: ghcr.io/cyberbotics/webots-docker/webots@sha256:f31b128a3e4c06e54b26ce3d963a0e6b1c9634907978ae4397db9b4cde2d9f0c
+        run: |
+          mkdir -p webots-output
+          docker run --rm \
+            -e LIBGL_ALWAYS_SOFTWARE=true \
+            -e SWP_WEBOTS_DURATION_S=0.25 \
+            -e SWP_WEBOTS_DRIVE_TORQUE_NM=0.0 \
+            -e SWP_WEBOTS_REACTION_TORQUE_NM=0.0 \
+            -e SWP_WEBOTS_TRACE=/workspace/webots-output/minimal-zero-torque.jsonl \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "$WEBOTS_IMAGE" \
+            bash -lc 'timeout 90s xvfb-run --auto-servernum webots --stdout --stderr --batch --mode=fast --no-rendering /workspace/tools/simulation/webots/worlds/single_wheel_synthetic.wbt'
+
+      - name: Validate Webots machine-readable trace
+        run: |
+          python3 tools/simulation/validate_webots_trace.py \
+            webots-output/minimal-zero-torque.jsonl \
+            --minimum-records 100
+
+      - name: Upload smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: webots-r2025a-smoke-trace
+          path: webots-output/minimal-zero-torque.jsonl
+          if-no-files-found: error
