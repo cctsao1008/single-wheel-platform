@@ -21,7 +21,7 @@ The repository has four architectural domains. They define ownership and depende
 ## Domains
 
 - **Plant** — physical state, units, dynamics, measurement physics, observation semantics, and actuator physics.
-- **Control** — desired closed-loop behavior. The current implementation contains inner state feedback and a 100 Hz outer velocity loop; it produces `GeneralizedDemand` in physical semantics.
+- **Control** — desired closed-loop behavior: inner state feedback and a 100 Hz outer velocity loop, producing `GeneralizedDemand` in physical semantics.
 - **Supervisor** — estimation, runtime state, timing health, watchdog/fault handling, actuator qualification, and the only semantic promotion to `AuthorizedActuation`.
 - **Firmware** — sensing-device protocols, communications, UI, buses, actuator electrical semantics, board/assembly binding, MCU target composition, and physical I/O.
 
@@ -55,7 +55,7 @@ firmware/
 └── targets/          MCU-specific executable composition and HAL ownership
 ```
 
-Current reusable Firmware components include:
+Reusable Firmware components include:
 
 ```text
 sensing        firmware/sensors/mpu6050
@@ -96,9 +96,9 @@ physical target backend
 
 The existence of an actuator frame, target backend, PWM peripheral, or GPIO route never grants authority by itself.
 
-## Current non-actuating runtime
+## Non-actuating runtime architecture
 
-The canonical STM32F103 runtime baseline currently implemented by `runtime-shadow` is:
+The canonical STM32F103 `runtime-shadow` baseline is:
 
 ```text
 inner sensing / estimation / balance    200 Hz
@@ -139,11 +139,11 @@ ActuationSink
         +-----------------------------> SimulationWorld
 ```
 
-`SimulationWorld` owns reduced physical truth, deterministic physical-time integration, device-like MPU6050/encoder sensing, and the currently applied authorized ideal torque. Simulation truth is available to host evidence/correlation only and is never passed directly into the production estimator or Control.
+`SimulationWorld` owns reduced physical truth, deterministic physical-time integration, device-like MPU6050/encoder sensing, and the applied authorized ideal torque. Simulation truth is available to host evidence/correlation only and is never passed directly into the production estimator or Control.
 
 The closed-loop SITL composition reuses production sensor scaling/calibration, frame transform, estimator-input, estimator, state feedback, velocity-loop reference generation, actuator model, Supervisor state/authority semantics, and `ActuationSink`. A missed runtime opportunity consumes that observation as missed and is never replayed or caught up.
 
-SITL configurations and repository integration tests use explicitly synthetic values where physical ONE V2 parameters or calibration evidence remain unknown. Simulation evidence is not physical validation.
+SITL configurations and repository integration tests use explicitly synthetic values where physical ONE V2 parameters or calibration evidence are unknown. Simulation evidence is not physical validation.
 
 ## Targets
 
@@ -162,7 +162,7 @@ The first six targets are non-actuating integration/profiling targets. `one-v2-p
 
 ## Support and host engineering
 
-`support/` contains non-domain implementation support shared by production domains; `support/dsp-kernel` is the current cross-domain numerical kernel. Firmware-owned recording codecs live under `firmware/recording/`. Host-side system identification, mathematical derivation, control synthesis, SITL, recording decode/replay, and correlation live under `tools/`.
+`support/` contains non-domain implementation support shared by production domains; `support/dsp-kernel` is the cross-domain numerical kernel. Firmware-owned recording codecs live under `firmware/recording/`. Host-side system identification, mathematical derivation, control synthesis, SITL, recording decode/replay, and correlation live under `tools/`.
 
 ## Build
 
@@ -176,3 +176,9 @@ cargo fw-io-shadow
 ```
 
 Architecture: [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
+
+## Documentation principle
+
+> **README explains the system. Issues explain the journey. Code proves the current state.**
+
+README and durable documentation explain the Plant / Control / Supervisor / Firmware architecture, typed interfaces, safety and authority boundaries, target roles, and validation interpretation. GitHub Issues preserve experiments, system-identification work, tuning, temporary constraints, implementation steps, and closure records. Code, target composition, configuration, and tests remain the authoritative evidence of executable behavior.
