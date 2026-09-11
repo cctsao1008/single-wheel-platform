@@ -1,0 +1,131 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "webots://projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "webots://projects/objects/floors/protos/Floor.proto"
+
+WorldInfo {
+  basicTimeStep 1
+  contactProperties [
+    ContactProperties {
+      material1 "drive_tire"
+      material2 "floor"
+      coulombFriction [
+        1
+      ]
+    }
+  ]
+}
+Viewpoint {
+  orientation -0.318 0.537 0.781 2.22
+  position 0.7 -1.2 0.65
+}
+TexturedBackground {
+}
+Floor {
+  size 4 4
+  contactMaterial "floor"
+}
+Robot {
+  translation 0 0 0.15
+  controller "swp_trace"
+  children [
+    InertialUnit {
+      name "body_imu"
+    }
+    Gyro {
+      name "body_gyro"
+    }
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.55 0.55 0.58
+        roughness 0.7
+        metalness 0
+      }
+      geometry DEF BODY_SHAPE Box {
+        size 0.12 0.05 0.20
+      }
+    }
+    HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 1 0
+        anchor 0 0 -0.10
+      }
+      device [
+        RotationalMotor {
+          name "drive_motor"
+          maxTorque 0.5
+        }
+        PositionSensor {
+          name "drive_encoder"
+        }
+      ]
+      endPoint Solid {
+        translation 0 0 -0.10
+        rotation 1 0 0 1.5708
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.12 0.12 0.12
+              roughness 0.9
+              metalness 0
+            }
+            geometry DEF DRIVE_WHEEL_SHAPE Cylinder {
+              height 0.02
+              radius 0.05
+              subdivision 32
+            }
+          }
+        ]
+        name "drive_wheel"
+        contactMaterial "drive_tire"
+        boundingObject USE DRIVE_WHEEL_SHAPE
+        physics Physics {
+          mass 0.1
+        }
+      }
+    }
+    HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 1 0 0
+        anchor 0 0 0.05
+      }
+      device [
+        RotationalMotor {
+          name "reaction_motor"
+          maxTorque 0.5
+        }
+        PositionSensor {
+          name "reaction_encoder"
+        }
+      ]
+      endPoint Solid {
+        translation 0 0 0.05
+        rotation 0 1 0 1.5708
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.18 0.32 0.68
+              roughness 0.6
+              metalness 0.1
+            }
+            geometry DEF REACTION_WHEEL_SHAPE Cylinder {
+              height 0.012
+              radius 0.04
+              subdivision 32
+            }
+          }
+        ]
+        name "reaction_wheel"
+        boundingObject USE REACTION_WHEEL_SHAPE
+        physics Physics {
+          mass 0.1
+        }
+      }
+    }
+  ]
+  name "single_wheel_synthetic"
+  boundingObject USE BODY_SHAPE
+  physics Physics {
+    mass 1
+  }
+}
