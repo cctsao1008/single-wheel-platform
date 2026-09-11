@@ -11,7 +11,7 @@ import json
 import os
 from pathlib import Path
 
-from controller import Robot
+from controller import Supervisor
 
 
 DURATION_S = float(os.environ.get("SWP_WEBOTS_DURATION_S", "0.25"))
@@ -21,7 +21,7 @@ TRACE_PATH = os.environ.get("SWP_WEBOTS_TRACE")
 
 
 def main() -> None:
-    robot = Robot()
+    robot = Supervisor()
     step_ms = int(robot.getBasicTimeStep())
     step_s = step_ms / 1000.0
 
@@ -83,6 +83,7 @@ def main() -> None:
     finally:
         if output:
             output.close()
+        robot.simulationQuit(0)
 
 
 if __name__ == "__main__":
