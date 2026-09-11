@@ -31,7 +31,14 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             "$WEBOTS_IMAGE" \
-            bash -lc 'timeout 90s xvfb-run --auto-servernum webots --stdout --stderr --batch --mode=fast --no-rendering /workspace/tools/simulation/webots/worlds/single_wheel_synthetic.wbt'
+            bash -lc 'set -o pipefail; timeout 90s xvfb-run --auto-servernum webots --stdout --stderr --batch --mode=fast --no-rendering /workspace/tools/simulation/webots/worlds/single_wheel_synthetic.wbt 2>&1 | tee /workspace/webots-output/webots.log'
+
+      - name: Reject Webots load/runtime errors
+        run: |
+          if grep -q '^ERROR:' webots-output/webots.log; then
+            cat webots-output/webots.log
+            exit 1
+          fi
 
       - name: Validate Webots machine-readable trace
         run: |
@@ -42,6 +49,8 @@ jobs:
       - name: Upload smoke evidence
         uses: actions/upload-artifact@v4
         with:
-          name: webots-r2025a-smoke-trace
-          path: webots-output/minimal-zero-torque.jsonl
+          name: webots-r2025a-smoke-evidence
+          path: |
+            webots-output/minimal-zero-torque.jsonl
+            webots-output/webots.log
           if-no-files-found: error
