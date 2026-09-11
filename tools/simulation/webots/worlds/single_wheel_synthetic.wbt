@@ -1,8 +1,5 @@
 #VRML_SIM R2025a utf8
 
-EXTERNPROTO "webots://projects/objects/backgrounds/protos/TexturedBackground.proto"
-EXTERNPROTO "webots://projects/objects/floors/protos/Floor.proto"
-
 WorldInfo {
   basicTimeStep 1
   contactProperties [
@@ -19,11 +16,23 @@ Viewpoint {
   orientation -0.318 0.537 0.781 2.22
   position 0.7 -1.2 0.65
 }
-TexturedBackground {
-}
-Floor {
-  size 4 4
+Solid {
+  translation 0 0 -0.01
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.35 0.35 0.35
+        roughness 1
+        metalness 0
+      }
+      geometry DEF FLOOR_SHAPE Box {
+        size 4 4 0.02
+      }
+    }
+  ]
+  name "floor"
   contactMaterial "floor"
+  boundingObject USE FLOOR_SHAPE
 }
 Robot {
   translation 0 0 0.15
@@ -81,6 +90,7 @@ Robot {
         contactMaterial "drive_tire"
         boundingObject USE DRIVE_WHEEL_SHAPE
         physics Physics {
+          density -1
           mass 0.1
         }
       }
@@ -119,6 +129,7 @@ Robot {
         name "reaction_wheel"
         boundingObject USE REACTION_WHEEL_SHAPE
         physics Physics {
+          density -1
           mass 0.1
         }
       }
@@ -127,6 +138,7 @@ Robot {
   name "single_wheel_synthetic"
   boundingObject USE BODY_SHAPE
   physics Physics {
+    density -1
     mass 1
   }
 }
