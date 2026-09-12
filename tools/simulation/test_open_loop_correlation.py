@@ -4,7 +4,12 @@ import json
 from pathlib import Path
 import unittest
 
-from open_loop_correlation import materialize_reduced_fixture, project_model_samples
+from open_loop_correlation import (
+    COMMON_STATE_FIELDS,
+    compare_common_traces,
+    materialize_reduced_fixture,
+    project_model_samples,
+)
 from validate_experiment import validate_experiment
 
 
@@ -52,6 +57,36 @@ class OpenLoopCorrelationTests(unittest.TestCase):
         self.assertEqual(projected["reaction_position_rad"], 8.0)
         self.assertEqual(projected["forward_position_m"], 1.0)
         self.assertEqual(projected["drive_torque_nm"], 9.0)
+
+    def test_finite_width_free_roll_mismatch_is_preserved_as_explainable(self) -> None:
+        def sample(time_s: float, pitch: float, roll: float) -> dict[str, float]:
+            record = {field: 0.0 for field in COMMON_STATE_FIELDS}
+            record.update(
+                {
+                    "time_s": time_s,
+                    "body_pitch_rad": pitch,
+                    "body_roll_rad": roll,
+                    "drive_torque_nm": 0.0,
+                    "reaction_torque_nm": 0.0,
+                }
+            )
+            return record
+
+        reference = [
+            sample(0.001, 0.0250, -0.0200),
+            sample(0.050, 0.0270, -0.0210),
+        ]
+        webots_like = [
+            sample(0.001, 0.0250, -0.0200),
+            sample(0.050, 0.0300, -0.0170),
+        ]
+        result = compare_common_traces(
+            "synthetic-free-response", reference, webots_like
+        )
+        self.assertEqual(result["status"], "explainable_difference")
+        self.assertFalse(result["causal_match"])
+        self.assertTrue(result["causal_acceptable"])
+        self.assertEqual(result["explained_differences"][0]["field"], "body_roll_rad")
 
 
 if __name__ == "__main__":
