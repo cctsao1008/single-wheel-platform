@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the minimal machine-readable Webots trace produced by swp_trace."""
+"""Validate the machine-readable Webots common-observable trace."""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from typing import Any
 
 FIELDS = (
     "time_s",
-    "body_roll_rad",
-    "body_roll_rate_rad_s",
+    "forward_position_m",
+    "forward_velocity_m_per_s",
     "body_pitch_rad",
-    "body_pitch_rate_rad_s",
-    "drive_position_rad",
-    "drive_rate_rad_s",
+    "body_pitch_rate_rad_per_s",
+    "body_roll_rad",
+    "body_roll_rate_rad_per_s",
     "reaction_position_rad",
-    "reaction_rate_rad_s",
+    "reaction_rate_rad_per_s",
     "drive_torque_nm",
     "reaction_torque_nm",
 )
