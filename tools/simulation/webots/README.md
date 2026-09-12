@@ -1,20 +1,20 @@
 # Webots backend
 
-This directory is the host-only high-fidelity simulation lane for the Single platform. Webots is an independent physical counterexample generator; it does not replace the analytical reference or Rust `SimulationWorld`, and it is not a production Firmware dependency.
+This directory is the host-only rigid-body simulation lane for the Single platform. Webots is an independent physical counterexample generator; it does not replace the analytical reference or Rust `SimulationWorld`, and it is not a production Firmware dependency.
 
-The first committed world is intentionally synthetic:
+The committed world is intentionally synthetic:
 
 ```text
 worlds/single_wheel_synthetic.wbt
   body rigid body
-  drive wheel: hinge axis +Y, ground contact
+  drive wheel: hinge axis +Y, finite-width ground contact
   reaction wheel: hinge axis +X
   body InertialUnit + Gyro
   drive/reaction PositionSensor
   drive/reaction RotationalMotor in direct torque control
 ```
 
-The world uses Webots' conventional robot axes as the project body frame:
+The world uses the project body frame and explicitly sets gravity to `9.80665 m/s^2`:
 
 ```text
 +X forward
@@ -22,65 +22,75 @@ The world uses Webots' conventional robot axes as the project body frame:
 +Z up
 ```
 
-This gives the physical sign mapping:
+Mechanical sign mapping:
 
 ```text
 drive wheel +    = relative rotation about +Y, producing +X forward rolling
 reaction wheel + = relative rotation about body +X by right-hand rule
 ```
 
-The geometry, masses, friction, and torque limits in this bootstrap world are **synthetic simulation values**. They are not promoted ONE V2 facts and must not be copied into `parameters/reference-assembly.json`.
+All geometry, mass, contact, friction, and torque-limit values in this bootstrap world are **synthetic simulation values**. They are not ONE V2 facts and must not be copied into `parameters/reference-assembly.json`.
 
-## Minimal trace run
+## Simulator-neutral experiment run
 
-With Webots R2025a installed on Linux, run headless under Xvfb:
+The controller accepts a schema-2 experiment through `SWP_EXPERIMENT` and writes common-observable JSONL through `SWP_WEBOTS_TRACE`:
 
 ```bash
+SWP_EXPERIMENT=tools/simulation/experiments/synthetic-drive-torque-pulse.json \
 SWP_WEBOTS_TRACE=/tmp/single-webots.jsonl \
 xvfb-run --auto-servernum webots \
   --stdout --stderr --batch --mode=fast --no-rendering \
   tools/simulation/webots/worlds/single_wheel_synthetic.wbt
 ```
 
-The `swp_trace` controller defaults to 0.25 s and zero torque. Optional environment variables are:
+`setTorque()` is used intentionally for ideal direct joint torque. The controller applies the experiment's piecewise drive/reaction torque profile and emits:
 
 ```text
-SWP_WEBOTS_DURATION_S
-SWP_WEBOTS_DRIVE_TORQUE_NM
-SWP_WEBOTS_REACTION_TORQUE_NM
-SWP_WEBOTS_TRACE
+time
+forward position / velocity
+pitch / pitch rate
+roll / roll rate
+reaction-wheel relative angle / rate
+applied drive / reaction torque
 ```
 
-`setTorque()` is used intentionally: Webots documents it as direct torque control that disables the internal position PID until position control is selected again.
+Forward translation comes from the body world pose/velocity. The drive encoder may remain in the Webots world as a backend diagnostic device, but it is deliberately not read as the common forward coordinate.
 
-The emitted JSONL records body roll/pitch and rates, drive/reaction positions and finite-difference rates, plus the applied ideal joint torques. This trace is simulator evidence only.
+A legacy zero-torque smoke mode remains when `SWP_EXPERIMENT` is absent; it is not the #16 correlation path.
+
+## Cross-backend parameter consistency
+
+The #16 Webots experiments use `tools/simulation/fixtures/synthetic-rigidbody-correlation.json`. Its reduced-model inertias are analytically derived from the same committed synthetic box/cylinder geometry used by this world. This prevents analytical/Rust/Webots comparisons from accidentally using different inertial parameter sets.
+
+The source is synthetic and exists only for correlation development.
+
+## Known roll/contact difference
+
+The Webots drive wheel has finite width. The reduced roll model uses a knife-edge-like rolling support assumption. A small roll perturbation can therefore remain inside a lateral contact support region in Webots while the reduced model predicts immediate unstable roll evolution.
+
+This difference is kept visible as `explainable_difference` evidence. It is not corrected with a hidden sign flip or controller/gain adjustment. Standalone drive- and reaction-torque experiments are used to verify actuator polarity and gross causal direction independently of that combined contact effect.
 
 ## Reproducible CI lane
 
-`.github/workflows/webots.yml` runs the smoke model in the Cyberbotics R2025a container pinned by immutable image digest:
+`.github/workflows/webots.yml` uses the Cyberbotics R2025a container pinned by immutable digest:
 
 ```text
 ghcr.io/cyberbotics/webots-docker/webots
 @sha256:f31b128a3e4c06e54b26ce3d963a0e6b1c9634907978ae4397db9b4cde2d9f0c
 ```
 
-The high-fidelity job runs only when its workflow, Webots model/controller, or Webots trace validation changes, and it is also available through `workflow_dispatch`. It deliberately does not run on every ordinary firmware commit. The normal Rust workflow still validates the lightweight simulator-neutral contract on each `main` push.
+The workflow runs the five #16 experiments across analytical, Rust `SimulationWorld`, and Webots lanes. For each experiment it validates the contract, materializes the reduced fixture, records raw/projected traces, verifies Webots emitted no runtime `ERROR:`, calculates discrepancy/causal metrics, and writes a machine-readable summary.
 
-The smoke workflow:
+Evidence artifacts are uploaded even when the correlation job fails, so a failed counterexample remains inspectable rather than disappearing with the job.
 
-1. runs Webots R2025a headlessly with software rendering;
-2. fails if Webots emits a load/runtime `ERROR:` line;
-3. validates the generated JSONL trace structure and timing;
-4. uploads the trace and Webots log as CI evidence.
-
-The pinned simulator image and repository commit together define the executable environment for this lane. Changing the simulator digest is an explicit evidence-boundary change, not an invisible upgrade.
+The pinned simulator image and repository commit together define the executable environment. Changing the simulator digest is an explicit evidence-boundary change, not an invisible upgrade.
 
 ## Boundary
 
-The bootstrap controller does **not** implement state estimation, LQR/LQI, the velocity loop, or runtime authority. Closing Webots through the production semantic path is a separate integration step. Until then:
+The bootstrap controller does **not** implement state estimation, LQR/LQI, the velocity loop, or runtime authority. Closing Webots through the production semantic path is a separate issue. Until then:
 
 ```text
-Webots truth/sensors -> trace evidence only
+Webots truth -> common trace evidence only
 ```
 
 not:
