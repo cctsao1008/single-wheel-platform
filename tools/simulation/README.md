@@ -64,11 +64,38 @@ synthetic-small-angle.json          # combined small disturbance
 synthetic-zero-input-equilibrium.json
 ```
 
-`open_loop_correlation.py` translates each neutral experiment into the reduced-model fixture format, projects analytical/Rust/Webots outputs into the common observable set, aligns time samples, checks applied inputs, computes max/RMS discrepancies, and performs experiment-specific causal/sign checks.
+Run the complete analytical/Rust/Webots suite from the repository root with one command:
+
+```bash
+tools/simulation/run_webots_correlation_suite.sh webots-output
+```
+
+The runner uses the pinned Webots R2025a container unless `WEBOTS_IMAGE` is explicitly overridden. It produces raw/projected traces, per-experiment JSON summaries, logs, and the aggregate machine-readable verdict:
+
+```text
+webots-output/suite-summary.json
+```
+
+`open_loop_correlation.py` produces the low-level aligned comparison. `finalize_correlation_summary.py` applies the dimensioned suite-level acceptance policy and enriches the evidence with repository/backend identity and peak/end/tail waveform characteristics. `summarize_correlation_suite.py` then aggregates all five required experiments into one verdict.
 
 The reduced analytical lane uses float64 exact ZOH. `SimulationWorld` uses the independent Rust f32/RK4 implementation. Their agreement is held to a strict numerical threshold. Webots is a rigid-body/contact model and is not required to numerically equal the reduced plant; it must preserve input/sign causality or produce an explicitly classified physical-model difference.
 
 A backend disagreement is not resolved by majority vote or by retuning one backend until it matches another.
+
+## Zero-input equilibrium criterion
+
+Equilibrium is checked with dimensioned per-field envelopes, not one scalar threshold shared across metres, metres/second, radians, and radians/second. The synthetic Webots lane must remain inside:
+
+```text
+forward position       <= 1e-6 m
+forward velocity       <= 1e-4 m/s
+pitch / roll / reaction angle
+                       <= 1e-4 rad
+pitch / roll / reaction rate
+                       <= 2e-3 rad/s
+```
+
+These are numerical/simulation sanity bounds for this synthetic evidence lane. They are not physical ONE V2 tolerances and must not be promoted into the physical parameter registry.
 
 ## Synthetic cross-backend parameter source
 
@@ -112,7 +139,7 @@ A backend-specific axis convention is an adapter concern. Hidden sign flips used
 
 ## Evidence
 
-A backend evidence bundle should identify backend/version, repository commit, experiment and SHA-256, parameter source and SHA-256, solver settings, raw/projected traces, correlation summary, and deterministic seed when applicable.
+A backend evidence bundle identifies the repository commit when available, experiment and SHA-256, parameter source and SHA-256, parameter provenance, solver/backend identity when available, raw/projected traces, correlation summary, and aggregate suite verdict.
 
 Generated traces and summaries are evidence artifacts. They are not parameter registries and must not silently feed production estimation or control.
 
