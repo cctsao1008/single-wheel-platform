@@ -2,6 +2,7 @@
 
 WorldInfo {
   basicTimeStep 1
+  gravity 0 0 -9.80665
   contactProperties [
     ContactProperties {
       material1 "drive_tire"
