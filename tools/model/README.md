@@ -37,6 +37,31 @@ python tools/model/derive_balance_model.py
 
 The derivation corresponds to [`docs/architecture/dynamics_model.md`](../../docs/architecture/dynamics_model.md). If the physical model changes, the document and symbolic source change together; Git preserves the history.
 
+## Physical parameter admissibility
+
+`check_parameter_admissibility.py` rejects a small class of physically impossible inertia values after they are accepted into `parameters/reference-assembly.json`.
+
+The current model assumes a diagonal body inertia tensor in body axes and an axisymmetric reaction wheel. Under those assumptions the validator checks:
+
+```text
+I_roll  <= I_pitch + I_yaw
+I_pitch <= I_roll  + I_yaw
+I_yaw   <= I_roll  + I_pitch
+
+I_reaction_spin <= 2 * I_reaction_transverse
+```
+
+Every known inertia must also be finite and strictly positive. Missing values remain missing: the validator never synthesizes, defaults, clamps, or repairs evidence.
+
+Run it with:
+
+```bash
+python tools/model/check_parameter_admissibility.py
+python -m unittest discover -s tools/model -p 'test_parameter_admissibility.py'
+```
+
+Passing this gate does **not** prove that an inertia value is correct for ONE V2. It only rejects values that cannot represent a rigid body under the current model assumptions. If physical evidence later requires products of inertia or a non-axisymmetric reaction wheel, the model/schema must expand instead of weakening this gate.
+
 ## Independent numeric reference
 
 `reference_balance.py` is an independent numeric oracle for the stationary-upright reduced plant currently used by `tools/sitl/SimulationWorld`.
