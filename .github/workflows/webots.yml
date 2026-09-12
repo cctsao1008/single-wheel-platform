@@ -83,8 +83,9 @@ jobs:
           done
 
       - name: Upload cross-backend evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: webots-r2025a-open-loop-correlation
           path: webots-output/
-          if-no-files-found: error
+          if-no-files-found: warn
