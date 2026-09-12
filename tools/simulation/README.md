@@ -21,15 +21,36 @@ experiment contract
 
 ## Experiment contract
 
-Schema `1` requires:
+Schema `2` / `simulator-neutral-v2` requires:
 
 - an explicit backend contract and allowed backend set;
 - a parameter-set identifier, source, and provenance class;
 - the canonical body frame and mechanical positive-direction definitions;
 - duration and integration/sample step;
-- the canonical eight-state initial condition;
+- the canonical eight-quantity physical initial condition;
 - a piecewise input profile containing drive torque, reaction-wheel torque, and optional body-frame external force;
-- named observables with explicit physical units.
+- named common observables with explicit physical units.
+
+The common initial-state contract is:
+
+```text
+forward_position_m
+forward_velocity_m_per_s
+body_pitch_rad
+body_pitch_rate_rad_per_s
+body_roll_rad
+body_roll_rate_rad_per_s
+reaction_position_rad
+reaction_rate_rad_per_s
+```
+
+This is intentionally not a list of simulator joints. In the canonical reduced model, drive-wheel relative angle is derived under local pure rolling:
+
+```text
+delta_d = s / r_drive - theta
+```
+
+A rigid-body backend may record drive-joint angle/rate as backend-native diagnostics, but those values are not interchangeable with `s` / `s_dot` and are not part of the common correlation state.
 
 Validate an experiment with:
 
@@ -38,7 +59,7 @@ python3 tools/simulation/validate_experiment.py \
   tools/simulation/experiments/synthetic-small-angle.json
 ```
 
-The committed example deliberately reuses values from the existing synthetic correlation fixture. Its provenance is `synthetic`; it is not ONE V2 physical evidence.
+The committed example deliberately reuses values from the existing synthetic correlation fixture. Its provenance is `synthetic`; it is not ONE V2 physical evidence. The fixture therefore starts at `s = 0`, `pitch = +0.025 rad`, and `roll = -0.02 rad`, matching that existing synthetic model experiment rather than inventing a backend-specific joint perturbation.
 
 ## Provenance classes
 
