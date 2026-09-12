@@ -21,15 +21,18 @@ EXPECTED_COORDINATES = {
     "reaction_wheel_positive": "relative rotation about body +X by right-hand rule",
 }
 
+# Common physical state shared by reduced and rigid-body backends.  Drive-wheel
+# relative angle is deliberately absent: in the reduced plant it is derived from
+# local pure rolling, delta_d = s / r_drive - theta.
 STATE_UNITS = {
-    "body_roll_rad": "rad",
-    "body_roll_rate_rad_s": "rad/s",
+    "forward_position_m": "m",
+    "forward_velocity_m_per_s": "m/s",
     "body_pitch_rad": "rad",
-    "body_pitch_rate_rad_s": "rad/s",
-    "drive_position_rad": "rad",
-    "drive_rate_rad_s": "rad/s",
+    "body_pitch_rate_rad_per_s": "rad/s",
+    "body_roll_rad": "rad",
+    "body_roll_rate_rad_per_s": "rad/s",
     "reaction_position_rad": "rad",
-    "reaction_rate_rad_s": "rad/s",
+    "reaction_rate_rad_per_s": "rad/s",
 }
 
 INPUT_UNITS = {
@@ -40,14 +43,7 @@ INPUT_UNITS = {
 }
 
 ALLOWED_OBSERVABLES = {
-    "body_roll_rad": "rad",
-    "body_roll_rate_rad_s": "rad/s",
-    "body_pitch_rad": "rad",
-    "body_pitch_rate_rad_s": "rad/s",
-    "drive_position_rad": "rad",
-    "drive_rate_rad_s": "rad/s",
-    "reaction_position_rad": "rad",
-    "reaction_rate_rad_s": "rad/s",
+    **STATE_UNITS,
     "drive_torque_nm": "N*m",
     "reaction_torque_nm": "N*m",
 }
@@ -98,8 +94,8 @@ def validate_experiment(document: dict[str, Any]) -> None:
     }
     _expect_keys(document, required, "experiment")
 
-    if document["schema"] != 1:
-        _fail("experiment.schema must be 1")
+    if document["schema"] != 2:
+        _fail("experiment.schema must be 2")
     if not isinstance(document["name"], str) or not document["name"].strip():
         _fail("experiment.name must be a non-empty string")
 
@@ -107,8 +103,8 @@ def validate_experiment(document: dict[str, Any]) -> None:
     if not isinstance(backend, dict):
         _fail("backend must be an object")
     _expect_keys(backend, {"contract", "allowed"}, "backend")
-    if backend["contract"] != "simulator-neutral-v1":
-        _fail("backend.contract must be 'simulator-neutral-v1'")
+    if backend["contract"] != "simulator-neutral-v2":
+        _fail("backend.contract must be 'simulator-neutral-v2'")
     allowed = backend["allowed"]
     if not isinstance(allowed, list) or not allowed:
         _fail("backend.allowed must be a non-empty list")
@@ -161,7 +157,7 @@ def validate_experiment(document: dict[str, Any]) -> None:
     if not isinstance(initial_state, dict):
         _fail("initial_state must be an object")
     if set(initial_state) != set(STATE_UNITS):
-        _fail("initial_state must contain exactly the canonical eight state quantities")
+        _fail("initial_state must contain exactly the canonical eight physical state quantities")
     for name, unit in STATE_UNITS.items():
         _validate_quantity(initial_state[name], unit, f"initial_state.{name}")
 
