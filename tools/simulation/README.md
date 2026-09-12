@@ -10,26 +10,18 @@ experiment contract
       +--> analytical model
       +--> Rust SimulationWorld
       +--> Webots
-      `--> PyBullet scratch work (when useful)
+      `--> scratch/reviewer backends when justified
               |
               v
-      backend evidence
+      common physical observables
               |
               v
-      correlation / counterexamples
+      discrepancy evidence
 ```
 
 ## Experiment contract
 
-Schema `2` / `simulator-neutral-v2` requires:
-
-- an explicit backend contract and allowed backend set;
-- a parameter-set identifier, source, and provenance class;
-- the canonical body frame and mechanical positive-direction definitions;
-- duration and integration/sample step;
-- the canonical eight-quantity physical initial condition;
-- a piecewise input profile containing drive torque, reaction-wheel torque, and optional body-frame external force;
-- named common observables with explicit physical units.
+Schema `2` / `simulator-neutral-v2` requires an explicit backend set, parameter source and provenance, project coordinate/sign definitions, timing, physical initial state, piecewise torque/disturbance input, and named observables with units.
 
 The common initial-state contract is:
 
@@ -50,26 +42,63 @@ This is intentionally not a list of simulator joints. In the canonical reduced m
 delta_d = s / r_drive - theta
 ```
 
-A rigid-body backend may record drive-joint angle/rate as backend-native diagnostics, but those values are not interchangeable with `s` / `s_dot` and are not part of the common correlation state.
+A rigid-body backend may retain drive-joint angle/rate as diagnostics, but those values are not interchangeable with `s` / `s_dot` and are not part of the common correlation state.
 
-Validate an experiment with:
+Validate the committed experiments with:
 
 ```bash
-python3 tools/simulation/validate_experiment.py \
-  tools/simulation/experiments/synthetic-small-angle.json
+for experiment in tools/simulation/experiments/*.json; do
+  python3 tools/simulation/validate_experiment.py "$experiment"
+done
 ```
 
-The committed example deliberately reuses values from the existing synthetic correlation fixture. Its provenance is `synthetic`; it is not ONE V2 physical evidence. The fixture therefore starts at `s = 0`, `pitch = +0.025 rad`, and `roll = -0.02 rad`, matching that existing synthetic model experiment rather than inventing a backend-specific joint perturbation.
+## Open-loop correlation suite
+
+Issue #16 defines five synthetic experiments before any closed-loop controller comparison:
+
+```text
+synthetic-free-response.json
+synthetic-drive-torque-pulse.json
+synthetic-reaction-torque-pulse.json
+synthetic-small-angle.json          # combined small disturbance
+synthetic-zero-input-equilibrium.json
+```
+
+`open_loop_correlation.py` translates each neutral experiment into the reduced-model fixture format, projects analytical/Rust/Webots outputs into the common observable set, aligns time samples, checks applied inputs, computes max/RMS discrepancies, and performs experiment-specific causal/sign checks.
+
+The reduced analytical lane uses float64 exact ZOH. `SimulationWorld` uses the independent Rust f32/RK4 implementation. Their agreement is held to a strict numerical threshold. Webots is a rigid-body/contact model and is not required to numerically equal the reduced plant; it must preserve input/sign causality or produce an explicitly classified physical-model difference.
+
+A backend disagreement is not resolved by majority vote or by retuning one backend until it matches another.
+
+## Synthetic cross-backend parameter source
+
+The older `tools/model/fixtures/synthetic_correlation.json` remains the compact synthetic fixture for reduced-model implementation correlation. Its convenient inertias were never intended to describe a realizable rigid-body geometry.
+
+Cross-backend analytical/Rust/Webots experiments instead use:
+
+```text
+tools/simulation/fixtures/synthetic-rigidbody-correlation.json
+```
+
+That fixture derives the reduced body/wheel inertias from the same synthetic box/cylinder geometry committed in the bootstrap Webots world. Unit tests pin the geometry-to-inertia formulas and require every #16 experiment to use this single source.
+
+Both fixtures are synthetic. Neither contains ONE V2 physical facts.
+
+## Known rigid-body difference
+
+The bootstrap Webots drive wheel has finite width, while the reduced roll model behaves like a knife-edge rolling support. A small initial roll can therefore produce different roll evolution in the two models. The correlation summary preserves this as an `explainable_difference`; it is not hidden with a sign flip or gain change.
+
+Independent drive-torque and reaction-torque experiments remain the polarity/causal checks. A sign failure there is a defect, not an explainable contact difference.
 
 ## Provenance classes
 
-`synthetic` means the values exist only to exercise architecture, dynamics, correlation, or controller behavior. They must never be described as measured ONE V2 properties.
+`synthetic` means values exist only to exercise architecture, dynamics, correlation, or controller behavior. They must never be described as measured ONE V2 properties.
 
-`accepted_physical` means the parameter source is the canonical `parameters/reference-assembly.json`. A later backend-specific materializer may derive simulator input from that registry, but it must fail closed when required accepted values remain unknown. Simulator defaults are never a substitute for missing physical evidence.
+`accepted_physical` means the parameter source is the canonical `parameters/reference-assembly.json`. A future backend-specific materializer may derive simulator input from that registry, but it must fail closed when required accepted values remain unknown. Simulator defaults are never a substitute for missing physical evidence.
 
 ## Coordinate contract
 
-All backends adapt into the project semantics before comparison:
+All backends adapt into project semantics before comparison:
 
 ```text
 body frame: +X forward, +Y left, +Z up
@@ -81,24 +110,12 @@ reaction wheel +: relative rotation about body +X by right-hand rule
 
 A backend-specific axis convention is an adapter concern. Hidden sign flips used only to make a controller appear stable are not allowed.
 
-## Evidence manifest
+## Evidence
 
-Backend runners added later should emit a manifest alongside traces. The manifest should record at least:
-
-```text
-schema
-backend name and version
-repository git commit
-experiment path and SHA-256
-parameter-set id, provenance, source, and SHA-256/materialization hash
-deterministic seed when applicable
-runtime/solver settings that affect results
-trace SHA-256
-summary SHA-256
-```
+A backend evidence bundle should identify backend/version, repository commit, experiment and SHA-256, parameter source and SHA-256, solver settings, raw/projected traces, correlation summary, and deterministic seed when applicable.
 
 Generated traces and summaries are evidence artifacts. They are not parameter registries and must not silently feed production estimation or control.
 
 ## Simulation-truth boundary
 
-A closed-loop simulator may expose its truth to evidence and correlation. Production estimation/control must receive device-like observations through the existing production semantic path. The simulator's ability to apply torque does not grant physical actuation authority.
+A closed-loop simulator may expose truth to evidence/correlation. Production estimation/control must receive device-like observations through the existing production semantic path. The simulator's ability to apply torque does not grant physical actuation authority.
