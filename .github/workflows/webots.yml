@@ -6,51 +6,85 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/webots.yml'
-      - 'tools/simulation/webots/**'
-      - 'tools/simulation/validate_webots_trace.py'
-      - 'tools/simulation/test_validate_webots_trace.py'
+      - 'tools/simulation/**'
+      - 'tools/model/fixtures/synthetic_correlation.json'
+      - 'tools/model/reference_balance.py'
+      - 'tools/sitl/src/bin/plant_reference_trace.rs'
+      - 'tools/sitl/src/simulation_world.rs'
 
 jobs:
-  smoke:
+  open-loop-correlation:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run pinned Webots R2025a headless smoke test
+      - name: Install analytical reference dependencies
+        run: python3 -m pip install -r tools/model/requirements.txt
+
+      - name: Check Rust toolchain
+        run: rustup show
+
+      - name: Run pinned Webots R2025a cross-backend suite
         env:
           WEBOTS_IMAGE: ghcr.io/cyberbotics/webots-docker/webots@sha256:f31b128a3e4c06e54b26ce3d963a0e6b1c9634907978ae4397db9b4cde2d9f0c
         run: |
+          set -euo pipefail
           mkdir -p webots-output
-          docker run --rm \
-            -e LIBGL_ALWAYS_SOFTWARE=true \
-            -e SWP_WEBOTS_DURATION_S=0.25 \
-            -e SWP_WEBOTS_DRIVE_TORQUE_NM=0.0 \
-            -e SWP_WEBOTS_REACTION_TORQUE_NM=0.0 \
-            -e SWP_WEBOTS_TRACE=/workspace/webots-output/minimal-zero-torque.jsonl \
-            -v "$PWD:/workspace" \
-            -w /workspace \
-            "$WEBOTS_IMAGE" \
-            bash -lc 'set -o pipefail; timeout 90s xvfb-run --auto-servernum webots --stdout --stderr --batch --mode=fast --no-rendering /workspace/tools/simulation/webots/worlds/single_wheel_synthetic.wbt 2>&1 | tee /workspace/webots-output/webots.log'
+          experiments=(
+            synthetic-free-response.json
+            synthetic-drive-torque-pulse.json
+            synthetic-reaction-torque-pulse.json
+            synthetic-small-angle.json
+            synthetic-zero-input-equilibrium.json
+          )
 
-      - name: Reject Webots load/runtime errors
-        run: |
-          if grep -q '^ERROR:' webots-output/webots.log; then
-            cat webots-output/webots.log
-            exit 1
-          fi
+          for name in "${experiments[@]}"; do
+            stem="${name%.json}"
+            experiment="tools/simulation/experiments/$name"
+            fixture="webots-output/$stem.fixture.json"
+            rust_trace="webots-output/$stem.rust.json"
+            webots_trace="webots-output/$stem.webots.jsonl"
+            summary="webots-output/$stem.summary.json"
+            log="webots-output/$stem.webots.log"
 
-      - name: Validate Webots machine-readable trace
-        run: |
-          python3 tools/simulation/validate_webots_trace.py \
-            webots-output/minimal-zero-torque.jsonl \
-            --minimum-records 100
+            python3 tools/simulation/validate_experiment.py "$experiment"
+            python3 tools/simulation/open_loop_correlation.py \
+              --experiment "$experiment" \
+              --materialize-reduced-fixture "$fixture"
 
-      - name: Upload smoke evidence
+            cargo run -p swp-sitl --bin plant_reference_trace \
+              --target x86_64-unknown-linux-gnu -- \
+              --fixture "$fixture" \
+              --output "$rust_trace"
+
+            docker run --rm \
+              -e LIBGL_ALWAYS_SOFTWARE=true \
+              -e SWP_EXPERIMENT="/workspace/$experiment" \
+              -e SWP_WEBOTS_TRACE="/workspace/$webots_trace" \
+              -v "$PWD:/workspace" \
+              -w /workspace \
+              "$WEBOTS_IMAGE" \
+              bash -lc "set -o pipefail; timeout 90s xvfb-run --auto-servernum webots --stdout --stderr --batch --mode=fast --no-rendering /workspace/tools/simulation/webots/worlds/single_wheel_synthetic.wbt 2>&1 | tee /workspace/$log"
+
+            if grep -q '^ERROR:' "$log"; then
+              cat "$log"
+              exit 1
+            fi
+
+            python3 tools/simulation/validate_webots_trace.py "$webots_trace" --minimum-records 80
+            python3 tools/simulation/open_loop_correlation.py \
+              --experiment "$experiment" \
+              --rust-trace "$rust_trace" \
+              --webots-trace "$webots_trace" \
+              --analytical-trace "webots-output/$stem.analytical.jsonl" \
+              --rust-projected-trace "webots-output/$stem.rust-projected.jsonl" \
+              --summary "$summary"
+          done
+
+      - name: Upload cross-backend evidence
         uses: actions/upload-artifact@v4
         with:
-          name: webots-r2025a-smoke-evidence
-          path: |
-            webots-output/minimal-zero-torque.jsonl
-            webots-output/webots.log
+          name: webots-r2025a-open-loop-correlation
+          path: webots-output/
           if-no-files-found: error
