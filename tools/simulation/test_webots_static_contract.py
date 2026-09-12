@@ -25,17 +25,28 @@ class WebotsStaticContractTests(unittest.TestCase):
         ):
             self.assertIn(fragment, text)
 
-    def test_controller_uses_direct_torque_and_expected_devices(self) -> None:
+    def test_controller_uses_direct_torque_and_common_physical_observables(self) -> None:
         text = CONTROLLER.read_text(encoding="utf-8")
         for fragment in (
             'getDevice("body_imu")',
             'getDevice("body_gyro")',
-            'getDevice("drive_encoder")',
             'getDevice("reaction_encoder")',
-            'drive_motor.setTorque(DRIVE_TORQUE_NM)',
-            'reaction_motor.setTorque(REACTION_TORQUE_NM)',
+            'getDevice("drive_motor")',
+            'getDevice("reaction_motor")',
+            'drive_motor.setTorque(drive_torque)',
+            'reaction_motor.setTorque(reaction_torque)',
+            'position = body_node.getPosition()',
+            'velocity = body_node.getVelocity()',
+            '"forward_position_m": position[0]',
+            '"forward_velocity_m_per_s": velocity[0]',
         ):
             self.assertIn(fragment, text)
+
+        # The world may retain a drive encoder for diagnostics, but the v2 common
+        # projection must not read drive-joint angle as if it were translation s.
+        self.assertNotIn('getDevice("drive_encoder")', text)
+        self.assertNotIn('"drive_position_rad"', text)
+        self.assertNotIn('"drive_rate_rad_s"', text)
 
 
 if __name__ == "__main__":
