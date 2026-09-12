@@ -1,13 +1,9 @@
 {
   "schema": 2,
-  "name": "synthetic-small-angle-open-loop",
+  "name": "synthetic-combined-small-disturbance",
   "backend": {
     "contract": "simulator-neutral-v2",
-    "allowed": [
-      "analytical",
-      "rust-simulation-world",
-      "webots"
-    ]
+    "allowed": ["analytical", "rust-simulation-world", "webots"]
   },
   "parameter_set": {
     "id": "synthetic-correlation-v1",
@@ -31,10 +27,7 @@
     "drive_wheel_positive": "relative rotation that produces +X forward rolling when body pitch is held fixed",
     "reaction_wheel_positive": "relative rotation about body +X by right-hand rule"
   },
-  "timing": {
-    "duration_s": 0.25,
-    "step_s": 0.001
-  },
+  "timing": {"duration_s": 0.25, "step_s": 0.001},
   "initial_state": {
     "forward_position_m": {"value": 0.0, "unit": "m"},
     "forward_velocity_m_per_s": {"value": 0.0, "unit": "m/s"},
@@ -46,41 +39,16 @@
     "reaction_rate_rad_per_s": {"value": 0.0, "unit": "rad/s"}
   },
   "input_profile": [
-    {
-      "time_s": {"value": 0.0, "unit": "s"},
-      "drive_torque_nm": {"value": 0.0, "unit": "N*m"},
-      "reaction_torque_nm": {"value": 0.0, "unit": "N*m"},
-      "external_force_body_n": {"value": [0.0, 0.0, 0.0], "unit": "N"}
-    },
-    {
-      "time_s": {"value": 0.05, "unit": "s"},
-      "drive_torque_nm": {"value": 0.02, "unit": "N*m"},
-      "reaction_torque_nm": {"value": -0.001, "unit": "N*m"},
-      "external_force_body_n": {"value": [0.0, 0.0, 0.0], "unit": "N"}
-    },
-    {
-      "time_s": {"value": 0.12, "unit": "s"},
-      "drive_torque_nm": {"value": -0.01, "unit": "N*m"},
-      "reaction_torque_nm": {"value": 0.0015, "unit": "N*m"},
-      "external_force_body_n": {"value": [0.0, 0.0, 0.0], "unit": "N"}
-    },
-    {
-      "time_s": {"value": 0.18, "unit": "s"},
-      "drive_torque_nm": {"value": 0.0, "unit": "N*m"},
-      "reaction_torque_nm": {"value": 0.0, "unit": "N*m"},
-      "external_force_body_n": {"value": [0.0, 0.0, 0.0], "unit": "N"}
-    }
+    {"time_s":{"value":0.0,"unit":"s"},"drive_torque_nm":{"value":0.0,"unit":"N*m"},"reaction_torque_nm":{"value":0.0,"unit":"N*m"},"external_force_body_n":{"value":[0.0,0.0,0.0],"unit":"N"}},
+    {"time_s":{"value":0.05,"unit":"s"},"drive_torque_nm":{"value":0.02,"unit":"N*m"},"reaction_torque_nm":{"value":-0.001,"unit":"N*m"},"external_force_body_n":{"value":[0.0,0.0,0.0],"unit":"N"}},
+    {"time_s":{"value":0.12,"unit":"s"},"drive_torque_nm":{"value":-0.01,"unit":"N*m"},"reaction_torque_nm":{"value":0.0015,"unit":"N*m"},"external_force_body_n":{"value":[0.0,0.0,0.0],"unit":"N"}},
+    {"time_s":{"value":0.18,"unit":"s"},"drive_torque_nm":{"value":0.0,"unit":"N*m"},"reaction_torque_nm":{"value":0.0,"unit":"N*m"},"external_force_body_n":{"value":[0.0,0.0,0.0],"unit":"N"}}
   ],
   "observables": [
-    {"name": "forward_position_m", "unit": "m"},
-    {"name": "forward_velocity_m_per_s", "unit": "m/s"},
-    {"name": "body_pitch_rad", "unit": "rad"},
-    {"name": "body_pitch_rate_rad_per_s", "unit": "rad/s"},
-    {"name": "body_roll_rad", "unit": "rad"},
-    {"name": "body_roll_rate_rad_per_s", "unit": "rad/s"},
-    {"name": "reaction_position_rad", "unit": "rad"},
-    {"name": "reaction_rate_rad_per_s", "unit": "rad/s"},
-    {"name": "drive_torque_nm", "unit": "N*m"},
-    {"name": "reaction_torque_nm", "unit": "N*m"}
+    {"name":"forward_position_m","unit":"m"},{"name":"forward_velocity_m_per_s","unit":"m/s"},
+    {"name":"body_pitch_rad","unit":"rad"},{"name":"body_pitch_rate_rad_per_s","unit":"rad/s"},
+    {"name":"body_roll_rad","unit":"rad"},{"name":"body_roll_rate_rad_per_s","unit":"rad/s"},
+    {"name":"reaction_position_rad","unit":"rad"},{"name":"reaction_rate_rad_per_s","unit":"rad/s"},
+    {"name":"drive_torque_nm","unit":"N*m"},{"name":"reaction_torque_nm","unit":"N*m"}
   ]
 }
