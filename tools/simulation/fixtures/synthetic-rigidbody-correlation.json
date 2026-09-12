@@ -1,0 +1,34 @@
+{
+  "provenance": "synthetic rigid-body correlation fixture derived from the bootstrap Webots geometry; not ONE V2 physical parameters",
+  "sample_period_us": 1000,
+  "duration_us": 250000,
+  "plant": {
+    "gravity_m_per_s2": 9.80665,
+    "body_mass_kg": 1.0,
+    "body_com_height_m": 0.1,
+    "body_inertia_roll_kg_m2": 0.0035416666666666674,
+    "body_inertia_pitch_kg_m2": 0.004533333333333334,
+    "body_inertia_yaw_kg_m2": 0.0014083333333333333,
+    "drive_wheel_mass_kg": 0.1,
+    "drive_wheel_radius_m": 0.05,
+    "drive_wheel_spin_inertia_kg_m2": 0.00012500000000000003,
+    "reaction_wheel_mass_kg": 0.1,
+    "reaction_wheel_com_height_m": 0.15,
+    "reaction_wheel_spin_inertia_kg_m2": 0.00008,
+    "reaction_wheel_transverse_inertia_kg_m2": 0.0000412
+  },
+  "webots_geometry": {
+    "body_size_m": [0.12, 0.05, 0.20],
+    "drive_wheel_width_m": 0.02,
+    "reaction_wheel_radius_m": 0.04,
+    "reaction_wheel_width_m": 0.012,
+    "drive_axle_body_z_m": -0.10,
+    "reaction_axle_body_z_m": 0.05
+  },
+  "derivation": {
+    "body": "uniform box: Ixx=m*(y^2+z^2)/12, Iyy=m*(x^2+z^2)/12, Izz=m*(x^2+y^2)/12",
+    "drive_wheel": "uniform solid cylinder: Ispin=m*r^2/2; transverse inertia is backend geometry-derived and unused by reduced plant",
+    "reaction_wheel": "uniform solid cylinder: Ispin=m*r^2/2, Itrans=m*(3*r^2+h^2)/12",
+    "heights": "body and reaction-wheel COM heights are measured from the synthetic drive-wheel axle"
+  }
+}
