@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import unittest
 
@@ -21,14 +22,94 @@ EXPERIMENTS = (
     "synthetic-small-angle.json",
     "synthetic-zero-input-equilibrium.json",
 )
+RIGIDBODY_SOURCE = "tools/simulation/fixtures/synthetic-rigidbody-correlation.json"
 
 
 class OpenLoopCorrelationTests(unittest.TestCase):
-    def test_required_experiment_suite_validates(self) -> None:
+    def test_required_experiment_suite_validates_and_uses_one_parameter_source(self) -> None:
         for name in EXPERIMENTS:
             with self.subTest(name=name):
                 document = json.loads((HERE / "experiments" / name).read_text(encoding="utf-8"))
                 validate_experiment(document)
+                self.assertEqual(document["parameter_set"]["source"], RIGIDBODY_SOURCE)
+                self.assertEqual(document["parameter_set"]["provenance"], "synthetic")
+
+    def test_rigidbody_fixture_matches_committed_box_and_cylinder_geometry(self) -> None:
+        fixture = json.loads(
+            (HERE / "fixtures" / "synthetic-rigidbody-correlation.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        plant = fixture["plant"]
+        geometry = fixture["webots_geometry"]
+
+        x, y, z = geometry["body_size_m"]
+        body_mass = plant["body_mass_kg"]
+        self.assertTrue(
+            math.isclose(
+                plant["body_inertia_roll_kg_m2"],
+                body_mass * (y * y + z * z) / 12.0,
+                rel_tol=0.0,
+                abs_tol=1.0e-15,
+            )
+        )
+        self.assertTrue(
+            math.isclose(
+                plant["body_inertia_pitch_kg_m2"],
+                body_mass * (x * x + z * z) / 12.0,
+                rel_tol=0.0,
+                abs_tol=1.0e-15,
+            )
+        )
+        self.assertTrue(
+            math.isclose(
+                plant["body_inertia_yaw_kg_m2"],
+                body_mass * (x * x + y * y) / 12.0,
+                rel_tol=0.0,
+                abs_tol=1.0e-15,
+            )
+        )
+
+        drive_mass = plant["drive_wheel_mass_kg"]
+        drive_radius = plant["drive_wheel_radius_m"]
+        self.assertTrue(
+            math.isclose(
+                plant["drive_wheel_spin_inertia_kg_m2"],
+                0.5 * drive_mass * drive_radius * drive_radius,
+                rel_tol=0.0,
+                abs_tol=1.0e-15,
+            )
+        )
+
+        reaction_mass = plant["reaction_wheel_mass_kg"]
+        reaction_radius = geometry["reaction_wheel_radius_m"]
+        reaction_width = geometry["reaction_wheel_width_m"]
+        self.assertTrue(
+            math.isclose(
+                plant["reaction_wheel_spin_inertia_kg_m2"],
+                0.5 * reaction_mass * reaction_radius * reaction_radius,
+                rel_tol=0.0,
+                abs_tol=1.0e-15,
+            )
+        )
+        self.assertTrue(
+            math.isclose(
+                plant["reaction_wheel_transverse_inertia_kg_m2"],
+                reaction_mass
+                * (3.0 * reaction_radius * reaction_radius + reaction_width * reaction_width)
+                / 12.0,
+                rel_tol=0.0,
+                abs_tol=1.0e-15,
+            )
+        )
+        self.assertTrue(
+            math.isclose(
+                plant["reaction_wheel_com_height_m"],
+                geometry["reaction_axle_body_z_m"] - geometry["drive_axle_body_z_m"],
+                rel_tol=0.0,
+                abs_tol=1.0e-15,
+            )
+        )
 
     def test_materializer_preserves_common_state_semantics(self) -> None:
         document = json.loads(
