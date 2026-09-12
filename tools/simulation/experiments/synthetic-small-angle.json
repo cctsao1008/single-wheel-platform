@@ -1,8 +1,8 @@
 {
-  "schema": 1,
+  "schema": 2,
   "name": "synthetic-small-angle-open-loop",
   "backend": {
-    "contract": "simulator-neutral-v1",
+    "contract": "simulator-neutral-v2",
     "allowed": [
       "analytical",
       "rust-simulation-world",
@@ -36,14 +36,14 @@
     "step_s": 0.001
   },
   "initial_state": {
-    "body_roll_rad": {"value": 0.0, "unit": "rad"},
-    "body_roll_rate_rad_s": {"value": 0.0, "unit": "rad/s"},
+    "forward_position_m": {"value": 0.0, "unit": "m"},
+    "forward_velocity_m_per_s": {"value": 0.0, "unit": "m/s"},
     "body_pitch_rad": {"value": 0.025, "unit": "rad"},
-    "body_pitch_rate_rad_s": {"value": 0.0, "unit": "rad/s"},
-    "drive_position_rad": {"value": -0.02, "unit": "rad"},
-    "drive_rate_rad_s": {"value": 0.0, "unit": "rad/s"},
+    "body_pitch_rate_rad_per_s": {"value": 0.0, "unit": "rad/s"},
+    "body_roll_rad": {"value": -0.02, "unit": "rad"},
+    "body_roll_rate_rad_per_s": {"value": 0.0, "unit": "rad/s"},
     "reaction_position_rad": {"value": 0.0, "unit": "rad"},
-    "reaction_rate_rad_s": {"value": 0.0, "unit": "rad/s"}
+    "reaction_rate_rad_per_s": {"value": 0.0, "unit": "rad/s"}
   },
   "input_profile": [
     {
@@ -72,14 +72,14 @@
     }
   ],
   "observables": [
-    {"name": "body_roll_rad", "unit": "rad"},
-    {"name": "body_roll_rate_rad_s", "unit": "rad/s"},
+    {"name": "forward_position_m", "unit": "m"},
+    {"name": "forward_velocity_m_per_s", "unit": "m/s"},
     {"name": "body_pitch_rad", "unit": "rad"},
-    {"name": "body_pitch_rate_rad_s", "unit": "rad/s"},
-    {"name": "drive_position_rad", "unit": "rad"},
-    {"name": "drive_rate_rad_s", "unit": "rad/s"},
+    {"name": "body_pitch_rate_rad_per_s", "unit": "rad/s"},
+    {"name": "body_roll_rad", "unit": "rad"},
+    {"name": "body_roll_rate_rad_per_s", "unit": "rad/s"},
     {"name": "reaction_position_rad", "unit": "rad"},
-    {"name": "reaction_rate_rad_s", "unit": "rad/s"},
+    {"name": "reaction_rate_rad_per_s", "unit": "rad/s"},
     {"name": "drive_torque_nm", "unit": "N*m"},
     {"name": "reaction_torque_nm", "unit": "N*m"}
   ]
