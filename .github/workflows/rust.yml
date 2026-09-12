@@ -37,8 +37,11 @@ jobs:
           python3 tools/simulation/validate_experiment.py \
             tools/simulation/experiments/synthetic-small-angle.json
           python3 -m unittest discover -s tools/simulation -p 'test_*.py'
-      - name: Physical parameter provenance
-        run: python3 tools/model/check_parameter_provenance.py
+      - name: Physical parameter provenance and admissibility
+        run: |
+          python3 tools/model/check_parameter_provenance.py
+          python3 tools/model/check_parameter_admissibility.py
+          python3 -m unittest discover -s tools/model -p 'test_parameter_admissibility.py'
       - name: Install plant model reference dependencies
         run: python3 -m pip install -r tools/model/requirements.txt
       - name: SimulationWorld reference correlation
