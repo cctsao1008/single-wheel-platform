@@ -1,0 +1,53 @@
+{
+  "provenance": "synthetic aggregate-equivalent Webots realization for Issue #17; not ONE V2 physical parameters",
+  "reduced_model_parameters": {
+    "gravity_m_per_s2": 9.80665,
+    "body_mass_kg": 1.0,
+    "body_com_height_m": 0.1,
+    "body_inertia_roll_kg_m2": 0.01,
+    "body_inertia_pitch_kg_m2": 0.01,
+    "body_inertia_yaw_kg_m2": 0.01,
+    "drive_wheel_mass_kg": 0.1,
+    "drive_wheel_radius_m": 0.05,
+    "drive_wheel_spin_inertia_kg_m2": 0.001,
+    "reaction_wheel_mass_kg": 0.1,
+    "reaction_wheel_com_height_m": 0.1,
+    "reaction_wheel_spin_inertia_kg_m2": 0.001,
+    "reaction_wheel_transverse_inertia_kg_m2": 0.0005
+  },
+  "webots_realization": {
+    "body": {
+      "mass_kg": 1.0,
+      "com_height_above_drive_axle_m": 0.1,
+      "box_size_m": [
+        0.2449489742783178,
+        0.2449489742783178,
+        0.2449489742783178
+      ]
+    },
+    "drive_wheel": {
+      "mass_kg": 0.3333333333333333,
+      "radius_m": 0.05,
+      "height_m": 0.02
+    },
+    "reaction_wheel": {
+      "mass_kg": 0.1,
+      "com_height_above_drive_axle_m": 0.1,
+      "radius_m": 0.1414213562373095,
+      "height_m": 0.000001
+    },
+    "accelerometer_height_above_drive_axle_m": 0.0
+  },
+  "equivalence_contract": {
+    "matched_reduced_aggregates": [
+      "gravitational_first_moment_kg_m",
+      "vertical_second_moment_kg_m2",
+      "equivalent_translation_mass_kg",
+      "pitch_inertia_kg_m2",
+      "roll_body_inertia_kg_m2"
+    ],
+    "matched_drive_wheel_radius_m": 0.05,
+    "matched_reaction_wheel_spin_inertia_kg_m2": 0.001,
+    "absolute_tolerance": 1e-9
+  }
+}
