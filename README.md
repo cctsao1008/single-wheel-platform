@@ -1,7 +1,8 @@
-# Self-Balancing Single-Wheel Platform
+# 🛞 Self-Balancing Single-Wheel Platform
 
 A Rust `no_std` control platform for a reaction-wheel-stabilized single-wheel robot.
 
+> **A tiny robot with a big attitude.**  
 > Small robot, serious boundaries: no hidden truth, no imaginary physical parameters, and no motor authority by accident.
 
 The repository has four architectural domains. They define ownership and dependency, not runtime execution order or directory depth.
@@ -20,7 +21,7 @@ The repository has four architectural domains. They define ownership and depende
                  FIRMWARE
 ```
 
-## Domains
+## 🧠 Domains
 
 - **Plant** — physical state, units, dynamics, measurement physics, observation semantics, and actuator physics.
 - **Control** — desired closed-loop behavior: inner state feedback and a 100 Hz outer velocity loop, producing `GeneralizedDemand` in physical semantics.
@@ -42,7 +43,7 @@ RawObservation
 
 These are intentionally different semantic objects. Evidence is not belief, belief is not control intent, control intent is not authorization, and authorization is not electrical output.
 
-## Firmware shape
+## 🧰 Firmware shape
 
 ```text
 firmware/
@@ -80,7 +81,7 @@ BLDC_2 / Encoder_2 -> DriveWheel
 BLDC_3             -> unused
 ```
 
-## Actuation authority
+## 🛡️ Actuation authority
 
 ```text
 BoundedActuatorCommand
@@ -100,7 +101,7 @@ physical target backend
 
 The existence of an actuator frame, target backend, PWM peripheral, or GPIO route never grants authority by itself.
 
-## Non-actuating runtime architecture
+## 🌙 Non-actuating runtime architecture
 
 The canonical STM32F103 `runtime-shadow` baseline is:
 
@@ -118,7 +119,7 @@ OLED UI framework                        10 Hz
 
 The ECB02 and OLED crates therefore define reusable contracts and presentation/transport behavior, but **do not claim verified ONE V2 UART/display wiring, BLE throughput, module configuration, or physical OLED operation**.
 
-## Software-In-The-Loop
+## 🧪 Software-In-The-Loop
 
 Host SITL lives under `tools/sitl/`; it is verification tooling, not a fifth production domain.
 
@@ -149,7 +150,7 @@ The closed-loop SITL composition reuses production sensor scaling/calibration, f
 
 SITL configurations and repository integration tests use explicitly synthetic values where physical ONE V2 parameters or calibration evidence are unknown. Simulation evidence is not physical validation.
 
-## Validation and evidence
+## 🔬 Validation and evidence
 
 The host validation stack intentionally uses models with different failure modes:
 
@@ -174,7 +175,7 @@ Webots is a host-only rigid-body counterexample generator. Its production-semant
 
 The current closed-loop Webots fixture is an **aggregate-equivalent synthetic realization** for selected upright quantities. It is explicitly not a claim of full roll/contact dynamic equivalence; finite wheel/contact dynamics remain outside the current reduced roll model validity domain.
 
-## Physical parameter gate
+## 📏 Physical parameter gate
 
 Accepted ONE V2 physical parameters live in:
 
@@ -206,7 +207,7 @@ unknown          complete
 
 Synthetic fixtures remain useful for architecture, correlation, and controller development, but they never become ONE V2 facts merely because a simulation looks convincing. The robot is allowed to be fictional only when the provenance label says so.
 
-## Targets
+## 🎯 Targets
 
 ```text
 firmware/targets/stm32f103/
@@ -221,13 +222,13 @@ firmware/targets/stm32f103/
 
 The first six targets are non-actuating integration/profiling targets. `one-v2-pwm-dir` contains the separate physical motor backend; it is not composed into `runtime-shadow` or `io-shadow`.
 
-## Support and host engineering
+## 🧱 Support and host engineering
 
 `support/` contains non-domain implementation support shared by production domains; `support/dsp-kernel` is the cross-domain numerical kernel. Firmware-owned recording codecs live under `firmware/recording/`. Host-side system identification, mathematical derivation, control synthesis, SITL, recording decode/replay, commissioning, high-fidelity simulation, and correlation live under `tools/`.
 
 Host tools may challenge production assumptions, but they do not become additional production domains and they do not gain physical actuation authority.
 
-## Build
+## 🔧 Build
 
 ```bash
 cargo fw-observation
@@ -244,7 +245,7 @@ Simulation evidence contract: [`tools/simulation/README.md`](tools/simulation/RE
 
 Plant model and validity boundary: [`docs/plant/model.md`](docs/plant/model.md)
 
-## Documentation principle
+## 📚 Documentation principle
 
 > **README explains the system. Issues explain the journey. Code proves the current state.**
 
