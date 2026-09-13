@@ -20,19 +20,24 @@ class WebotsStaticContractTests(unittest.TestCase):
             'name "reaction_motor"',
             'name "reaction_encoder"',
             'name "body_imu"',
+            'name "body_accel"',
             'name "body_gyro"',
             'contactMaterial "drive_tire"',
         ):
             self.assertIn(fragment, text)
 
-    def test_controller_uses_direct_torque_and_common_physical_observables(self) -> None:
+    def test_controller_separates_raw_device_evidence_from_common_truth(self) -> None:
         text = CONTROLLER.read_text(encoding="utf-8")
         for fragment in (
             'getDevice("body_imu")',
+            'getDevice("body_accel")',
             'getDevice("body_gyro")',
+            'getDevice("drive_encoder")',
             'getDevice("reaction_encoder")',
             'getDevice("drive_motor")',
             'getDevice("reaction_motor")',
+            'encode_raw_sample(',
+            'drive_encoder_rad=drive_encoder.getValue()',
             'drive_motor.setTorque(drive_torque)',
             'reaction_motor.setTorque(reaction_torque)',
             'position = body_node.getPosition()',
@@ -42,11 +47,18 @@ class WebotsStaticContractTests(unittest.TestCase):
         ):
             self.assertIn(fragment, text)
 
-        # The world may retain a drive encoder for diagnostics, but the v2 common
-        # projection must not read drive-joint angle as if it were translation s.
-        self.assertNotIn('getDevice("drive_encoder")', text)
+        # Closed-loop production input legitimately includes the physical drive
+        # encoder. It still must never masquerade as reduced-model translation s
+        # in the common/open-loop observable projection.
         self.assertNotIn('"drive_position_rad"', text)
         self.assertNotIn('"drive_rate_rad_s"', text)
+
+    def test_only_production_bridge_response_changes_closed_loop_torque(self) -> None:
+        text = CONTROLLER.read_text(encoding="utf-8")
+        self.assertIn('response = bridge_step(bridge, raw_sample)', text)
+        self.assertIn('if response["actuation"] == "apply":', text)
+        self.assertIn('elif response["actuation"] == "revoke":', text)
+        self.assertIn('"webots_evidence_truth": truth_record(', text)
 
 
 if __name__ == "__main__":
