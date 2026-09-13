@@ -1,0 +1,53 @@
+name: Webots disturbance envelope
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/webots-envelope.yml'
+      - 'tools/simulation/envelopes/**'
+      - 'tools/simulation/analyze_webots_envelope.py'
+      - 'tools/simulation/summarize_webots_envelope.py'
+      - 'tools/simulation/run_webots_envelope.py'
+      - 'tools/simulation/test_analyze_webots_envelope.py'
+      - 'tools/simulation/test_summarize_webots_envelope.py'
+      - 'tools/simulation/validate_closed_loop_realization.py'
+      - 'tools/simulation/fixtures/closed-loop-aggregate-equivalent.json'
+      - 'tools/simulation/webots/bridge_protocol.py'
+      - 'tools/simulation/webots/controllers/swp_trace/swp_trace.py'
+      - 'tools/simulation/webots/worlds/single_wheel_closed_loop_equivalent.wbt'
+      - 'tools/sitl/src/bin/webots_production_bridge.rs'
+      - 'control/**'
+      - 'supervisor/**'
+      - 'plant/actuator-model/**'
+      - 'plant/dynamics-model/**'
+      - 'plant/measurement-model/**'
+      - 'firmware/adapters/estimator-input/**'
+      - 'firmware/adapters/frame-transform/**'
+      - 'firmware/adapters/sensor-calibration/**'
+      - 'firmware/sensors/mpu6050/**'
+
+jobs:
+  initial-tilt-envelope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Rust toolchain
+        run: rustup show
+
+      - name: Run predeclared Webots R2025a initial-tilt envelope
+        run: |
+          python3 tools/simulation/run_webots_envelope.py \
+            --manifest tools/simulation/envelopes/initial-tilt-v1.json \
+            --output webots-envelope-output
+
+      - name: Upload machine-readable envelope evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webots-r2025a-initial-tilt-envelope
+          path: webots-envelope-output/
+          if-no-files-found: warn
