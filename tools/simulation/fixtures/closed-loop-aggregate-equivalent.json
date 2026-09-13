@@ -49,5 +49,15 @@
     "matched_drive_wheel_radius_m": 0.05,
     "matched_reaction_wheel_spin_inertia_kg_m2": 0.001,
     "absolute_tolerance": 1e-9
+  },
+  "validity_domain": {
+    "purpose": "production-semantic closed-loop plumbing and selected stationary-upright aggregate consistency",
+    "full_roll_contact_dynamic_equivalence": false,
+    "excluded_from_equivalence": [
+      "drive-wheel transverse/tipping inertia in the reduced roll block",
+      "lateral ground-contact kinematics and finite contact patch effects",
+      "coupled lateral/yaw contact motion outside the reduced balance coordinates"
+    ],
+    "evidence": "Issue #18 nominal Webots envelope counterexample; tracked by Issue #25"
   }
 }
