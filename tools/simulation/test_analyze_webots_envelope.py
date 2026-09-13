@@ -24,6 +24,7 @@ CASE = {
     "initial_pitch_rad": 0.001,
     "initial_roll_rad": 0.0,
 }
+_TEMPORARIES: list[tempfile.TemporaryDirectory[str]] = []
 
 
 def record(
@@ -77,11 +78,11 @@ def record(
 
 def write_trace(records: list[dict]) -> Path:
     directory = tempfile.TemporaryDirectory()
+    _TEMPORARIES.append(directory)
     path = Path(directory.name) / "trace.jsonl"
     path.write_text(
         "".join(json.dumps(item) + "\n" for item in records), encoding="utf-8"
     )
-    path._temporary_directory = directory  # type: ignore[attr-defined]
     return path
 
 
