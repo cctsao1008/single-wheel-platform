@@ -67,7 +67,7 @@ Robot {
       device [
         RotationalMotor {
           name "drive_motor"
-          maxTorque 0.5
+          maxTorque 2
         }
         PositionSensor {
           name "drive_encoder"
@@ -107,7 +107,7 @@ Robot {
       device [
         RotationalMotor {
           name "reaction_motor"
-          maxTorque 0.5
+          maxTorque 2
         }
         PositionSensor {
           name "reaction_encoder"
