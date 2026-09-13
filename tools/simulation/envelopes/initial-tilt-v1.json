@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "name": "synthetic-webots-initial-tilt-envelope-v1",
+  "provenance": "synthetic robustness evidence for Issue #18; not ONE V2 physical robustness",
+  "backend": {
+    "name": "Webots",
+    "version": "R2025a",
+    "image": "ghcr.io/cyberbotics/webots-docker/webots@sha256:f31b128a3e4c06e54b26ce3d963a0e6b1c9634907978ae4397db9b4cde2d9f0c"
+  },
+  "world": "tools/simulation/webots/worlds/single_wheel_closed_loop_equivalent.wbt",
+  "realization_fixture": "tools/simulation/fixtures/closed-loop-aggregate-equivalent.json",
+  "control_period_s": 0.002,
+  "horizon_s": 0.5,
+  "classification": {
+    "settling_dwell_s": 0.1,
+    "settling_angle_abs_rad": 0.005,
+    "settling_rate_abs_rad_per_s": 0.05,
+    "hard_attitude_abs_rad": 0.5,
+    "runtime_fault_is_loss": true,
+    "drive_saturated_reason_bit": 32,
+    "reaction_saturated_reason_bit": 64
+  },
+  "predeclared_prediction": {
+    "small_tilt": "Sufficiently small isolated initial tilts should remain fault-free and return toward upright within the declared horizon.",
+    "large_tilt": "Larger isolated tilts may expose actuator saturation, momentum/authority limits, or loss of balance; the exact boundary is intentionally not predicted.",
+    "sign_symmetry": "Positive and negative cases at the same isolated magnitude should be approximately symmetric; strong classification asymmetry is a counterexample, not a tuning instruction."
+  },
+  "cases": [
+    {"id": "baseline", "axis": "none", "magnitude_rad": 0.0, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.0},
+
+    {"id": "pitch_p0005", "axis": "pitch", "magnitude_rad": 0.0005, "initial_pitch_rad": 0.0005, "initial_roll_rad": 0.0},
+    {"id": "pitch_n0005", "axis": "pitch", "magnitude_rad": 0.0005, "initial_pitch_rad": -0.0005, "initial_roll_rad": 0.0},
+    {"id": "pitch_p0010", "axis": "pitch", "magnitude_rad": 0.001, "initial_pitch_rad": 0.001, "initial_roll_rad": 0.0},
+    {"id": "pitch_n0010", "axis": "pitch", "magnitude_rad": 0.001, "initial_pitch_rad": -0.001, "initial_roll_rad": 0.0},
+    {"id": "pitch_p0025", "axis": "pitch", "magnitude_rad": 0.0025, "initial_pitch_rad": 0.0025, "initial_roll_rad": 0.0},
+    {"id": "pitch_n0025", "axis": "pitch", "magnitude_rad": 0.0025, "initial_pitch_rad": -0.0025, "initial_roll_rad": 0.0},
+    {"id": "pitch_p0050", "axis": "pitch", "magnitude_rad": 0.005, "initial_pitch_rad": 0.005, "initial_roll_rad": 0.0},
+    {"id": "pitch_n0050", "axis": "pitch", "magnitude_rad": 0.005, "initial_pitch_rad": -0.005, "initial_roll_rad": 0.0},
+    {"id": "pitch_p0100", "axis": "pitch", "magnitude_rad": 0.01, "initial_pitch_rad": 0.01, "initial_roll_rad": 0.0},
+    {"id": "pitch_n0100", "axis": "pitch", "magnitude_rad": 0.01, "initial_pitch_rad": -0.01, "initial_roll_rad": 0.0},
+    {"id": "pitch_p0200", "axis": "pitch", "magnitude_rad": 0.02, "initial_pitch_rad": 0.02, "initial_roll_rad": 0.0},
+    {"id": "pitch_n0200", "axis": "pitch", "magnitude_rad": 0.02, "initial_pitch_rad": -0.02, "initial_roll_rad": 0.0},
+    {"id": "pitch_p0500", "axis": "pitch", "magnitude_rad": 0.05, "initial_pitch_rad": 0.05, "initial_roll_rad": 0.0},
+    {"id": "pitch_n0500", "axis": "pitch", "magnitude_rad": 0.05, "initial_pitch_rad": -0.05, "initial_roll_rad": 0.0},
+    {"id": "pitch_p1000", "axis": "pitch", "magnitude_rad": 0.1, "initial_pitch_rad": 0.1, "initial_roll_rad": 0.0},
+    {"id": "pitch_n1000", "axis": "pitch", "magnitude_rad": 0.1, "initial_pitch_rad": -0.1, "initial_roll_rad": 0.0},
+
+    {"id": "roll_p0005", "axis": "roll", "magnitude_rad": 0.0005, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.0005},
+    {"id": "roll_n0005", "axis": "roll", "magnitude_rad": 0.0005, "initial_pitch_rad": 0.0, "initial_roll_rad": -0.0005},
+    {"id": "roll_p0010", "axis": "roll", "magnitude_rad": 0.001, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.001},
+    {"id": "roll_n0010", "axis": "roll", "magnitude_rad": 0.001, "initial_pitch_rad": 0.0, "initial_roll_rad": -0.001},
+    {"id": "roll_p0025", "axis": "roll", "magnitude_rad": 0.0025, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.0025},
+    {"id": "roll_n0025", "axis": "roll", "magnitude_rad": 0.0025, "initial_pitch_rad": 0.0, "initial_roll_rad": -0.0025},
+    {"id": "roll_p0050", "axis": "roll", "magnitude_rad": 0.005, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.005},
+    {"id": "roll_n0050", "axis": "roll", "magnitude_rad": 0.005, "initial_pitch_rad": 0.0, "initial_roll_rad": -0.005},
+    {"id": "roll_p0100", "axis": "roll", "magnitude_rad": 0.01, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.01},
+    {"id": "roll_n0100", "axis": "roll", "magnitude_rad": 0.01, "initial_pitch_rad": 0.0, "initial_roll_rad": -0.01},
+    {"id": "roll_p0200", "axis": "roll", "magnitude_rad": 0.02, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.02},
+    {"id": "roll_n0200", "axis": "roll", "magnitude_rad": 0.02, "initial_pitch_rad": 0.0, "initial_roll_rad": -0.02},
+    {"id": "roll_p0500", "axis": "roll", "magnitude_rad": 0.05, "initial_pitch_rad": 0.0, "initial_roll_rad": 0.05},
+    {"id": "roll_n0500", "axis": "roll", "magnitude_rad": 0.05, "initial_pitch_rad": 0.0, "initial_roll_rad": -0.05}
+  ]
+}
