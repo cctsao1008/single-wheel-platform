@@ -43,6 +43,9 @@ Robot {
     InertialUnit {
       name "body_imu"
     }
+    Accelerometer {
+      name "body_accel"
+    }
     Gyro {
       name "body_gyro"
     }
