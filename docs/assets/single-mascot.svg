@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 340" role="img" aria-labelledby="title desc">
+  <title id="title">Single mascot</title>
+  <desc id="desc">A cute self-balancing single-wheel robot with a smiling controller body, one ground wheel, and a small reaction-wheel accent.</desc>
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#5b463f" flood-opacity="0.18"/>
+    </filter>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffaf4"/>
+      <stop offset="1" stop-color="#ffe8d8"/>
+    </linearGradient>
+    <linearGradient id="wheel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5a5658"/>
+      <stop offset="1" stop-color="#2f3035"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="210" cy="307" rx="82" ry="13" fill="#dfe8ef" opacity="0.78"/>
+
+  <g filter="url(#shadow)" transform="rotate(-2 210 164)">
+    <!-- reaction-wheel accent -->
+    <circle cx="104" cy="149" r="31" fill="#70696a" stroke="#5b463f" stroke-width="5"/>
+    <circle cx="104" cy="149" r="21" fill="#b8c8d6" stroke="#fff7ef" stroke-width="5"/>
+    <circle cx="104" cy="149" r="8" fill="#5b463f"/>
+
+    <!-- controller/body -->
+    <rect x="112" y="45" width="198" height="132" rx="42" fill="url(#body)" stroke="#5b463f" stroke-width="6"/>
+    <path d="M139 63 Q210 37 283 62" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
+
+    <!-- eyes -->
+    <circle cx="171" cy="102" r="28" fill="#fffdfb" stroke="#5b463f" stroke-width="5"/>
+    <circle cx="251" cy="102" r="28" fill="#fffdfb" stroke="#5b463f" stroke-width="5"/>
+    <circle cx="174" cy="106" r="15" fill="#7d4f36"/>
+    <circle cx="254" cy="106" r="15" fill="#7d4f36"/>
+    <circle cx="180" cy="98" r="6" fill="#ffffff"/>
+    <circle cx="260" cy="98" r="6" fill="#ffffff"/>
+    <circle cx="169" cy="112" r="3" fill="#ffffff" opacity="0.7"/>
+    <circle cx="249" cy="112" r="3" fill="#ffffff" opacity="0.7"/>
+
+    <!-- cheeks + smile -->
+    <ellipse cx="143" cy="132" rx="18" ry="9" fill="#ff9fa5" opacity="0.75"/>
+    <ellipse cx="278" cy="132" rx="18" ry="9" fill="#ff9fa5" opacity="0.75"/>
+    <path d="M195 130 Q210 146 225 130" fill="none" stroke="#5b463f" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- neck -->
+    <path d="M188 177 L187 198 M232 177 L233 198" stroke="#5b463f" stroke-width="7" stroke-linecap="round"/>
+
+    <!-- single ground wheel -->
+    <ellipse cx="210" cy="246" rx="48" ry="72" fill="url(#wheel)" stroke="#5b463f" stroke-width="6"/>
+    <ellipse cx="210" cy="246" rx="27" ry="50" fill="#f7f1eb" stroke="#5b463f" stroke-width="5"/>
+    <ellipse cx="210" cy="246" rx="14" ry="34" fill="#8dd2e6" stroke="#5b463f" stroke-width="4"/>
+    <ellipse cx="210" cy="246" rx="5" ry="15" fill="#fffdfb" opacity="0.9"/>
+  </g>
+
+  <!-- balance marks -->
+  <path d="M329 77 l13 -12 M338 92 l18 -3 M326 61 l4 -17" stroke="#f6b93b" stroke-width="7" stroke-linecap="round"/>
+  <path d="M79 92 l-13 -9 M73 108 l-17 1" stroke="#83bce6" stroke-width="7" stroke-linecap="round"/>
+  <path d="M323 190 q15 7 23 0" fill="none" stroke="#b9a4d8" stroke-width="5" stroke-linecap="round" opacity="0.8"/>
+  <path d="M78 202 q-15 7 -23 0" fill="none" stroke="#b9a4d8" stroke-width="5" stroke-linecap="round" opacity="0.8"/>
+</svg>
