@@ -1,0 +1,169 @@
+#VRML_SIM R2025a utf8
+
+# Issue #17 closed-loop validation world.
+#
+# This is a physically realizable, aggregate-equivalent realization of the
+# reduced synthetic plant used by the production semantic bridge.  It is not an
+# ONE V2 geometry or parameter claim.  The corresponding provenance/equivalence
+# contract is tools/simulation/fixtures/closed-loop-aggregate-equivalent.json.
+
+WorldInfo {
+  basicTimeStep 1
+  gravity 9.80665
+  contactProperties [
+    ContactProperties {
+      material1 "drive_tire"
+      material2 "floor"
+      coulombFriction [
+        1
+      ]
+    }
+  ]
+}
+Viewpoint {
+  orientation -0.318 0.537 0.781 2.22
+  position 0.7 -1.2 0.65
+}
+Solid {
+  translation 0 0 -0.01
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.35 0.35 0.35
+        roughness 1
+        metalness 0
+      }
+      geometry DEF CLOSED_LOOP_FLOOR_SHAPE Box {
+        size 4 4 0.02
+      }
+    }
+  ]
+  name "floor"
+  contactMaterial "floor"
+  boundingObject USE CLOSED_LOOP_FLOOR_SHAPE
+}
+Robot {
+  translation 0 0 0.15
+  controller "swp_trace"
+  supervisor TRUE
+  children [
+    InertialUnit {
+      name "body_imu"
+    }
+    # The production measurement model for this synthetic fixture places the
+    # accelerometer at the drive-wheel axle / reduced-model origin.  The Robot
+    # origin is 0.10 m above that axle, so the device is translated -0.10 m.
+    Accelerometer {
+      translation 0 0 -0.10
+      name "body_accel"
+    }
+    Gyro {
+      name "body_gyro"
+    }
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.55 0.55 0.58
+        roughness 0.7
+        metalness 0
+      }
+      geometry DEF CLOSED_LOOP_BODY_SHAPE Box {
+        # A 1 kg cube with this side length has Ixx=Iyy=Izz=0.01 kg m^2.
+        size 0.2449489742783178 0.2449489742783178 0.2449489742783178
+      }
+    }
+    HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 1 0
+        anchor 0 0 -0.10
+      }
+      device [
+        RotationalMotor {
+          name "drive_motor"
+          # Match the synthetic actuator-model authority ceiling.  Webots must
+          # not silently clamp an already-authorized production torque.
+          maxTorque 2
+        }
+        PositionSensor {
+          name "drive_encoder"
+        }
+      ]
+      endPoint Solid {
+        translation 0 0 -0.10
+        rotation 1 0 0 1.5708
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.12 0.12 0.12
+              roughness 0.9
+              metalness 0
+            }
+            geometry DEF CLOSED_LOOP_DRIVE_WHEEL_SHAPE Cylinder {
+              height 0.02
+              radius 0.05
+              subdivision 32
+            }
+          }
+        ]
+        name "drive_wheel"
+        contactMaterial "drive_tire"
+        boundingObject USE CLOSED_LOOP_DRIVE_WHEEL_SHAPE
+        physics Physics {
+          density -1
+          # For a uniform cylinder this gives Ispin=0.0004166666667 kg m^2;
+          # m + Ispin/r^2 = 0.5 kg, equal to the reduced fixture's drive
+          # translation contribution 0.1 + 0.001/0.05^2.
+          mass 0.3333333333333333
+        }
+      }
+    }
+    HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 1 0 0
+        # Reaction-wheel center is at the body origin, exactly 0.10 m above the
+        # drive axle, matching the reduced upright first/second moments.
+        anchor 0 0 0
+      }
+      device [
+        RotationalMotor {
+          name "reaction_motor"
+          maxTorque 2
+        }
+        PositionSensor {
+          name "reaction_encoder"
+        }
+      ]
+      endPoint Solid {
+        translation 0 0 0
+        rotation 0 1 0 1.5708
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.18 0.32 0.68
+              roughness 0.6
+              metalness 0.1
+            }
+            geometry DEF CLOSED_LOOP_REACTION_WHEEL_SHAPE Cylinder {
+              # A 0.1 kg near-planar disk with r=sqrt(0.02) has
+              # Ispin=0.001 kg m^2 and Itransverse~=0.0005 kg m^2.
+              height 0.000001
+              radius 0.1414213562373095
+              subdivision 48
+            }
+          }
+        ]
+        name "reaction_wheel"
+        boundingObject USE CLOSED_LOOP_REACTION_WHEEL_SHAPE
+        physics Physics {
+          density -1
+          mass 0.1
+        }
+      }
+    }
+  ]
+  name "single_wheel_closed_loop_equivalent"
+  boundingObject USE CLOSED_LOOP_BODY_SHAPE
+  physics Physics {
+    density -1
+    mass 1
+  }
+}
