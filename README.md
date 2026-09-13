@@ -1,9 +1,32 @@
-# 🛞 Self-Balancing Single-Wheel Platform
+<p align="center">
+  <img src="docs/assets/single-mascot.svg" width="240" alt="Single mascot">
+</p>
 
-A Rust `no_std` control platform for a reaction-wheel-stabilized single-wheel robot.
+<h1 align="center">Single</h1>
 
-> **A tiny robot with a big attitude.**  
-> Small robot, serious boundaries: no hidden truth, no imaginary physical parameters, and no motor authority by accident.
+<p align="center">
+  <strong>Self-Balancing Single-Wheel Control Research</strong>
+</p>
+
+<p align="center">
+  <strong>One wheel. Two actuators. Zero imaginary physics.</strong>
+</p>
+
+<p align="center">
+  <em>Observe first. Estimate carefully. Authorize last.</em>
+</p>
+
+<p align="center">
+  🛞 Balance &nbsp;·&nbsp; 🧠 Estimate &nbsp;·&nbsp; 🛡️ Authorize &nbsp;·&nbsp; 🔬 Validate
+</p>
+
+Single is a Rust `no_std` control and system-identification platform for a reaction-wheel-stabilized single-wheel robot. It keeps physical evidence, estimated state, control intent, actuator limits, runtime authority, and electrical realization deliberately separate so that no layer gains more meaning—or more authority—than the available evidence supports.
+
+> **Small robot. Serious boundaries.** No hidden truth, no imaginary physical parameters, and no motor authority by accident.
+
+---
+
+## 🧠 Architecture
 
 The repository has four architectural domains. They define ownership and dependency, not runtime execution order or directory depth.
 
@@ -20,8 +43,6 @@ The repository has four architectural domains. They define ownership and depende
                      │
                  FIRMWARE
 ```
-
-## 🧠 Domains
 
 - **Plant** — physical state, units, dynamics, measurement physics, observation semantics, and actuator physics.
 - **Control** — desired closed-loop behavior: inner state feedback and a 100 Hz outer velocity loop, producing `GeneralizedDemand` in physical semantics.
