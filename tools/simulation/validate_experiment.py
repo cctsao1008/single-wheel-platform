@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any
 
 
+ROOT = Path(__file__).resolve().parents[2]
+PHYSICAL_REGISTRY_PATH = ROOT / "parameters" / "reference-assembly.json"
+
 ALLOWED_BACKENDS = {"analytical", "rust-simulation-world", "webots", "pybullet-scratch"}
 ALLOWED_PROVENANCE = {"synthetic", "accepted_physical"}
 
@@ -77,7 +80,36 @@ def _validate_quantity(value: Any, expected_unit: str, where: str) -> float:
     return _finite_number(value["value"], f"{where}.value")
 
 
-def validate_experiment(document: dict[str, Any]) -> None:
+def _load_physical_registry() -> dict[str, Any]:
+    with PHYSICAL_REGISTRY_PATH.open("r", encoding="utf-8") as handle:
+        value = json.load(handle)
+    if not isinstance(value, dict):
+        _fail("accepted physical registry must be one JSON object")
+    return value
+
+
+def _require_accepted_physical_readiness(registry: dict[str, Any]) -> None:
+    # Imported lazily so synthetic experiment validation remains independent of
+    # physical fixture materialization and its model-admissibility helpers.
+    from materialize_physical_fixture import PhysicalFixtureError, readiness
+
+    try:
+        status = readiness(registry)
+    except PhysicalFixtureError as error:
+        _fail(f"accepted_physical registry is invalid: {error}")
+    if not status["ready"]:
+        missing = ", ".join(status["missing"])
+        _fail(
+            "accepted_physical experiment cannot run while required accepted evidence is "
+            f"unknown: {missing}"
+        )
+
+
+def validate_experiment(
+    document: dict[str, Any],
+    *,
+    accepted_physical_registry: dict[str, Any] | None = None,
+) -> None:
     if not isinstance(document, dict):
         _fail("experiment must be one JSON object")
 
@@ -121,8 +153,14 @@ def validate_experiment(document: dict[str, Any]) -> None:
     provenance = parameter_set["provenance"]
     if provenance not in ALLOWED_PROVENANCE:
         _fail(f"parameter_set.provenance must be one of {sorted(ALLOWED_PROVENANCE)}")
-    if provenance == "accepted_physical" and parameter_set["source"] != "parameters/reference-assembly.json":
-        _fail("accepted_physical parameter sets must source parameters/reference-assembly.json")
+    if provenance == "accepted_physical":
+        if parameter_set["source"] != "parameters/reference-assembly.json":
+            _fail("accepted_physical parameter sets must source parameters/reference-assembly.json")
+        _require_accepted_physical_readiness(
+            accepted_physical_registry
+            if accepted_physical_registry is not None
+            else _load_physical_registry()
+        )
     if not isinstance(parameter_set["id"], str) or not parameter_set["id"].strip():
         _fail("parameter_set.id must be a non-empty string")
     if not isinstance(parameter_set["source"], str) or not parameter_set["source"].strip():

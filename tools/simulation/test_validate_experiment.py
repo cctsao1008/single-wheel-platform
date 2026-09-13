@@ -5,11 +5,25 @@ import json
 from pathlib import Path
 import unittest
 
+from materialize_physical_fixture import REQUIRED_PATHS
 from validate_experiment import validate_experiment
 
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
 FIXTURE = HERE / "experiments" / "synthetic-small-angle.json"
+PHYSICAL_REGISTRY = ROOT / "parameters" / "reference-assembly.json"
+
+
+def filled_physical_registry() -> dict:
+    registry = json.loads(PHYSICAL_REGISTRY.read_text(encoding="utf-8"))
+    for path in REQUIRED_PATHS:
+        node = registry
+        parts = path.split(".")
+        for part in parts[:-1]:
+            node = node[part]
+        node[parts[-1]] = {"value": 1.0, "evidence": "measured"}
+    return registry
 
 
 class ExperimentContractTests(unittest.TestCase):
@@ -56,6 +70,24 @@ class ExperimentContractTests(unittest.TestCase):
         broken["parameter_set"]["source"] = "some-convenient-values.json"
         with self.assertRaisesRegex(ValueError, "reference-assembly"):
             validate_experiment(broken)
+
+    def test_accepted_physical_fails_closed_on_unknown_registry_value(self) -> None:
+        experiment = copy.deepcopy(self.document)
+        experiment["parameter_set"]["provenance"] = "accepted_physical"
+        experiment["parameter_set"]["source"] = "parameters/reference-assembly.json"
+        registry = filled_physical_registry()
+        registry["body"]["mass_kg"] = {"value": None, "evidence": "unknown"}
+        with self.assertRaisesRegex(ValueError, "cannot run.*body.mass_kg"):
+            validate_experiment(experiment, accepted_physical_registry=registry)
+
+    def test_accepted_physical_ready_registry_passes_readiness_gate(self) -> None:
+        experiment = copy.deepcopy(self.document)
+        experiment["parameter_set"]["provenance"] = "accepted_physical"
+        experiment["parameter_set"]["source"] = "parameters/reference-assembly.json"
+        validate_experiment(
+            experiment,
+            accepted_physical_registry=filled_physical_registry(),
+        )
 
     def test_rejects_wrong_physical_sign_contract(self) -> None:
         broken = copy.deepcopy(self.document)
