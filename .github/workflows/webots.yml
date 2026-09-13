@@ -9,8 +9,25 @@ on:
       - 'tools/simulation/**'
       - 'tools/model/fixtures/synthetic_correlation.json'
       - 'tools/model/reference_balance.py'
+      - 'tools/sitl/Cargo.toml'
       - 'tools/sitl/src/bin/plant_reference_trace.rs'
+      - 'tools/sitl/src/bin/webots_production_bridge.rs'
+      - 'tools/sitl/src/closed_loop.rs'
       - 'tools/sitl/src/simulation_world.rs'
+      - 'firmware/adapters/estimator-input/**'
+      - 'firmware/adapters/frame-transform/**'
+      - 'firmware/adapters/sensor-calibration/**'
+      - 'firmware/sensors/mpu6050/**'
+      - 'control/state-feedback/**'
+      - 'control/velocity-loop/**'
+      - 'plant/actuator-model/**'
+      - 'plant/dynamics-model/**'
+      - 'plant/measurement-model/**'
+      - 'plant/robot-domain/**'
+      - 'supervisor/control-runtime/**'
+      - 'supervisor/runtime-state/**'
+      - 'supervisor/runtime-supervisor/**'
+      - 'supervisor/state-estimator/**'
 
 jobs:
   open-loop-correlation:
@@ -36,4 +53,26 @@ jobs:
         with:
           name: webots-r2025a-open-loop-correlation
           path: webots-output/
+          if-no-files-found: warn
+
+  closed-loop-production-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Rust toolchain
+        run: rustup show
+
+      - name: Run pinned Webots R2025a through production semantic path
+        env:
+          WEBOTS_IMAGE: ghcr.io/cyberbotics/webots-docker/webots@sha256:f31b128a3e4c06e54b26ce3d963a0e6b1c9634907978ae4397db9b4cde2d9f0c
+        run: bash tools/simulation/run_webots_closed_loop.sh webots-closed-loop-output
+
+      - name: Upload closed-loop production-path evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webots-r2025a-production-path-closed-loop
+          path: webots-closed-loop-output/
           if-no-files-found: warn
