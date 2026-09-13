@@ -13,7 +13,14 @@ fi
 WEBOTS_IMAGE="${WEBOTS_IMAGE:-ghcr.io/cyberbotics/webots-docker/webots@sha256:f31b128a3e4c06e54b26ce3d963a0e6b1c9634907978ae4397db9b4cde2d9f0c}"
 TRACE="$OUTPUT_DIR/closed-loop-production-path.jsonl"
 LOG="$OUTPUT_DIR/webots.log"
+WORLD="tools/simulation/webots/worlds/single_wheel_closed_loop_equivalent.wbt"
+FIXTURE="tools/simulation/fixtures/closed-loop-aggregate-equivalent.json"
 mkdir -p "$OUTPUT_DIR"
+
+# Fail before simulation if the high-fidelity rigid body no longer realizes the
+# same upright reduced aggregates as the production bridge's synthetic model.
+# This validates a physical realization, not a convenient impossible inertia.
+python3 tools/simulation/validate_closed_loop_realization.py "$FIXTURE"
 
 cargo build -p swp-sitl --bin webots_production_bridge \
   --target x86_64-unknown-linux-gnu
@@ -22,9 +29,10 @@ BRIDGE="target/x86_64-unknown-linux-gnu/debug/webots_production_bridge"
 test -x "$BRIDGE"
 
 # #17 validates semantic loop closure, not the disturbance envelope. Use a
-# deliberately tiny pitch-only perturbation and a short evidence window so we
-# exercise nonzero AuthorizedActuation without tuning around known rigid-body
-# model differences. Larger/longer disturbances are explicitly owned by #18.
+# deliberately tiny pitch-only perturbation and a short evidence window.  The
+# Webots body now has a physically realizable aggregate-equivalent model and its
+# accelerometer is located at the production measurement model's axle origin.
+# Larger/longer disturbances are explicitly owned by #18.
 docker run --rm \
   -e LIBGL_ALWAYS_SOFTWARE=true \
   -e SWP_WEBOTS_CLOSED_LOOP=1 \
@@ -36,7 +44,7 @@ docker run --rm \
   -v "$PWD:/workspace" \
   -w /workspace \
   "$WEBOTS_IMAGE" \
-  bash -lc "set -o pipefail; timeout 90s xvfb-run --auto-servernum webots --stdout --stderr --batch --mode=fast --no-rendering /workspace/tools/simulation/webots/worlds/single_wheel_synthetic.wbt 2>&1 | tee /workspace/$LOG"
+  bash -lc "set -o pipefail; timeout 90s xvfb-run --auto-servernum webots --stdout --stderr --batch --mode=fast --no-rendering /workspace/$WORLD 2>&1 | tee /workspace/$LOG"
 
 if grep -q '^ERROR:' "$LOG"; then
   cat "$LOG"
