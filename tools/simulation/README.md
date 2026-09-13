@@ -121,7 +121,34 @@ Independent drive-torque and reaction-torque experiments remain the polarity/cau
 
 `synthetic` means values exist only to exercise architecture, dynamics, correlation, or controller behavior. They must never be described as measured ONE V2 properties.
 
-`accepted_physical` means the parameter source is the canonical `parameters/reference-assembly.json`. A future backend-specific materializer may derive simulator input from that registry, but it must fail closed when required accepted values remain unknown. Simulator defaults are never a substitute for missing physical evidence.
+`accepted_physical` means the parameter source is the canonical `parameters/reference-assembly.json`. Accepted physical values are now materialized through:
+
+```text
+tools/simulation/materialize_physical_fixture.py
+```
+
+The materializer is intentionally fail-closed. It reads only the accepted registry, preserves each value's evidence classification, applies the existing inertia-admissibility gate, records both the exact registry-file SHA-256 and a canonical parameter-set SHA-256, and emits no simulator convenience defaults.
+
+Current readiness can be inspected without weakening the gate:
+
+```bash
+python3 tools/simulation/materialize_physical_fixture.py --readiness
+```
+
+Readiness mode returns a machine-readable list of missing accepted evidence and exits successfully so CI can observe the boundary. Actual materialization is different: if even one required value remains unknown, it exits nonzero and produces no physical fixture.
+
+A successful future materialization can be written explicitly:
+
+```bash
+python3 tools/simulation/materialize_physical_fixture.py \
+  --output /tmp/one-v2-accepted-physical.json
+```
+
+The current `webots-production-semantic-v1` profile requires the complete physical registry surface used by the production-semantic rigid-body path: body mass/COM/inertias, drive/reaction wheel mass/inertia/encoder evidence, IMU position, and both actuator-model parameter sets. Unknown values remain unknown; the tool never derives or guesses them merely to make a simulator start.
+
+Solver settings, contact algorithms, friction assumptions, integration tolerances, and other simulator-only knobs are deliberately **not** physical registry values. They stay in separate backend configuration/evidence. If future physical-fidelity claims require a contact or geometry quantity that is not represented by the accepted registry, the schema/evidence process must expand rather than hiding a default in the simulator.
+
+The materializer does not turn synthetic fixtures into accepted physical fixtures. Existing synthetic experiments remain usable through their explicit `synthetic` provenance path.
 
 ## Coordinate contract
 
