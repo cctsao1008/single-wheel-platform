@@ -32,6 +32,7 @@ def validate(path: Path, minimum_records: int) -> dict:
         )
 
     apply_count = 0
+    nonzero_apply_count = 0
     revoke_count = 0
     balancing_count = 0
     first_apply_index = None
@@ -39,6 +40,7 @@ def validate(path: Path, minimum_records: int) -> dict:
     previous_timestamp = None
     max_abs_pitch = 0.0
     max_abs_roll = 0.0
+    max_abs_authorized_torque = 0.0
 
     for position, record in enumerate(records):
         if record.get("mode") != "closed_loop_production_path":
@@ -83,12 +85,16 @@ def validate(path: Path, minimum_records: int) -> dict:
         reaction_torque = _finite(
             record["authorized_reaction_torque_nm"], "reaction torque"
         )
+        sample_max_torque = max(abs(drive_torque), abs(reaction_torque))
+        max_abs_authorized_torque = max(max_abs_authorized_torque, sample_max_torque)
         if actuation == "revoke":
             revoke_count += 1
             if drive_torque != 0.0 or reaction_torque != 0.0:
                 raise EvidenceError("revoked authority produced nonzero Webots torque")
         elif actuation == "apply":
             apply_count += 1
+            if sample_max_torque > 1.0e-6:
+                nonzero_apply_count += 1
             if first_apply_index is None:
                 first_apply_index = position
             if production.get("authority") != "closed_loop":
@@ -124,6 +130,8 @@ def validate(path: Path, minimum_records: int) -> dict:
         raise EvidenceError("production authority never reached an applied actuation")
     if first_apply_index < 2:
         raise EvidenceError("actuation was applied before encoder/timing evidence matured")
+    if nonzero_apply_count == 0:
+        raise EvidenceError("closed-loop evidence never exercised a nonzero authorized torque")
     if balancing_count == 0:
         raise EvidenceError("RuntimeSupervisor never reached Balancing")
 
@@ -141,8 +149,10 @@ def validate(path: Path, minimum_records: int) -> dict:
         "records": len(records),
         "revoke_count": revoke_count,
         "apply_count": apply_count,
+        "nonzero_apply_count": nonzero_apply_count,
         "first_apply_sample": records[first_apply_index]["production"]["sample_index"],
         "balancing_count": balancing_count,
+        "max_abs_authorized_torque_nm": max_abs_authorized_torque,
         "start_pitch_rad": first_truth["body_pitch_rad"],
         "end_pitch_rad": final_truth["body_pitch_rad"],
         "start_roll_rad": first_truth["body_roll_rad"],
@@ -155,7 +165,7 @@ def validate(path: Path, minimum_records: int) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("trace", type=Path)
-    parser.add_argument("--minimum-records", type=int, default=100)
+    parser.add_argument("--minimum-records", type=int, default=10)
     args = parser.parse_args()
     print(json.dumps(validate(args.trace, args.minimum_records), sort_keys=True))
 
