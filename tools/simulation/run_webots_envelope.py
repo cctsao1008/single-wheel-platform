@@ -5,12 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 
 from analyze_webots_envelope import analyze
 from summarize_webots_envelope import summarize
@@ -106,7 +104,7 @@ def webots_command(
         "bash",
         "-lc",
         (
-            "set -o pipefail; timeout 90s xvfb-run --auto-servernum webots "
+            "set -o pipefail; timeout 15s xvfb-run --auto-servernum webots "
             "--stdout --stderr --batch --mode=fast --no-rendering "
             f"/workspace/{world}"
         ),
@@ -144,8 +142,9 @@ def main() -> int:
     cases = [
         case for case in document["cases"] if not selected_ids or case["id"] in selected_ids
     ]
-    if selected_ids - {case["id"] for case in cases}:
-        parser.error(f"unknown case id(s): {sorted(selected_ids - {case['id'] for case in cases})}")
+    unknown_ids = selected_ids - {case["id"] for case in cases}
+    if unknown_ids:
+        parser.error(f"unknown case id(s): {sorted(unknown_ids)}")
 
     output = ROOT / args.output
     if output.exists():
@@ -171,7 +170,12 @@ def main() -> int:
     image = str(document["backend"]["image"])
     world = str(document["world"])
     horizon_s = float(document["horizon_s"])
+    control_period_s = float(document["control_period_s"])
     summaries: list[dict] = []
+
+    # Pull once outside the per-case timeout.  A large Webots image download is
+    # infrastructure setup, not part of any disturbance case's physical horizon.
+    run_checked(["docker", "pull", image])
 
     for index, case in enumerate(cases, start=1):
         case_id = str(case["id"])
@@ -201,31 +205,49 @@ def main() -> int:
             cwd=ROOT,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=30,
         )
         log_text = (completed.stdout or "") + (completed.stderr or "")
         log.write_text(log_text, encoding="utf-8")
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"Webots infrastructure failed for {case_id} with exit {completed.returncode}"
-            )
         if any(line.startswith("ERROR:") for line in log_text.splitlines()):
             raise RuntimeError(f"Webots reported runtime ERROR for {case_id}")
         if not trace.is_file():
-            raise RuntimeError(f"Webots produced no trace for {case_id}")
+            raise RuntimeError(
+                f"Webots produced no evidence trace for {case_id}; exit {completed.returncode}"
+            )
 
         summary = analyze(
             trace,
             case,
             document["classification"],
-            float(document["control_period_s"]),
+            control_period_s,
         )
+        completed_horizon = float(summary["end_time_s"]) >= horizon_s - control_period_s
+        terminated_early = completed.returncode != 0 or not completed_horizon
+        summary["simulator_exit_code"] = completed.returncode
+        summary["completed_declared_horizon"] = completed_horizon
+        summary["terminated_early_after_declared_loss"] = False
+
+        if terminated_early:
+            # Once the predeclared loss criterion has already been observed, a
+            # later encoder rejection/controller exit is part of the failed
+            # trajectory, not permission to discard the counterexample.  A
+            # partial trace without declared loss remains an infrastructure
+            # failure because its classification would be censored.
+            if summary["classification"] != "loss_of_balance":
+                raise RuntimeError(
+                    f"Webots terminated early for {case_id} before a declared loss; "
+                    f"exit {completed.returncode}, end={summary['end_time_s']} s"
+                )
+            summary["terminated_early_after_declared_loss"] = True
+
         summary_path.write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         summaries.append(summary)
+        suffix = " [early after loss]" if summary["terminated_early_after_declared_loss"] else ""
         print(
-            f"    {summary['classification']}; "
+            f"    {summary['classification']}{suffix}; "
             f"max_pitch={summary['max_abs_pitch_rad']:.6g} rad, "
             f"max_roll={summary['max_abs_roll_rad']:.6g} rad, "
             f"max_tau={summary['max_abs_authorized_torque_nm']:.6g} N m",
