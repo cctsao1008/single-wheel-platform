@@ -15,6 +15,7 @@ swp-control-runtime = { path = "../../supervisor/control-runtime" }
 swp-dynamics-model = { path = "../../plant/dynamics-model" }
 swp-estimator-input = { path = "../../firmware/adapters/estimator-input" }
 swp-frame-transform = { path = "../../firmware/adapters/frame-transform" }
+swp-measurement-model = { path = "../../plant/measurement-model" }
 swp-mpu6050 = { path = "../../firmware/sensors/mpu6050" }
 swp-plant-observation = { path = "../../plant/plant-observation" }
 swp-robot-domain = { path = "../../plant/robot-domain" }
@@ -22,8 +23,5 @@ swp-runtime-state = { path = "../../supervisor/runtime-state" }
 swp-runtime-supervisor = { path = "../../supervisor/runtime-supervisor" }
 swp-sensor-calibration = { path = "../../firmware/adapters/sensor-calibration" }
 swp-state-estimator = { path = "../../supervisor/state-estimator" }
-swp-velocity-loop = { path = "../../control/velocity-loop" }
-
-[dev-dependencies]
-swp-measurement-model = { path = "../../plant/measurement-model" }
 swp-state-feedback = { path = "../../control/state-feedback" }
+swp-velocity-loop = { path = "../../control/velocity-loop" }
