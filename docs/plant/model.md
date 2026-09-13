@@ -139,6 +139,33 @@ The drive-wheel gravitational potential is constant in the local rolling model a
 
 The current parameter partition is a model contract, not a claim that every value is already known. Unknown quantities remain unknown until measured or identified.
 
+## Reduced roll/contact validity domain
+
+The four-coordinate balance reduction is not a complete rigid-wheel/ground-contact model. In particular, its roll coordinate assumes that the drive-axle path and the body/reaction-wheel mass distribution can be represented without introducing independent lateral contact or yaw coordinates into the balance state.
+
+That assumption is visible in the energy model itself. The drive wheel contributes translation and spin terms through `M_s`, `r`, and `J_d`, but the current roll block uses
+
+```text
+J_phi = S + I_bx
+```
+
+and therefore does not include a drive-wheel transverse/tipping inertia term or a finite contact-patch model. Lateral ground reaction, tire/contact geometry, and coupled lateral/yaw motion are outside the demonstrated dynamic equivalence of this reduction.
+
+Accordingly, the current reduced roll/reaction-wheel block is supported as a local upright model under its idealized rolling/contact assumptions. Matching `H`, `S`, `M_s`, `J_theta`, `J_phi`, wheel radius, and reaction-wheel spin inertia in a rigid-body simulator is useful aggregate consistency evidence, but it does **not** prove full roll/contact dynamic equivalence.
+
+Issue #18 exposed this boundary with a synthetic high-fidelity counterexample. In the nominal Webots closed-loop baseline, the raw gyro sign/unit mapping remained consistent to bridge quantization accuracy, while residuals against both the reduced lateral-acceleration measurement equation and the reduced roll equation grew materially as contact motion developed. That localizes the discrepancy above the raw-device mapping and at the reduced measurement/plant model versus rigid-body contact semantics; it does not identify one unique missing physical term.
+
+Any future claim of high-fidelity roll robustness must therefore do one of two things:
+
+```text
+1. demonstrate that the chosen contact realization satisfies the reduced roll assumptions,
+   or
+2. promote the missing lateral/contact degrees of freedom and parameters into the
+   canonical plant/measurement hierarchy.
+```
+
+Controller tuning, simulator-only sign changes, or relaxed recovery thresholds are not substitutes for resolving this model boundary. The Webots evidence establishing this limitation is synthetic and promotes no ONE V2 physical parameter.
+
 ## Kinetic and potential energy
 
 Using the orientation convention
