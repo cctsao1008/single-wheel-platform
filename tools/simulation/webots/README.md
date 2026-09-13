@@ -101,7 +101,7 @@ and is checked by:
 tools/simulation/validate_closed_loop_realization.py
 ```
 
-The Webots component masses and geometries are physically realizable and reproduce the reduced upright quantities that actually govern the local model:
+The Webots component masses and geometries are physically realizable and reproduce selected stationary-upright reduced quantities:
 
 ```text
 gravitational first moment
@@ -115,33 +115,60 @@ reaction-wheel spin inertia
 
 within the declared tolerance. This is an **aggregate-equivalent synthetic realization**, not a claim that its component dimensions describe ONE V2.
 
+It is also deliberately **not** a claim of full roll/contact dynamic equivalence. The fixture now encodes that validity boundary explicitly with `full_roll_contact_dynamic_equivalence: false`. The current reduced roll model excludes drive-wheel transverse/tipping inertia from its roll block and does not model finite lateral contact-patch or coupled lateral/yaw ground-contact motion. Matching the selected scalar aggregates cannot make those omitted dynamics disappear.
+
 The closed-loop accelerometer is placed at the drive-wheel axle / reduced-model origin, matching the measurement model used by the production bridge. That placement is part of the evidence contract, not a hidden correction.
 
 `tools/simulation/run_webots_closed_loop.sh` first validates this realization, then runs the pinned Webots image through the production semantic bridge and validates the resulting authority/actuation trace.
 
-## Known roll/contact difference
+## Roll/contact model boundary exposed by #18
+
+The first predeclared closed-loop disturbance envelope intentionally reused the #17 world without retuning. It produced a useful counterexample: even the nominal zero-tilt baseline did not satisfy the declared recovery criterion over 0.50 s because the roll/reaction-wheel channel developed oscillation and reached synthetic reaction-torque saturation.
+
+`tools/simulation/analyze_roll_model_gap.py` localizes that discrepancy without changing controller gains or signs. It checks three distinct layers:
+
+```text
+raw gyro encoding/sign
+  hard bridge contract
+
+reduced lateral-acceleration measurement equation
+  diagnostic residual
+
+reduced roll dynamic equation using actual prior authorized torque
+  diagnostic residual
+```
+
+The baseline evidence shows the raw gyro mapping remains consistent to bridge quantization accuracy while the measurement and roll-dynamics residuals grow materially later in the trajectory. This places the first demonstrated mismatch above raw-device mapping and at the reduced measurement/plant assumptions versus rigid-body ground-contact behavior.
+
+The result does not identify one unique missing term. Finite wheel width, drive-wheel tipping inertia, lateral contact kinematics, and lateral/yaw coupling remain candidate omitted dynamics rather than tuning knobs. The durable model boundary is documented in `docs/plant/model.md` and tracked through Issue #25.
+
+Until that model hierarchy is extended or an actually compatible contact realization is demonstrated, the #18 Webots envelope is a **counterexample to a robustness claim**, not a robustness certificate.
+
+## Known open-loop roll/contact difference
 
 The open-loop Webots drive wheel has finite width. The reduced roll model uses a knife-edge-like rolling support assumption. A small roll perturbation can therefore remain inside a lateral contact support region in Webots while the reduced model predicts immediate unstable roll evolution.
 
 This difference is kept visible as `explainable_difference` evidence. It is not corrected with a hidden sign flip or controller/gain adjustment. Standalone drive- and reaction-torque experiments are used to verify actuator polarity and gross causal direction independently of that combined contact effect.
 
-## Reproducible CI lane
+## Reproducible CI lanes
 
-`.github/workflows/webots.yml` uses the Cyberbotics R2025a container pinned by immutable digest:
+`.github/workflows/webots.yml` and `.github/workflows/webots-envelope.yml` use the Cyberbotics R2025a container pinned by immutable digest:
 
 ```text
 ghcr.io/cyberbotics/webots-docker/webots
 @sha256:f31b128a3e4c06e54b26ce3d963a0e6b1c9634907978ae4397db9b4cde2d9f0c
 ```
 
-The workflow runs both evidence lanes:
+The standard Webots workflow runs:
 
 1. the five #16 experiments across analytical, Rust `SimulationWorld`, and Webots;
 2. the #17 short closed-loop production-semantic scenario.
 
 For open-loop experiments it validates contracts, materializes the reduced fixture, records raw/projected traces, verifies Webots emitted no runtime `ERROR:`, calculates discrepancy/causal metrics, and writes machine-readable summaries.
 
-For the closed-loop path it requires startup revocation before authority, nonzero authorized actuation, zero runtime faults, bounded attitude in the short acceptance window, and exact equality between the Rust-authorized torque and the torque sent to Webots.
+For the #17 closed-loop path it requires startup revocation before authority, nonzero authorized actuation, zero runtime faults, bounded attitude in the short acceptance window, and exact equality between the Rust-authorized torque and the torque sent to Webots.
+
+The envelope workflow runs the predeclared #18 disturbance grid and emits machine-readable classifications. It also records the #25 baseline model-gap diagnostic. The raw gyro sign/unit check is a hard failure; known measurement/plant residuals remain evidence rather than thresholds to tune around.
 
 Evidence artifacts are uploaded even when a job fails, so a failed counterexample remains inspectable rather than disappearing with the job.
 
