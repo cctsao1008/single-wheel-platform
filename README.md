@@ -2,6 +2,8 @@
 
 A Rust `no_std` control platform for a reaction-wheel-stabilized single-wheel robot.
 
+> Small robot, serious boundaries: no hidden truth, no imaginary physical parameters, and no motor authority by accident.
+
 The repository has four architectural domains. They define ownership and dependency, not runtime execution order or directory depth.
 
 ```text
@@ -37,6 +39,8 @@ RawObservation
   -> actuator-specific electrical/protocol frame
   -> physical output
 ```
+
+These are intentionally different semantic objects. Evidence is not belief, belief is not control intent, control intent is not authorization, and authorization is not electrical output.
 
 ## Firmware shape
 
@@ -145,6 +149,63 @@ The closed-loop SITL composition reuses production sensor scaling/calibration, f
 
 SITL configurations and repository integration tests use explicitly synthetic values where physical ONE V2 parameters or calibration evidence are unknown. Simulation evidence is not physical validation.
 
+## Validation and evidence
+
+The host validation stack intentionally uses models with different failure modes:
+
+```text
+analytical reduced model
+          │
+          ├──────────────┐
+          │              │
+Rust SimulationWorld   Webots rigid-body
+          │              │
+          └──────┬───────┘
+                 │
+       common observable evidence
+                 │
+                 ▼
+             ONE V2
+```
+
+The analytical model, Rust `SimulationWorld`, and Webots are independent reviewers, not a majority-vote physics committee. Agreement increases confidence; disagreement opens a model, sign, coordinate, parameter, or simulator-semantics investigation.
+
+Webots is a host-only rigid-body counterexample generator. Its production-semantic closed-loop lane emits device-like sensor evidence, passes that evidence through the Rust production estimator/control/supervisor path, and applies only returned `AuthorizedActuation`. Simulator truth is never an estimator shortcut.
+
+The current closed-loop Webots fixture is an **aggregate-equivalent synthetic realization** for selected upright quantities. It is explicitly not a claim of full roll/contact dynamic equivalence; finite wheel/contact dynamics remain outside the current reduced roll model validity domain.
+
+## Physical parameter gate
+
+Accepted ONE V2 physical parameters live in:
+
+```text
+parameters/reference-assembly.json
+```
+
+Unknown values are valid registry states. They are not invitations to guess.
+
+```text
+physical evidence
+      ↓
+accepted registry
+      ↓
+provenance + admissibility
+      ↓
+accepted_physical readiness
+   ┌───────┴────────┐
+   │                │
+unknown          complete
+   │                │
+ REFUSE              ▼
+             materialized fixture
+             + source SHA-256
+             + parameter-set SHA-256
+```
+
+`tools/simulation/materialize_physical_fixture.py` implements the fail-closed path. An `accepted_physical` simulation cannot start until its required accepted evidence is present and admissible. Solver/contact/numerical settings remain simulator configuration rather than physical facts.
+
+Synthetic fixtures remain useful for architecture, correlation, and controller development, but they never become ONE V2 facts merely because a simulation looks convincing. The robot is allowed to be fictional only when the provenance label says so.
+
 ## Targets
 
 ```text
@@ -162,7 +223,9 @@ The first six targets are non-actuating integration/profiling targets. `one-v2-p
 
 ## Support and host engineering
 
-`support/` contains non-domain implementation support shared by production domains; `support/dsp-kernel` is the cross-domain numerical kernel. Firmware-owned recording codecs live under `firmware/recording/`. Host-side system identification, mathematical derivation, control synthesis, SITL, recording decode/replay, and correlation live under `tools/`.
+`support/` contains non-domain implementation support shared by production domains; `support/dsp-kernel` is the cross-domain numerical kernel. Firmware-owned recording codecs live under `firmware/recording/`. Host-side system identification, mathematical derivation, control synthesis, SITL, recording decode/replay, commissioning, high-fidelity simulation, and correlation live under `tools/`.
+
+Host tools may challenge production assumptions, but they do not become additional production domains and they do not gain physical actuation authority.
 
 ## Build
 
@@ -177,8 +240,12 @@ cargo fw-io-shadow
 
 Architecture: [`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)
 
+Simulation evidence contract: [`tools/simulation/README.md`](tools/simulation/README.md)
+
+Plant model and validity boundary: [`docs/plant/model.md`](docs/plant/model.md)
+
 ## Documentation principle
 
 > **README explains the system. Issues explain the journey. Code proves the current state.**
 
-README and durable documentation explain the Plant / Control / Supervisor / Firmware architecture, typed interfaces, safety and authority boundaries, target roles, and validation interpretation. GitHub Issues preserve experiments, system-identification work, tuning, temporary constraints, implementation steps, and closure records. Code, target composition, configuration, and tests remain the authoritative evidence of executable behavior.
+README and durable documentation explain the Plant / Control / Supervisor / Firmware architecture, typed interfaces, safety and authority boundaries, target roles, validation interpretation, and evidence gates. GitHub Issues preserve experiments, system-identification work, tuning, temporary constraints, implementation steps, and closure records. Code, target composition, configuration, and tests remain the authoritative evidence of executable behavior.
