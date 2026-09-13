@@ -8,9 +8,11 @@ on:
       - '.github/workflows/webots-envelope.yml'
       - 'tools/simulation/envelopes/**'
       - 'tools/simulation/analyze_webots_envelope.py'
+      - 'tools/simulation/analyze_roll_model_gap.py'
       - 'tools/simulation/summarize_webots_envelope.py'
       - 'tools/simulation/run_webots_envelope.py'
       - 'tools/simulation/test_analyze_webots_envelope.py'
+      - 'tools/simulation/test_analyze_roll_model_gap.py'
       - 'tools/simulation/test_summarize_webots_envelope.py'
       - 'tools/simulation/validate_closed_loop_realization.py'
       - 'tools/simulation/fixtures/closed-loop-aggregate-equivalent.json'
@@ -43,6 +45,14 @@ jobs:
           python3 tools/simulation/run_webots_envelope.py \
             --manifest tools/simulation/envelopes/initial-tilt-v1.json \
             --output webots-envelope-output
+
+      - name: Diagnose reduced roll/contact model boundary
+        run: |
+          python3 tools/simulation/analyze_roll_model_gap.py \
+            webots-envelope-output/baseline/trace.jsonl \
+            --fixture tools/simulation/fixtures/closed-loop-aggregate-equivalent.json \
+            --output webots-envelope-output/baseline/model-gap.json \
+            --require-canonical-gyro
 
       - name: Upload machine-readable envelope evidence
         if: always()
