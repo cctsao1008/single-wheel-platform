@@ -47,7 +47,18 @@ python3 tools/commissioning/encoder_preregistration.py \
 
 Preserve that SHA-256 with the lab/capture record. The exact raw counter polarity is deliberately left `unknown` where no accepted physical evidence exists. The pre-capture falsifiable expectations are instead structural: a marked positive revolution must produce nonzero motion, the marked negative revolution must reverse counter sign, and repeated exact one-revolution trials must agree in absolute count magnitude.
 
-After capture, select the exact record sequence ranges for the positive and negative marked revolutions and analyze them with `encoder_evidence.py`. That tool verifies record continuity, encoder quality, 16-bit wrap handling, bidirectional sign consistency, and repeated one-revolution count magnitude before emitting a candidate result.
+After capture, select the exact record sequence ranges for the positive and negative marked revolutions in a commissioning trial-plan JSON and analyze them with the matching preregistration:
+
+```bash
+python3 tools/commissioning/encoder_evidence.py capture.bin \
+  --plan drive-trials.json \
+  --preregistration tools/commissioning/plans/drive-encoder-one-rev.preregistration.json \
+  --output drive-encoder-evidence.json
+```
+
+The evidence output carries the validated preregistration fingerprint and records whether an explicit sign hypothesis matched, was contradicted, or was intentionally not prejudged. A prediction counterexample remains valid evidence; it must not trigger a controller/estimator sign repair.
+
+`encoder_evidence.py` also verifies record continuity, encoder quality, 16-bit wrap handling, bidirectional sign consistency, and repeated one-revolution count magnitude before emitting a candidate result.
 
 The observed slow manual-run maximum count step is evidence only. It is **not** `encoder_max_abs_delta_counts_per_sample`; that bound still requires an evidenced runtime speed envelope.
 
