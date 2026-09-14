@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Single Simulation Viewer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">single-wheel-platform · host-only observer</p>
+        <h1>Single Simulation Viewer</h1>
+        <p class="subtitle">Watch the model move without granting the UI any control authority.</p>
+      </div>
+      <div class="provenance-badge" id="provenanceBadge">no trace loaded</div>
+    </header>
+
+    <section class="toolbar card">
+      <label class="file-button">
+        Load common trace
+        <input id="traceFile" type="file" accept=".jsonl,.json,.txt">
+      </label>
+      <button id="playPause" type="button" disabled>Play</button>
+      <button id="restart" type="button" disabled>Restart</button>
+      <label>Speed
+        <select id="speed" disabled>
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </label>
+      <input id="scrubber" type="range" min="0" max="0" value="0" step="1" disabled>
+      <output id="clock">t = —</output>
+    </section>
+
+    <section class="viewer-grid">
+      <article class="card model-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">side view</p>
+            <h2>Pitch / forward motion</h2>
+          </div>
+          <span class="value-pill" id="pitchValue">pitch —</span>
+        </div>
+        <svg id="sideView" viewBox="0 0 640 360" role="img" aria-label="Single wheel side-view simulation">
+          <defs>
+            <linearGradient id="bodyGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#fff9f3"/>
+              <stop offset="1" stop-color="#ffd9c2"/>
+            </linearGradient>
+            <linearGradient id="wheelGradient" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#5f6168"/>
+              <stop offset="1" stop-color="#292b31"/>
+            </linearGradient>
+          </defs>
+          <line class="ground" x1="40" y1="295" x2="600" y2="295"/>
+          <g id="groundTicks"></g>
+          <g id="sideRobot" transform="translate(320 0)">
+            <circle class="wheel" cx="0" cy="252" r="46"/>
+            <circle class="hub" cx="0" cy="252" r="9"/>
+            <g id="pitchBody" transform="rotate(0 0 206)">
+              <rect class="body" x="-61" y="108" width="122" height="112" rx="36"/>
+              <circle class="eye" cx="-22" cy="151" r="8"/>
+              <circle class="eye" cx="22" cy="151" r="8"/>
+              <path class="smile" d="M-14 180 Q0 191 14 180"/>
+              <line class="stem" x1="0" y1="220" x2="0" y2="244"/>
+            </g>
+            <path class="pitchArc" d="M78 210 A78 78 0 0 0 68 172"/>
+            <text class="axis-label" x="87" y="174">θ</text>
+          </g>
+        </svg>
+      </article>
+
+      <article class="card model-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">front view</p>
+            <h2>Roll / reaction wheel</h2>
+          </div>
+          <span class="value-pill" id="rollValue">roll —</span>
+        </div>
+        <svg id="frontView" viewBox="0 0 640 360" role="img" aria-label="Single wheel front-view simulation">
+          <line class="ground" x1="40" y1="295" x2="600" y2="295"/>
+          <g transform="translate(320 0)">
+            <ellipse class="front-wheel" cx="0" cy="254" rx="22" ry="47"/>
+            <g id="rollBody" transform="rotate(0 0 207)">
+              <rect class="body" x="-61" y="108" width="122" height="112" rx="36"/>
+              <circle class="eye" cx="-22" cy="151" r="8"/>
+              <circle class="eye" cx="22" cy="151" r="8"/>
+              <path class="smile" d="M-14 180 Q0 191 14 180"/>
+              <line class="stem" x1="0" y1="220" x2="0" y2="244"/>
+              <g id="reactionWheel" transform="translate(0 132) rotate(0)">
+                <circle class="reaction-ring" cx="0" cy="0" r="41"/>
+                <line class="reaction-spoke" x1="0" y1="-35" x2="0" y2="35"/>
+                <line class="reaction-spoke" x1="-35" y1="0" x2="35" y2="0"/>
+              </g>
+            </g>
+            <path class="rollArc" d="M78 210 A78 78 0 0 0 68 172"/>
+            <text class="axis-label" x="87" y="174">φ</text>
+          </g>
+        </svg>
+      </article>
+    </section>
+
+    <section class="telemetry-grid">
+      <article class="card telemetry-card">
+        <p class="eyebrow">state</p>
+        <dl>
+          <div><dt>Forward position</dt><dd id="forwardPosition">—</dd></div>
+          <div><dt>Forward velocity</dt><dd id="forwardVelocity">—</dd></div>
+          <div><dt>Pitch rate</dt><dd id="pitchRate">—</dd></div>
+          <div><dt>Roll rate</dt><dd id="rollRate">—</dd></div>
+          <div><dt>Reaction angle</dt><dd id="reactionAngle">—</dd></div>
+          <div><dt>Reaction rate</dt><dd id="reactionRate">—</dd></div>
+        </dl>
+      </article>
+      <article class="card telemetry-card">
+        <p class="eyebrow">applied input</p>
+        <dl>
+          <div><dt>Drive torque</dt><dd id="driveTorque">—</dd></div>
+          <div><dt>Reaction torque</dt><dd id="reactionTorque">—</dd></div>
+        </dl>
+        <div class="authority-note">
+          <strong>Observer only.</strong>
+          This UI reads evidence. It cannot create `AuthorizedActuation`.
+        </div>
+      </article>
+    </section>
+
+    <section class="card trace-help">
+      <h2>Trace contract</h2>
+      <p>Load simulator-neutral JSONL with the same fields used by the cross-backend correlation contract:</p>
+      <code>time_s, forward_position_m, forward_velocity_m_per_s, body_pitch_rad, body_pitch_rate_rad_per_s, body_roll_rad, body_roll_rate_rad_per_s, reaction_position_rad, reaction_rate_rad_per_s, drive_torque_nm, reaction_torque_nm</code>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
