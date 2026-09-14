@@ -53,10 +53,20 @@ fn run() -> Result<(), Box<dyn Error>> {
         if !first {
             simulation.advance(previous, at)?;
         } else {
-            dispatch(&mut simulation, at, &mut insertion_sequence, EventKind::ScenarioStart)?;
+            dispatch(
+                &mut simulation,
+                at,
+                &mut insertion_sequence,
+                EventKind::ScenarioStart,
+            )?;
         }
 
-        dispatch(&mut simulation, at, &mut insertion_sequence, EventKind::SensorSample)?;
+        dispatch(
+            &mut simulation,
+            at,
+            &mut insertion_sequence,
+            EventKind::SensorSample,
+        )?;
         dispatch(
             &mut simulation,
             at,
@@ -101,7 +111,10 @@ fn run() -> Result<(), Box<dyn Error>> {
                                 "sample_index": sample_index,
                                 "timestamp_us": at.as_micros()
                             },
-                            "sitl_evidence_truth": truth_json(snapshot.truth.state, snapshot.truth.reaction_wheel_relative_angle_rad),
+                            "sitl_evidence_truth": truth_json(
+                                snapshot.truth.state,
+                                snapshot.truth.reaction_wheel_relative_angle_rad
+                            ),
                             "production": {
                                 "schema": 1,
                                 "sample_index": sample_index,
@@ -113,7 +126,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                                 "authority_reason_bits": decision.reasons.bits(),
                                 "constrained": decision.constrained,
                                 "hold_integrator": decision.hold_integrator,
-                                "actuation": if decision.closed_loop_authorized() { "apply" } else { "revoke" },
+                                "actuation": if decision.closed_loop_authorized() {
+                                    "apply"
+                                } else {
+                                    "revoke"
+                                },
                                 "drive_torque_nm": snapshot.truth.applied_input.drive_torque_nm,
                                 "reaction_torque_nm": snapshot.truth.applied_input.reaction_wheel_torque_nm,
                                 "estimate": state_json(estimate),
@@ -150,7 +167,7 @@ fn dispatch(
         insertion_sequence: *insertion_sequence,
         kind,
     };
-    *insertion_sequence = insertion_sequence
+    *insertion_sequence = (*insertion_sequence)
         .checked_add(1)
         .ok_or_else(|| io::Error::other("live SITL insertion sequence exhausted"))?;
     simulation.dispatch_event(event)?;
