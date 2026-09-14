@@ -22,6 +22,7 @@ const state = {
   simStartedS: 0,
   animationFrame: null,
   filename: null,
+  view: "split",
 };
 
 function finiteNumber(value, field) {
@@ -48,21 +49,7 @@ function normalizeRecord(record, lineNumber) {
   return Object.fromEntries(COMMON_TRACE_FIELDS.map((field) => [field, finiteNumber(record[field], field)]));
 }
 
-function parseTrace(text) {
-  const trimmed = text.trim();
-  if (!trimmed) throw new Error("trace is empty");
-
-  if (trimmed.startsWith("[")) {
-    const values = JSON.parse(trimmed);
-    if (!Array.isArray(values)) throw new Error("JSON trace must be an array");
-    return values.map((record, index) => normalizeRecord(record, index + 1));
-  }
-
-  const records = trimmed
-    .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line, index) => normalizeRecord(JSON.parse(line), index + 1));
-
+function validateTraceOrder(records) {
   if (records.length < 2) throw new Error("trace must contain at least two records");
   for (let i = 1; i < records.length; i += 1) {
     if (records[i].time_s <= records[i - 1].time_s) {
@@ -72,12 +59,49 @@ function parseTrace(text) {
   return records;
 }
 
+function parseTrace(text) {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("trace is empty");
+
+  let records;
+  if (trimmed.startsWith("[")) {
+    const values = JSON.parse(trimmed);
+    if (!Array.isArray(values)) throw new Error("JSON trace must be an array");
+    records = values.map((record, index) => normalizeRecord(record, index + 1));
+  } else {
+    records = trimmed
+      .split(/\r?\n/)
+      .filter((line) => line.trim())
+      .map((line, index) => normalizeRecord(JSON.parse(line), index + 1));
+  }
+  return validateTraceOrder(records);
+}
+
 function format(value, digits, unit) {
   return `${value.toFixed(digits)} ${unit}`;
 }
 
 function setText(id, text) {
   $(id).textContent = text;
+}
+
+function logEvent(message, timeS = null) {
+  const log = $("eventLog");
+  const row = document.createElement("div");
+  const time = document.createElement("span");
+  const body = document.createElement("span");
+  time.className = "log-time";
+  time.textContent = timeS === null ? "console" : `${timeS.toFixed(3)} s`;
+  body.textContent = message;
+  row.append(time, body);
+  log.prepend(row);
+  while (log.children.length > 10) log.removeChild(log.lastElementChild);
+}
+
+function setTraceStatus(text, kind = "neutral") {
+  setText("traceStatus", text);
+  const dot = $("traceStatus").parentElement.querySelector(".status-dot");
+  dot.className = `status-dot ${kind}`;
 }
 
 function renderGround(forwardPositionM) {
@@ -102,8 +126,8 @@ function renderRecord(record) {
   renderGround(record.forward_position_m);
 
   setText("clock", `t = ${record.time_s.toFixed(3)} s`);
-  setText("pitchValue", `pitch ${pitchDeg.toFixed(2)}°`);
-  setText("rollValue", `roll ${rollDeg.toFixed(2)}°`);
+  setText("pitchValue", `Pitch ${pitchDeg.toFixed(2)}°`);
+  setText("rollValue", `Roll ${rollDeg.toFixed(2)}°`);
   setText("forwardPosition", format(record.forward_position_m, 4, "m"));
   setText("forwardVelocity", format(record.forward_velocity_m_per_s, 4, "m/s"));
   setText("pitchRate", format(record.body_pitch_rate_rad_per_s, 4, "rad/s"));
@@ -112,6 +136,7 @@ function renderRecord(record) {
   setText("reactionRate", format(record.reaction_rate_rad_per_s, 4, "rad/s"));
   setText("driveTorque", format(record.drive_torque_nm, 4, "N·m"));
   setText("reactionTorque", format(record.reaction_torque_nm, 4, "N·m"));
+  setText("sampleIndex", `${state.index + 1} / ${state.trace.length}`);
 }
 
 function setIndex(index) {
@@ -137,6 +162,7 @@ function frame(nowMs) {
 
   if (index >= state.trace.length - 1) {
     stopPlayback();
+    logEvent("Playback reached the end of the evidence trace.", state.trace[index].time_s);
     return;
   }
   state.animationFrame = requestAnimationFrame(frame);
@@ -149,13 +175,17 @@ function startPlayback() {
   state.wallStartedMs = performance.now();
   state.simStartedS = state.trace[state.index].time_s;
   $("playPause").textContent = "Pause";
+  logEvent(`Playback started at ${state.speed}×.`, state.trace[state.index].time_s);
   state.animationFrame = requestAnimationFrame(frame);
 }
 
 function showError(message) {
+  stopPlayback();
   const badge = $("provenanceBadge");
   badge.textContent = message;
   badge.classList.add("error");
+  setTraceStatus("TRACE ERROR", "warn");
+  logEvent(`Trace rejected: ${message}`);
 }
 
 function loadTrace(trace, filename) {
@@ -168,10 +198,29 @@ function loadTrace(trace, filename) {
   $("playPause").disabled = false;
   $("restart").disabled = false;
   $("speed").disabled = false;
+
+  const first = trace[0];
+  const last = trace[trace.length - 1];
+  const duration = last.time_s - first.time_s;
   const badge = $("provenanceBadge");
   badge.classList.remove("error");
-  badge.textContent = `${filename} · ${trace.length} samples · observer-only`;
+  badge.textContent = `${filename} · ${trace.length} samples`;
+  setText("traceName", filename);
+  setText("sampleCount", String(trace.length));
+  setText("durationValue", `${duration.toFixed(3)} s`);
+  setTraceStatus("TRACE READY", "good");
   setIndex(0);
+  logEvent(`Accepted ${filename}: ${trace.length} samples, ${duration.toFixed(3)} s duration.`);
+}
+
+function setView(view) {
+  state.view = view;
+  const viewport = $("modelViewport");
+  viewport.classList.remove("split-mode", "side-mode", "front-mode");
+  viewport.classList.add(`${view}-mode`);
+  document.querySelectorAll(".view-button").forEach((button) => {
+    button.classList.toggle("selected-view", button.dataset.view === view);
+  });
 }
 
 $("traceFile").addEventListener("change", async (event) => {
@@ -180,19 +229,42 @@ $("traceFile").addEventListener("change", async (event) => {
   try {
     loadTrace(parseTrace(await file.text()), file.name);
   } catch (error) {
-    stopPlayback();
     showError(error instanceof Error ? error.message : String(error));
   }
 });
 
-$("playPause").addEventListener("click", () => state.playing ? stopPlayback() : startPlayback());
-$("restart").addEventListener("click", () => { stopPlayback(); setIndex(0); });
+$("playPause").addEventListener("click", () => {
+  if (state.playing) {
+    const timeS = state.trace[state.index]?.time_s ?? null;
+    stopPlayback();
+    logEvent("Playback paused.", timeS);
+  } else {
+    startPlayback();
+  }
+});
+
+$("restart").addEventListener("click", () => {
+  stopPlayback();
+  setIndex(0);
+  if (state.trace.length) logEvent("Playback returned to the first sample.", state.trace[0].time_s);
+});
+
 $("speed").addEventListener("change", () => {
   const wasPlaying = state.playing;
   if (wasPlaying) stopPlayback();
   state.speed = Number($("speed").value);
+  logEvent(`Playback speed set to ${state.speed}×.`, state.trace[state.index]?.time_s ?? null);
   if (wasPlaying) startPlayback();
 });
-$("scrubber").addEventListener("input", () => { stopPlayback(); setIndex(Number($("scrubber").value)); });
+
+$("scrubber").addEventListener("input", () => {
+  stopPlayback();
+  setIndex(Number($("scrubber").value));
+});
+
+document.querySelectorAll(".view-button").forEach((button) => {
+  button.addEventListener("click", () => setView(button.dataset.view));
+});
 
 renderGround(0);
+setView("split");
