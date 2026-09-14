@@ -90,6 +90,8 @@ button, a, label { -webkit-tap-highlight-color: transparent; }
 .nav-item:hover { background: #2f3338; color: #f0f1f2; }
 .nav-item.active { color: #1f1d18; background: var(--accent); border-left-color: #f0c455; font-weight: 800; }
 .nav-item.active span { color: #403318; }
+.view-button.selected-view { color: #f0c45a; background: #353a3f; border-left-color: var(--accent); font-weight: 760; }
+.view-button.selected-view span { color: #e8b644; }
 .sidebar-foot { margin-top: auto; padding: 16px 14px 0; border-top: 1px solid var(--line-soft); color: #7f858b; }
 .sidebar-foot p { margin: 4px 0; font-size: .73rem; line-height: 1.4; }
 .mini-title { color: #b5bbc0; font-size: .71rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
