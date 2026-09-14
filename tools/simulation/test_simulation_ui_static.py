@@ -11,6 +11,7 @@ COMPARE = UI / "compare.js"
 INDEX = UI / "index.html"
 STYLE = UI / "style.css"
 COMMON_SAMPLE = UI / "sample-trace.jsonl"
+COMPARE_SAMPLE = UI / "sample-compare-trace.jsonl"
 CLOSED_LOOP_SAMPLE = UI / "sample-closed-loop-trace.jsonl"
 
 EXPECTED_FIELDS = (
@@ -58,6 +59,7 @@ class SimulationUiStaticTests(unittest.TestCase):
             UI / "README.md",
             UI / "CONSOLE_LAYOUT.md",
             COMMON_SAMPLE,
+            COMPARE_SAMPLE,
             CLOSED_LOOP_SAMPLE,
         ):
             self.assertTrue(path.is_file(), path)
@@ -68,6 +70,15 @@ class SimulationUiStaticTests(unittest.TestCase):
         self.assertIsNotNone(match)
         fields = tuple(re.findall(r'"([a-z0-9_]+)"', match.group(1)))
         self.assertEqual(fields, EXPECTED_FIELDS)
+
+    def test_aligned_comparison_fixture_matches_primary_grid(self):
+        primary = load_jsonl(COMMON_SAMPLE)
+        comparison = load_jsonl(COMPARE_SAMPLE)
+        self.assertEqual(len(primary), len(comparison))
+        self.assertEqual([record["time_s"] for record in primary], [record["time_s"] for record in comparison])
+        self.assertTrue(any(a["body_pitch_rad"] != b["body_pitch_rad"] for a, b in zip(primary, comparison)))
+        for record in comparison:
+            self.assertEqual(set(record), set(EXPECTED_FIELDS))
 
     def test_closed_loop_dialect_is_explicit(self):
         source = APP.read_text(encoding="utf-8")
