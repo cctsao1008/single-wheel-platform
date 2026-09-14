@@ -11,6 +11,7 @@
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
 }
 
 .spatial-toolbar button {
@@ -31,6 +32,20 @@
   border-color: #d9a329;
   color: #f2c864;
   background: #353a3f;
+}
+
+.spatial-camera-status {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid #454a50;
+  border-radius: 4px;
+  color: #92989f;
+  background: #202327;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .spatial-boundary {
@@ -57,6 +72,13 @@
   height: min(58vh, 520px);
   min-height: 390px;
   background: #25282c;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+#spatialCanvas.is-orbiting {
+  cursor: grabbing;
 }
 
 .spatial-readout {
