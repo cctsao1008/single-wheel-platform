@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "kind": "encoder-one-revolution-preregistration",
+  "assembly": "reference-assembly",
+  "encoder_channel": "encoder_1",
+  "installed_role": "ReactionWheel",
+  "runtime_counter": "TIM2",
+  "mechanical_coordinate": "reaction_wheel_relative_angle",
+  "positive_direction_definition": "relative wheel rotation about body +X by the right-hand rule",
+  "safety": {
+    "firmware_target": "observation",
+    "physical_motor_backend_present": false,
+    "motor_actuation_allowed": false,
+    "manual_rotation_only": true
+  },
+  "prediction": {
+    "positive_trial_must_produce_nonzero_net_counts": true,
+    "negative_trial_must_invert_counter_sign": true,
+    "one_revolution_absolute_count_must_repeat": true,
+    "counter_sign_for_mechanical_positive": "unknown",
+    "sign_prediction_basis": "The raw TIM2 counter polarity for the project-defined body +X right-hand-rule direction is intentionally unknown. Legacy reaction-wheel counting behavior is useful historical evidence but does not bind raw counter polarity to the current physical coordinate convention."
+  },
+  "forbidden_interpretations": [
+    "Do not promote legacy reaction-wheel encoder line count directly as STM32 counts per mechanical revolution.",
+    "Do not infer physical sign from legacy software variable naming or control algebra.",
+    "Do not infer encoder_max_abs_delta_counts_per_sample from slow manual rotation.",
+    "Do not change estimator, controller, or actuator signs to make the capture look expected."
+  ]
+}
