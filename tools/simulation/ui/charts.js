@@ -266,7 +266,7 @@
       appendPath(series, "trend-estimate-pitch", records, (record) => record.production.estimate?.body_pitch_rad, ROWS.attitude, attitudeLimit);
       appendPath(series, "trend-estimate-roll", records, (record) => record.production.estimate?.body_roll_rad, ROWS.attitude, attitudeLimit);
       document.getElementById("trendNote").textContent =
-        "Solid attitude = Webots evidence truth; dashed attitude = production estimate. Runtime markers are transition-only evidence.";
+        "Solid attitude = carried simulator truth; dashed attitude = production estimate. Runtime markers are transition-only evidence.";
     } else {
       document.getElementById("trendNote").textContent =
         "Common trace: solid attitude and applied torque only. Runtime authority is intentionally unavailable.";
@@ -339,5 +339,10 @@
   setIndex = function trendAwareSetIndex(index) {
     baseSetIndex(index);
     updateTrendCursor();
+  };
+
+  window.SingleConsoleTrends = {
+    render: renderTrends,
+    updateCursor: updateTrendCursor,
   };
 })();
