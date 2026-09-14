@@ -7,6 +7,7 @@ HERE = Path(__file__).resolve().parent
 UI = HERE / "ui"
 APP = UI / "app.js"
 CHARTS = UI / "charts.js"
+COMPARE = UI / "compare.js"
 INDEX = UI / "index.html"
 STYLE = UI / "style.css"
 COMMON_SAMPLE = UI / "sample-trace.jsonl"
@@ -52,6 +53,7 @@ class SimulationUiStaticTests(unittest.TestCase):
             INDEX,
             APP,
             CHARTS,
+            COMPARE,
             STYLE,
             UI / "README.md",
             UI / "CONSOLE_LAYOUT.md",
@@ -112,6 +114,7 @@ class SimulationUiStaticTests(unittest.TestCase):
         self.assertIn("Production runtime", source)
         self.assertIn("UI-derived truth minus estimate", source)
         self.assertIn('<script src="charts.js"></script>', source)
+        self.assertIn('<script src="compare.js"></script>', source)
 
     def test_trend_projection_is_recorded_evidence_only(self):
         source = CHARTS.read_text(encoding="utf-8")
@@ -126,11 +129,26 @@ class SimulationUiStaticTests(unittest.TestCase):
         self.assertIn("baseSetIndex", source)
         self.assertIn("Trend plot seeked to recorded sample", source)
 
+    def test_cross_trace_comparison_is_exact_grid_and_non_consensus(self):
+        source = COMPARE.read_text(encoding="utf-8")
+        self.assertIn("const MAX_COMPARISONS = 3", source)
+        self.assertIn('parsed.dialect !== "simulator-neutral-v2"', source)
+        self.assertIn("sample count", source)
+        self.assertIn("exact alignment is required", source)
+        self.assertIn("parsed.records[index].time_s !== state.trace[index].time_s", source)
+        self.assertIn("No averaging, winner selection, backend inference", source)
+        self.assertIn("majority-vote physics", source)
+        self.assertIn("Local filenames are display labels only", source)
+        self.assertIn("maxAbsDifference", source)
+        self.assertNotIn("interpolate(", source.lower())
+        self.assertNotIn("resample(", source.lower())
+
     def test_ui_is_observer_only(self):
         source = (
             INDEX.read_text(encoding="utf-8")
             + APP.read_text(encoding="utf-8")
             + CHARTS.read_text(encoding="utf-8")
+            + COMPARE.read_text(encoding="utf-8")
         ).lower()
         self.assertIn("observer only", source)
         self.assertNotIn("fetch(", source)
