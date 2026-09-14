@@ -36,6 +36,12 @@
     side: { eye: [0.2, -4.8, 1.20], target: [0, 0, 0.58], focal: 720 },
     front: { eye: [4.8, 0.2, 1.25], target: [0, 0, 0.58], focal: 720 },
   };
+  const CAMERA_MIN_RADIUS = 1.8;
+  const CAMERA_MAX_RADIUS = 7.5;
+  const CAMERA_MIN_ELEVATION_RAD = 0.08;
+  const CAMERA_MAX_ELEVATION_RAD = 1.45;
+  const CAMERA_ORBIT_SENSITIVITY = 0.006;
+  const CAMERA_ZOOM_SENSITIVITY = 0.001;
 
   const BODY_HALF = [0.18, 0.16, 0.33];
   const BODY_CENTER = [0, 0, 0.45];
@@ -49,7 +55,17 @@
     [6, 7],
   ];
 
+  function cloneCamera(camera) {
+    return {
+      eye: [...camera.eye],
+      target: [...camera.target],
+      focal: camera.focal,
+    };
+  }
+
   let cameraPreset = "iso";
+  let cameraState = cloneCamera(cameraPresets.iso);
+  let activeOrbitPointer = null;
   let latestRecord = null;
   let estimateGhostEnabled = true;
 
@@ -80,6 +96,10 @@
   function normalize(v) {
     const length = Math.hypot(v[0], v[1], v[2]);
     return length > 0 ? scale(v, 1 / length) : [0, 0, 0];
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.max(minimum, Math.min(maximum, value));
   }
 
   function rotateX(v, angle) {
@@ -120,11 +140,61 @@
   }
 
   function cameraBasis() {
-    const camera = cameraPresets[cameraPreset];
+    // Camera state is presentation-only. Evidence/world coordinates are never rewritten from it.
+    const camera = cameraState;
     const forward = normalize(sub(camera.target, camera.eye));
     const right = normalize(cross(forward, [0, 0, 1]));
     const up = normalize(cross(right, forward));
     return { ...camera, forward, right, up };
+  }
+
+  function cameraSpherical() {
+    const relative = sub(cameraState.eye, cameraState.target);
+    const radius = Math.hypot(relative[0], relative[1], relative[2]);
+    return {
+      radius,
+      azimuth: Math.atan2(relative[1], relative[0]),
+      elevation: Math.asin(clamp(relative[2] / radius, -1, 1)),
+    };
+  }
+
+  function setCameraSpherical(radius, azimuth, elevation) {
+    const boundedRadius = clamp(radius, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
+    const boundedElevation = clamp(elevation, CAMERA_MIN_ELEVATION_RAD, CAMERA_MAX_ELEVATION_RAD);
+    const horizontal = boundedRadius * Math.cos(boundedElevation);
+    cameraState.eye = add(cameraState.target, [
+      horizontal * Math.cos(azimuth),
+      horizontal * Math.sin(azimuth),
+      boundedRadius * Math.sin(boundedElevation),
+    ]);
+  }
+
+  function updateCameraStatus() {
+    const status = document.getElementById("spatialCameraState");
+    if (!status) return;
+    const spherical = cameraSpherical();
+    const label = cameraPreset === "custom" ? "CUSTOM" : cameraPreset.toUpperCase();
+    status.textContent = `camera ${label} · r ${spherical.radius.toFixed(2)} · az ${(spherical.azimuth * DEG).toFixed(0)}° · el ${(spherical.elevation * DEG).toFixed(0)}°`;
+  }
+
+  function updatePresetButtons() {
+    document.querySelectorAll("[data-camera-preset]").forEach((button) => {
+      button.classList.toggle("active-camera", button.dataset.cameraPreset === cameraPreset);
+    });
+  }
+
+  function selectCameraPreset(preset) {
+    if (!cameraPresets[preset]) return;
+    cameraPreset = preset;
+    cameraState = cloneCamera(cameraPresets[preset]);
+    updatePresetButtons();
+    updateCameraStatus();
+    draw(latestRecord);
+  }
+
+  function markCameraCustom() {
+    cameraPreset = "custom";
+    updatePresetButtons();
   }
 
   function project(point, basis, width, height) {
@@ -388,6 +458,7 @@
     );
     setSpatialText("spatialForward", `${forward.toFixed(4)} m`);
     updateGhostStatus(Boolean(estimate));
+    updateCameraStatus();
   }
 
   function installEstimateGhostUi() {
@@ -430,19 +501,89 @@
     });
   }
 
+  function installCameraUi() {
+    const toolbar = document.querySelector(".spatial-toolbar");
+    if (!toolbar || document.getElementById("spatialCameraReset")) return;
+
+    const reset = document.createElement("button");
+    reset.id = "spatialCameraReset";
+    reset.type = "button";
+    reset.dataset.cameraReset = "iso";
+    reset.textContent = "RESET";
+    reset.title = "Reset presentation camera to ISO preset";
+    toolbar.appendChild(reset);
+
+    const status = document.createElement("span");
+    status.id = "spatialCameraState";
+    status.className = "spatial-camera-status";
+    status.textContent = "camera ISO";
+    toolbar.appendChild(status);
+
+    reset.addEventListener("click", () => selectCameraPreset("iso"));
+  }
+
+  function beginOrbit(event) {
+    if (event.button !== 0) return;
+    activeOrbitPointer = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    canvas.setPointerCapture?.(event.pointerId);
+    canvas.classList.add("is-orbiting");
+  }
+
+  function moveOrbit(event) {
+    if (!activeOrbitPointer || event.pointerId !== activeOrbitPointer.id) return;
+    const deltaX = event.clientX - activeOrbitPointer.x;
+    const deltaY = event.clientY - activeOrbitPointer.y;
+    activeOrbitPointer.x = event.clientX;
+    activeOrbitPointer.y = event.clientY;
+
+    const spherical = cameraSpherical();
+    markCameraCustom();
+    setCameraSpherical(
+      spherical.radius,
+      spherical.azimuth - deltaX * CAMERA_ORBIT_SENSITIVITY,
+      spherical.elevation - deltaY * CAMERA_ORBIT_SENSITIVITY
+    );
+    updateCameraStatus();
+    draw(latestRecord);
+  }
+
+  function endOrbit(event) {
+    if (!activeOrbitPointer || event.pointerId !== activeOrbitPointer.id) return;
+    canvas.releasePointerCapture?.(event.pointerId);
+    activeOrbitPointer = null;
+    canvas.classList.remove("is-orbiting");
+  }
+
+  function zoomCamera(event) {
+    event.preventDefault();
+    const spherical = cameraSpherical();
+    const factor = Math.exp(event.deltaY * CAMERA_ZOOM_SENSITIVITY);
+    markCameraCustom();
+    setCameraSpherical(
+      clamp(spherical.radius * factor, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS),
+      spherical.azimuth,
+      spherical.elevation
+    );
+    updateCameraStatus();
+    draw(latestRecord);
+  }
+
   document.querySelectorAll("[data-camera-preset]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const preset = button.dataset.cameraPreset;
-      if (!cameraPresets[preset]) return;
-      cameraPreset = preset;
-      document.querySelectorAll("[data-camera-preset]").forEach((candidate) => {
-        candidate.classList.toggle("active-camera", candidate === button);
-      });
-      draw(latestRecord);
-    });
+    button.addEventListener("click", () => selectCameraPreset(button.dataset.cameraPreset));
   });
 
   installEstimateGhostUi();
+  installCameraUi();
+
+  canvas.addEventListener("pointerdown", beginOrbit);
+  canvas.addEventListener("pointermove", moveOrbit);
+  canvas.addEventListener("pointerup", endOrbit);
+  canvas.addEventListener("pointercancel", endOrbit);
+  canvas.addEventListener("wheel", zoomCamera, { passive: false });
 
   const baseRenderRecord = renderRecord;
   renderRecord = function spatialAwareRenderRecord(record) {
@@ -453,11 +594,19 @@
 
   const observer = new ResizeObserver(() => draw(latestRecord));
   observer.observe(canvas);
-  document.querySelector('[data-camera-preset="iso"]')?.classList.add("active-camera");
+  updatePresetButtons();
+  updateCameraStatus();
   draw(null);
 
   window.SingleSpatialView = {
     render: draw,
+    resetCamera: () => selectCameraPreset("iso"),
+    cameraBounds: {
+      minRadius: CAMERA_MIN_RADIUS,
+      maxRadius: CAMERA_MAX_RADIUS,
+      minElevationRad: CAMERA_MIN_ELEVATION_RAD,
+      maxElevationRad: CAMERA_MAX_ELEVATION_RAD,
+    },
     coordinateContract: {
       x: "+X forward",
       y: "+Y left",
@@ -470,6 +619,12 @@
       source: "record.production.estimate attitude only",
       origin: "same schematic axle/origin as truth; no estimated translation synthesized",
       reactionPhase: "not estimated; truth/common only",
+    },
+    cameraContract: {
+      scope: "presentation only",
+      orbit: "changes camera eye around fixed presentation target",
+      zoom: "bounded camera radius only",
+      evidenceMutation: "none",
     },
   };
 })();
