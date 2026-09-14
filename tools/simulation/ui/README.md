@@ -44,6 +44,8 @@ http://127.0.0.1:8000/tools/simulation/ui/
 
 Load a simulator-neutral `.jsonl` trace produced by the existing simulation/correlation tooling.
 
+`sample-trace.jsonl` is **illustrative synthetic UI data only**. It exists to exercise the viewer and is not a recorded simulator result, controller result, or ONE V2 physical claim.
+
 ## Semantic boundary
 
 The drawings are visual projections of trace fields. They are not a physics backend and are not evidence by themselves. The UI must not infer missing physical parameters, repair signs, smooth away counterexamples, or change simulator/control behavior.
