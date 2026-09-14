@@ -6,6 +6,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 UI = HERE / "ui"
 APP = UI / "app.js"
+CHARTS = UI / "charts.js"
 INDEX = UI / "index.html"
 STYLE = UI / "style.css"
 COMMON_SAMPLE = UI / "sample-trace.jsonl"
@@ -50,6 +51,7 @@ class SimulationUiStaticTests(unittest.TestCase):
         for path in (
             INDEX,
             APP,
+            CHARTS,
             STYLE,
             UI / "README.md",
             UI / "CONSOLE_LAYOUT.md",
@@ -109,9 +111,27 @@ class SimulationUiStaticTests(unittest.TestCase):
         self.assertIn("Truth vs estimate", source)
         self.assertIn("Production runtime", source)
         self.assertIn("UI-derived truth minus estimate", source)
+        self.assertIn('<script src="charts.js"></script>', source)
+
+    def test_trend_projection_is_recorded_evidence_only(self):
+        source = CHARTS.read_text(encoding="utf-8")
+        self.assertIn("Synchronized trends", source)
+        self.assertIn("No smoothing, resampling, filtering, or browser-side estimation", source)
+        self.assertIn("authority/runtime unavailable in simulator-neutral-v2", source)
+        self.assertIn("transitionIndices", source)
+        self.assertIn("current.operating_state !== previous.operating_state", source)
+        self.assertIn("current.authority !== previous.authority", source)
+        self.assertIn("current.actuation !== previous.actuation", source)
+        self.assertIn("baseLoadTrace", source)
+        self.assertIn("baseSetIndex", source)
+        self.assertIn("Trend plot seeked to recorded sample", source)
 
     def test_ui_is_observer_only(self):
-        source = (INDEX.read_text(encoding="utf-8") + APP.read_text(encoding="utf-8")).lower()
+        source = (
+            INDEX.read_text(encoding="utf-8")
+            + APP.read_text(encoding="utf-8")
+            + CHARTS.read_text(encoding="utf-8")
+        ).lower()
         self.assertIn("observer only", source)
         self.assertNotIn("fetch(", source)
         self.assertNotIn("websocket", source)
