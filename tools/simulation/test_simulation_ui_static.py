@@ -49,7 +49,7 @@ class SimulationUiStaticTests(unittest.TestCase):
         source = INDEX.read_text(encoding="utf-8")
         for element_id in REQUIRED_CONSOLE_IDS:
             self.assertRegex(source, rf'id="{re.escape(element_id)}"')
-        self.assertIn("Single Control &amp; Evidence Console", source)
+        self.assertIn("Single Control & Evidence Console", source)
         self.assertIn("not carried by common trace", source)
 
     def test_ui_is_observer_only(self):
