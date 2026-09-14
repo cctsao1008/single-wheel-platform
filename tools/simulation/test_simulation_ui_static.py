@@ -1,3 +1,4 @@
+import ast
 import json
 import re
 import unittest
@@ -8,6 +9,8 @@ UI = HERE / "ui"
 APP = UI / "app.js"
 CHARTS = UI / "charts.js"
 COMPARE = UI / "compare.js"
+LIVE = UI / "live.js"
+LIVE_SERVER = UI / "serve_live.py"
 INDEX = UI / "index.html"
 STYLE = UI / "style.css"
 COMMON_SAMPLE = UI / "sample-trace.jsonl"
@@ -41,6 +44,10 @@ REQUIRED_CONSOLE_IDS = (
     "referencePanel",
     "runtimePanel",
     "authoritySummary",
+    "liveChip",
+    "liveStart",
+    "liveStop",
+    "liveSpeed",
 )
 
 
@@ -55,6 +62,8 @@ class SimulationUiStaticTests(unittest.TestCase):
             APP,
             CHARTS,
             COMPARE,
+            LIVE,
+            LIVE_SERVER,
             STYLE,
             UI / "README.md",
             UI / "CONSOLE_LAYOUT.md",
@@ -124,8 +133,11 @@ class SimulationUiStaticTests(unittest.TestCase):
         self.assertIn("Truth vs estimate", source)
         self.assertIn("Production runtime", source)
         self.assertIn("UI-derived truth minus estimate", source)
+        self.assertIn("SIMULATION ONLY", source)
+        self.assertIn("NO PHYSICAL AUTHORITY", source)
         self.assertIn('<script src="charts.js"></script>', source)
         self.assertIn('<script src="compare.js"></script>', source)
+        self.assertIn('<script src="live.js"></script>', source)
 
     def test_trend_projection_is_recorded_evidence_only(self):
         source = CHARTS.read_text(encoding="utf-8")
@@ -139,6 +151,7 @@ class SimulationUiStaticTests(unittest.TestCase):
         self.assertIn("baseLoadTrace", source)
         self.assertIn("baseSetIndex", source)
         self.assertIn("Trend plot seeked to recorded sample", source)
+        self.assertIn("window.SingleConsoleTrends", source)
 
     def test_cross_trace_comparison_is_exact_grid_and_non_consensus(self):
         source = COMPARE.read_text(encoding="utf-8")
@@ -154,17 +167,36 @@ class SimulationUiStaticTests(unittest.TestCase):
         self.assertNotIn("interpolate(", source.lower())
         self.assertNotIn("resample(", source.lower())
 
-    def test_ui_is_observer_only(self):
+    def test_live_mode_is_bounded_localhost_transport_only(self):
+        source = LIVE.read_text(encoding="utf-8")
+        server = LIVE_SERVER.read_text(encoding="utf-8")
+        ast.parse(server)
+        self.assertIn("const LIVE_HISTORY_LIMIT = 3600", source)
+        self.assertIn('new EventSource(`/api/live?', source)
+        self.assertIn('const LIVE_MAPPING_ID = "sitl-simulation-world-v1"', source)
+        self.assertIn("state.trace.length > LIVE_HISTORY_LIMIT", source)
+        self.assertIn("persistent Rust ClosedLoopSimulation", source)
+        self.assertIn("simulation evidence only", server.lower())
+        self.assertIn('ThreadingHTTPServer(("127.0.0.1", args.port), Handler)', server)
+        self.assertIn('parsed.path == "/api/live"', server)
+        self.assertIn('"single_sitl_live"', server)
+        self.assertIn("display_period = 1.0 / fps", server)
+        self.assertIn("stop_process(process)", server)
+        self.assertNotIn("0.0.0.0", server)
+
+    def test_ui_has_no_physical_actuation_or_browser_physics_path(self):
         source = (
             INDEX.read_text(encoding="utf-8")
             + APP.read_text(encoding="utf-8")
             + CHARTS.read_text(encoding="utf-8")
             + COMPARE.read_text(encoding="utf-8")
+            + LIVE.read_text(encoding="utf-8")
         ).lower()
         self.assertIn("observer only", source)
-        self.assertNotIn("fetch(", source)
+        self.assertIn("simulation only", source)
         self.assertNotIn("websocket", source)
         self.assertNotIn("authorizedactuation(", source)
+        self.assertNotIn("fetch(", LIVE.read_text(encoding="utf-8").lower())
 
 
 if __name__ == "__main__":
