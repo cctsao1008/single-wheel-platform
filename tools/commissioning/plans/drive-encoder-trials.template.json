@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "assembly": "reference-assembly",
+  "encoder_channel": "encoder_2",
+  "mechanical_coordinate": "drive_wheel_relative_angle",
+  "positive_direction_definition": "relative wheel rotation that produces +X forward rolling when body pitch is held fixed",
+  "preregistration": "tools/commissioning/plans/drive-encoder-one-rev.preregistration.json",
+  "note": "Copy this file outside the committed template path after capture, then replace the null sequence boundaries with exact RecordedObservation sequence numbers. Do not change the physical-positive definition to fit the observed sign.",
+  "trials": [
+    {
+      "name": "positive-1",
+      "direction": "positive",
+      "start_sequence": null,
+      "end_sequence": null
+    },
+    {
+      "name": "negative-1",
+      "direction": "negative",
+      "start_sequence": null,
+      "end_sequence": null
+    },
+    {
+      "name": "positive-2",
+      "direction": "positive",
+      "start_sequence": null,
+      "end_sequence": null
+    },
+    {
+      "name": "negative-2",
+      "direction": "negative",
+      "start_sequence": null,
+      "end_sequence": null
+    }
+  ]
+}
