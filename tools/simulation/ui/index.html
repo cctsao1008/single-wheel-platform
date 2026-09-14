@@ -20,14 +20,28 @@
       <div class="system-strip" aria-label="viewer status">
         <div class="status-chip"><span class="status-dot neutral"></span><span id="traceStatus">NO TRACE</span></div>
         <div class="status-chip"><span class="status-dot good"></span><span id="traceDialect">SIMULATOR-NEUTRAL V2</span></div>
+        <div class="status-chip"><span class="status-dot neutral"></span><span id="liveChip">LIVE: stopped</span></div>
+        <div class="status-chip"><span class="status-dot good"></span>SIMULATION ONLY</div>
         <div class="status-chip"><span class="status-dot good"></span>OBSERVER ONLY</div>
         <div class="status-chip muted-chip" id="provenanceBadge">no trace loaded</div>
       </div>
 
-      <label class="load-button">
-        Load trace
-        <input id="traceFile" type="file" accept=".jsonl,.json,.txt">
-      </label>
+      <div class="topbar-actions">
+        <label class="live-speed-label">Live
+          <select id="liveSpeed">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+        <button id="liveStart" class="live-button" type="button">▶ Live</button>
+        <button id="liveStop" class="live-stop-button" type="button" disabled>■ Stop</button>
+        <label class="load-button">
+          Load trace
+          <input id="traceFile" type="file" accept=".jsonl,.json,.txt">
+        </label>
+      </div>
     </header>
 
     <section class="workspace">
@@ -48,7 +62,7 @@
         <div class="sidebar-foot">
           <div class="mini-title">Semantic boundary</div>
           <p>Evidence in. Pixels out.</p>
-          <p>No actuation route exists here.</p>
+          <p>NO PHYSICAL AUTHORITY.</p>
         </div>
       </aside>
 
@@ -248,5 +262,6 @@
   <script src="app.js"></script>
   <script src="charts.js"></script>
   <script src="compare.js"></script>
+  <script src="live.js"></script>
 </body>
 </html>
