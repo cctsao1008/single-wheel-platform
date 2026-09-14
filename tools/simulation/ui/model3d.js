@@ -20,6 +20,8 @@
     hub: "#c5912f",
     reaction: "#dda52f",
     spoke: "#f6d77b",
+    estimateGhost: "#7fc6ff",
+    estimateGhostSoft: "rgba(127,198,255,0.20)",
     shadow: "rgba(0,0,0,0.23)",
   };
 
@@ -28,14 +30,28 @@
   // positive pitch = right-hand rotation about +Y -> rotateY(+pitch).
   // positive roll  = right-hand rotation about +X -> rotateX(+roll).
   // positive reaction-wheel phase = right-hand rotation about body +X.
+  // The estimate ghost uses this same transform. It never receives a visual-only sign fix.
   const cameraPresets = {
     iso: { eye: [2.8, -3.8, 2.45], target: [0, 0, 0.70], focal: 680 },
     side: { eye: [0.2, -4.8, 1.20], target: [0, 0, 0.58], focal: 720 },
     front: { eye: [4.8, 0.2, 1.25], target: [0, 0, 0.58], focal: 720 },
   };
 
+  const BODY_HALF = [0.18, 0.16, 0.33];
+  const BODY_CENTER = [0, 0, 0.45];
+  const BODY_EDGES = [
+    [0, 1], [0, 2], [0, 4],
+    [1, 3], [1, 5],
+    [2, 3], [2, 6],
+    [3, 7],
+    [4, 5], [4, 6],
+    [5, 7],
+    [6, 7],
+  ];
+
   let cameraPreset = "iso";
   let latestRecord = null;
+  let estimateGhostEnabled = true;
 
   function add(a, b) {
     return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -85,6 +101,22 @@
 
   function bodyPoint(local, pitch, roll) {
     return add(BODY_PIVOT, bodyRotate(local, pitch, roll));
+  }
+
+  function bodyVertices(pitch, roll) {
+    const vertices = [];
+    [-1, 1].forEach((sx) => {
+      [-1, 1].forEach((sy) => {
+        [-1, 1].forEach((sz) => {
+          vertices.push(bodyPoint([
+            BODY_CENTER[0] + sx * BODY_HALF[0],
+            BODY_CENTER[1] + sy * BODY_HALF[1],
+            BODY_CENTER[2] + sz * BODY_HALF[2],
+          ], pitch, roll));
+        });
+      });
+    });
+    return vertices;
   }
 
   function cameraBasis() {
@@ -158,14 +190,12 @@
       } else {
         local = [radius * Math.cos(angle), 0, radius * Math.sin(angle)];
       }
-      let point;
-      if (bodyAttached) {
-        point = bodyPoint(add(center, local), pitch, roll);
-      } else {
-        point = add(center, local);
-      }
+      const point = bodyAttached
+        ? bodyPoint(add(center, local), pitch, roll)
+        : add(center, local);
       points.push(project(point, basis, width, height));
     }
+
     ctx.beginPath();
     let drawing = false;
     points.forEach((point) => {
@@ -191,6 +221,7 @@
   }
 
   function drawGround(basis, width, height, forwardPosition) {
+    // Forward displacement shifts only the reference grid. Drive-wheel phase is intentionally not inferred.
     const spacing = 0.25;
     const offset = ((forwardPosition % spacing) + spacing) % spacing;
     for (let index = -8; index <= 8; index += 1) {
@@ -222,22 +253,13 @@
     });
   }
 
+  function vertex(vertices, sx, sy, sz) {
+    return vertices[((sx + 1) / 2) * 4 + ((sy + 1) / 2) * 2 + ((sz + 1) / 2)];
+  }
+
   function drawBody(pitch, roll, basis, width, height) {
-    const half = [0.18, 0.16, 0.33];
-    const center = [0, 0, 0.45];
-    const vertices = [];
-    [-1, 1].forEach((sx) => {
-      [-1, 1].forEach((sy) => {
-        [-1, 1].forEach((sz) => {
-          vertices.push(bodyPoint([
-            center[0] + sx * half[0],
-            center[1] + sy * half[1],
-            center[2] + sz * half[2],
-          ], pitch, roll));
-        });
-      });
-    });
-    const v = (sx, sy, sz) => vertices[((sx + 1) / 2) * 4 + ((sy + 1) / 2) * 2 + ((sz + 1) / 2)];
+    const vertices = bodyVertices(pitch, roll);
+    const v = (sx, sy, sz) => vertex(vertices, sx, sy, sz);
     const faces = [
       { points: [v(-1,-1,-1), v(-1,1,-1), v(-1,1,1), v(-1,-1,1)], fill: COLORS.bodySide },
       { points: [v(1,-1,-1), v(1,-1,1), v(1,1,1), v(1,1,-1)], fill: COLORS.bodyFront },
@@ -254,22 +276,69 @@
       .forEach((face) => polygon3d(face.points, basis, width, height, face.fill));
 
     const stemA = bodyPoint([0, 0, 0.12], pitch, roll);
-    const stemB = BODY_PIVOT;
-    line3d(stemA, stemB, basis, width, height, COLORS.edge, 7);
+    line3d(stemA, BODY_PIVOT, basis, width, height, COLORS.edge, 7);
+  }
+
+  function drawEstimateGhost(pitch, roll, basis, width, height) {
+    // Estimate ghost is attitude-only. Same schematic origin; no estimated translation is synthesized.
+    const vertices = bodyVertices(pitch, roll);
+    BODY_EDGES.forEach(([a, b]) => {
+      line3d(vertices[a], vertices[b], basis, width, height, COLORS.estimateGhost, 2.2);
+    });
+
+    const top = bodyPoint([0, 0, BODY_CENTER[2] + BODY_HALF[2] + 0.08], pitch, roll);
+    const projected = project(top, basis, width, height);
+    if (projected) {
+      ctx.font = `${Math.max(10, width / 92)}px ui-monospace, monospace`;
+      ctx.fillStyle = COLORS.estimateGhost;
+      ctx.fillText("estimate attitude", projected.x + 5, projected.y - 4);
+    }
   }
 
   function drawDriveWheel(basis, width, height) {
     const center = [0, 0, 0.28];
-    const radius = 0.28;
+    const radius = 0.28; // schematic display radius only, not an accepted ONE V2 physical parameter
     ring3d(add(center, [0, -0.085, 0]), "y", radius, 0, 0, null, basis, width, height, COLORS.wheelEdge, 9, false);
     ring3d(add(center, [0, 0.085, 0]), "y", radius, 0, 0, null, basis, width, height, COLORS.wheel, 9, false);
     line3d([0, -0.13, 0.28], [0, 0.13, 0.28], basis, width, height, COLORS.hub, 8);
   }
 
   function drawReactionWheel(pitch, roll, phase, basis, width, height) {
+    // Reaction phase is truth/common evidence only. The production estimate does not carry this cyclic coordinate.
     const center = [0, 0, 0.58];
     ring3d(add(center, [-0.035, 0, 0]), "x", 0.20, pitch, roll, phase, basis, width, height, COLORS.reaction, 5, true);
     ring3d(add(center, [0.035, 0, 0]), "x", 0.20, pitch, roll, phase, basis, width, height, COLORS.reaction, 5, true);
+  }
+
+  function estimateAttitude(record) {
+    if (record?.dialect !== "production-semantic-v1") return null;
+    const estimate = record.production?.estimate;
+    if (!estimate) return null;
+    if (!Number.isFinite(estimate.body_pitch_rad) || !Number.isFinite(estimate.body_roll_rad)) return null;
+    return {
+      pitch: estimate.body_pitch_rad,
+      roll: estimate.body_roll_rad,
+    };
+  }
+
+  function setSpatialText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  }
+
+  function updateGhostStatus(available) {
+    const status = document.getElementById("spatialGhostStatus");
+    if (!status) return;
+    if (!estimateGhostEnabled) {
+      status.textContent = "estimate ghost: hidden";
+      status.dataset.kind = "hidden";
+    } else if (available) {
+      status.textContent = "estimate ghost: attitude only";
+      status.dataset.kind = "available";
+    } else {
+      status.textContent = "estimate ghost: unavailable";
+      status.dataset.kind = "unavailable";
+    }
   }
 
   function draw(record) {
@@ -291,6 +360,7 @@
     const roll = Number.isFinite(visual.body_roll_rad) ? visual.body_roll_rad : 0;
     const forward = Number.isFinite(visual.forward_position_m) ? visual.forward_position_m : 0;
     const reactionPhase = Number.isFinite(visual.reaction_position_rad) ? visual.reaction_position_rad : null;
+    const estimate = estimateAttitude(record);
 
     drawGround(basis, width, height, forward);
     drawAxes(basis, width, height);
@@ -306,13 +376,58 @@
     drawDriveWheel(basis, width, height);
     drawBody(pitch, roll, basis, width, height);
     drawReactionWheel(pitch, roll, reactionPhase, basis, width, height);
+    if (estimateGhostEnabled && estimate) {
+      drawEstimateGhost(estimate.pitch, estimate.roll, basis, width, height);
+    }
 
-    document.getElementById("spatialPitch").textContent = `${(pitch * DEG).toFixed(2)}°`;
-    document.getElementById("spatialRoll").textContent = `${(roll * DEG).toFixed(2)}°`;
-    document.getElementById("spatialPhase").textContent = reactionPhase === null
-      ? "unavailable"
-      : `${reactionPhase.toFixed(4)} rad`;
-    document.getElementById("spatialForward").textContent = `${forward.toFixed(4)} m`;
+    setSpatialText("spatialPitch", `${(pitch * DEG).toFixed(2)}°`);
+    setSpatialText("spatialRoll", `${(roll * DEG).toFixed(2)}°`);
+    setSpatialText(
+      "spatialPhase",
+      reactionPhase === null ? "unavailable" : `${reactionPhase.toFixed(4)} rad · truth/common only`
+    );
+    setSpatialText("spatialForward", `${forward.toFixed(4)} m`);
+    updateGhostStatus(Boolean(estimate));
+  }
+
+  function installEstimateGhostUi() {
+    const toolbar = document.querySelector(".spatial-toolbar");
+    const boundary = document.querySelector(".spatial-boundary");
+    if (!toolbar || !boundary || document.getElementById("spatialEstimateGhost")) return;
+
+    const toggle = document.createElement("label");
+    toggle.className = "spatial-ghost-toggle";
+    toggle.innerHTML = '<input id="spatialEstimateGhost" type="checkbox" checked> estimate ghost';
+    toolbar.appendChild(toggle);
+
+    const legend = document.createElement("div");
+    legend.className = "spatial-ghost-legend";
+    legend.innerHTML = `
+      <span><i class="spatial-truth-key"></i>solid = truth/common</span>
+      <span><i class="spatial-estimate-key"></i>cyan wireframe = production estimate attitude only</span>
+      <span>reaction phase = truth/common only</span>
+      <strong id="spatialGhostStatus" data-kind="unavailable">estimate ghost: unavailable</strong>
+    `;
+    boundary.insertAdjacentElement("afterend", legend);
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .spatial-ghost-toggle { display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:0 9px; border:1px solid #555b61; border-radius:4px; color:#bfc4c9; background:#24272b; font-size:11px; cursor:pointer; white-space:nowrap; }
+      .spatial-ghost-toggle input { accent-color:#7fc6ff; }
+      .spatial-ghost-legend { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:8px 14px; border-bottom:1px solid #43484f; background:#202327; color:#969ca3; font-size:11px; }
+      .spatial-ghost-legend span { display:inline-flex; align-items:center; gap:5px; }
+      .spatial-ghost-legend i { display:inline-block; width:18px; height:0; border-top:3px solid #d2aa61; }
+      .spatial-ghost-legend .spatial-estimate-key { border-top-color:#7fc6ff; border-top-style:dashed; }
+      #spatialGhostStatus { margin-left:auto; color:#7fc6ff; font-family:ui-monospace, monospace; font-size:10px; font-weight:600; }
+      #spatialGhostStatus[data-kind="unavailable"] { color:#858b92; }
+      #spatialGhostStatus[data-kind="hidden"] { color:#b08d58; }
+    `;
+    document.head.appendChild(style);
+
+    document.getElementById("spatialEstimateGhost").addEventListener("change", (event) => {
+      estimateGhostEnabled = event.target.checked;
+      draw(latestRecord);
+    });
   }
 
   document.querySelectorAll("[data-camera-preset]").forEach((button) => {
@@ -326,6 +441,8 @@
       draw(latestRecord);
     });
   });
+
+  installEstimateGhostUi();
 
   const baseRenderRecord = renderRecord;
   renderRecord = function spatialAwareRenderRecord(record) {
@@ -348,6 +465,11 @@
       pitch: "+ about +Y (right-hand rule)",
       roll: "+ about +X (right-hand rule)",
       reactionPhase: "+ about body +X (right-hand rule)",
+    },
+    estimateGhostContract: {
+      source: "record.production.estimate attitude only",
+      origin: "same schematic axle/origin as truth; no estimated translation synthesized",
+      reactionPhase: "not estimated; truth/common only",
     },
   };
 })();
