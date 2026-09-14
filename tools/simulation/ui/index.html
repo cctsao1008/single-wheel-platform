@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Single Control & Evidence Console</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="model3d.css">
 </head>
 <body>
   <main class="console-shell">
@@ -49,6 +50,7 @@
         <div class="sidebar-section-label">Console</div>
         <a class="nav-item active" href="#modelStage"><span>◌</span> Setup</a>
         <a class="nav-item" href="#modelStage"><span>◇</span> Simulation</a>
+        <a class="nav-item" href="#spatialPanel"><span>⬡</span> Spatial</a>
         <a class="nav-item" href="#statePanel"><span>≋</span> State</a>
         <a class="nav-item" href="#inputPanel"><span>⇄</span> Inputs</a>
         <a class="nav-item" href="#evidencePanel"><span>⌁</span> Evidence</a>
@@ -143,6 +145,33 @@
             <div><span class="metric-label">Reaction phase</span><strong id="reactionAngle">—</strong></div>
             <div><span class="metric-label">Current sample</span><strong id="sampleIndex">—</strong></div>
           </div>
+        </article>
+
+        <article class="panel spatial-panel" id="spatialPanel">
+          <div class="panel-header spatial-header">
+            <div>
+              <div class="panel-kicker">Schematic spatial projection</div>
+              <h2>Physically signed 3-D view</h2>
+              <p>Evidence-driven presentation only. Geometry is schematic; no ONE V2 physical dimensions are claimed here.</p>
+            </div>
+            <div class="spatial-toolbar" aria-label="3-D camera presets">
+              <button type="button" data-camera-preset="iso">ISO</button>
+              <button type="button" data-camera-preset="side">SIDE</button>
+              <button type="button" data-camera-preset="front">FRONT</button>
+            </div>
+          </div>
+          <div class="spatial-boundary">
+            <strong>SCHEMATIC GEOMETRY</strong>
+            <span>+X forward · +Y left · +Z up · pitch + about +Y · roll + about +X · reaction phase + about body +X</span>
+          </div>
+          <canvas id="spatialCanvas" aria-label="Schematic physically signed 3-D Single projection"></canvas>
+          <div class="spatial-readout">
+            <div><span>Pitch</span><strong id="spatialPitch">—</strong></div>
+            <div><span>Roll</span><strong id="spatialRoll">—</strong></div>
+            <div><span>Reaction phase</span><strong id="spatialPhase">unavailable</strong></div>
+            <div><span>Forward</span><strong id="spatialForward">—</strong></div>
+          </div>
+          <p class="spatial-note">Drive-wheel phase is intentionally not inferred from forward position or any assumed wheel radius. Camera presets change presentation only.</p>
         </article>
 
         <article class="panel contract-panel" id="contractPanel">
@@ -263,5 +292,6 @@
   <script src="charts.js"></script>
   <script src="compare.js"></script>
   <script src="live.js"></script>
+  <script src="model3d.js"></script>
 </body>
 </html>
