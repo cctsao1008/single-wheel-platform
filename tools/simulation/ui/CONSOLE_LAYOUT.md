@@ -20,12 +20,13 @@ plant/common observables        saved closed-loop evidence               |
 +----------+---------------------------------------------+-----------------------+
 |          |                                             |                       |
 | Sidebar  | Model viewport                              | Inspector             |
-|          | synchronized trends                         | evidence              |
-| setup    | exact-grid comparison                       | displayed state       |
-| sim      |                                             | truth/estimate        |
-| state    | split / side / front                        | reference             |
-| inputs   |                                             | runtime               |
-| evidence |                                             | applied input         |
+|          | physically signed 3-D spatial viewport      | evidence              |
+| setup    | synchronized trends                         | displayed state       |
+| sim      | exact-grid comparison                       | truth/estimate        |
+| spatial  |                                             | reference             |
+| state    | split / side / front                        | runtime               |
+| inputs   |                                             | applied input         |
+| evidence |                                             |                       |
 | trends   |                                             |                       |
 | compare  |                                             |                       |
 | contract |                                             |                       |
@@ -40,7 +41,10 @@ plant/common observables        saved closed-loop evidence               |
 | --- | --- | --- |
 | Header | identify loaded/live evidence, dialect, and select presentation mode | infer missing backend/runtime provenance or grant authority |
 | Sidebar | navigate presentation surfaces and select model view | configure controller/firmware |
-| Model viewport | project carried motion evidence into a drawing | integrate physics |
+| Model viewport | project carried motion evidence into side/front drawings | integrate physics |
+| Spatial viewport | project the same carried evidence into schematic 3-D geometry using the documented physical sign convention | infer dimensions, integrate motion, repair signs, or create state |
+| Spatial estimate ghost | show production estimate pitch/roll as a wireframe attitude-only diagnostic when explicitly carried | synthesize estimated translation or reaction-wheel phase |
+| Spatial camera | orbit/zoom/preset the observer viewpoint with declared bounds | change world coordinates, evidence, trace time/index, simulation, or control state |
 | Trend panel | project carried samples and explicit semantic transitions over time | smooth, resample, estimate, integrate, or create runtime state |
 | Comparison panel | overlay exact-grid common traces and report primary-minus-comparison discrepancies | interpolate, average, rank, vote, or identify a backend from a filename |
 | Inspector | preserve truth / estimate / reference / authority provenance | synthesize missing state |
@@ -50,7 +54,7 @@ plant/common observables        saved closed-loop evidence               |
 
 ## Dialect boundary
 
-The flat simulator-neutral trace carries plant state and applied torque only. It does not carry estimator state, controller reference, runtime authority, or saturation provenance. Those remain visibly unavailable in that dialect, including in the trend panel.
+The flat simulator-neutral trace carries plant state and applied torque only. It does not carry estimator state, controller reference, runtime authority, or saturation provenance. Those remain visibly unavailable in that dialect, including in the trend and spatial estimate surfaces.
 
 The nested `closed_loop_production_path` evidence carries explicit simulator truth, production estimate/reference, runtime authority, actuation, and applied torque. Saved Webots evidence and persistent Rust SITL use distinct source/mapping provenance even though the browser projects both into the same production-semantic presentation shape.
 
@@ -86,6 +90,60 @@ Display-rate limiting may drop samples from the browser view, but it does not al
 The browser keeps at most 3600 forwarded live samples. Stop/disconnect closes the SSE connection and the localhost bridge terminates its owned Rust child. The retained rolling window can then be replayed locally.
 
 There is no physical actuator command path from browser to bridge or from bridge to Rust. `SIMULATION ONLY / NO PHYSICAL AUTHORITY` is a structural boundary, not a cosmetic warning.
+
+## Spatial projection boundary
+
+The 3-D viewport is a presentation transform over the same normalized record used by the side/front views, inspector, trends, and live mode:
+
+```text
+normalized record
+      |
+      +--> truth/common pitch, roll, forward position, reaction phase when carried
+      |
+      +--> production estimate pitch/roll when explicitly carried
+      |
+      v
+project sign transform
++X forward / +Y left / +Z up
++pitch RHS about +Y
++roll RHS about +X
++reaction phase RHS about body +X
+      |
+      v
+schematic geometry
+      |
+      +--> solid truth/common body
+      +--> optional cyan estimate-attitude ghost
+      |
+      v
+presentation camera
+      |
+      v
+pixels
+```
+
+The geometry is deliberately schematic. Its body, drive-wheel, and reaction-wheel dimensions are visual proportions, not accepted ONE V2 physical parameters. Forward position shifts the reference grid; the renderer does not infer a drive-wheel phase from a schematic or guessed radius.
+
+The production estimate does not carry reaction-wheel phase. The spatial ghost therefore represents only estimate pitch/roll at the same schematic axle/origin as the truth/common body. It does not synthesize estimated 3-D translation or reaction phase. If the estimate is absent, the ghost is absent.
+
+### Camera interaction boundary
+
+Camera state is independent presentation state:
+
+```text
+world/evidence geometry ---- unchanged ----+
+                                           |
+                                           v
+                                  presentation camera
+                              preset / orbit / zoom
+                                           |
+                                           v
+                                         pixels
+```
+
+ISO, SIDE, and FRONT are deterministic presets. Pointer drag changes only camera azimuth/elevation around the fixed presentation target. Wheel input changes only bounded camera radius. Reset returns to the ISO preset. Camera radius and elevation are clamped to declared bounds in `model3d.js`.
+
+Camera interaction must not mutate `latestRecord`, normalized evidence, trace index, simulation time, estimator/controller data, or physical coordinate definitions. Moving the camera is not moving the robot.
 
 ## Synchronized trend boundary
 
@@ -130,4 +188,4 @@ Truth-minus-estimate residuals are permitted only where both values exist explic
 
 Reaction-wheel phase is a useful example of the boundary: simulator truth carries it, while the reduced production estimate omits that cyclic coordinate. The UI therefore shows truth phase but does not fabricate an estimated phase.
 
-This distinction is deliberate: a polished console is not permission to invent telemetry, upgrade evidence, or hold a majority vote on physics.
+This distinction is deliberate: a polished console is not permission to invent telemetry, upgrade evidence, move reality with the camera, or hold a majority vote on physics.
