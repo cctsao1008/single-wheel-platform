@@ -50,6 +50,8 @@ The current viewport shows:
 
 The inspector intentionally does **not** invent fields that the common trace does not contain. For example, runtime authority is displayed as `not carried by common trace` rather than inferred from torque or motion.
 
+The durable information-architecture boundary is recorded in [`CONSOLE_LAYOUT.md`](CONSOLE_LAYOUT.md).
+
 ## Common observable contract
 
 The UI uses the same common observable contract as `open_loop_correlation.py`:
