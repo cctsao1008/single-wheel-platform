@@ -19,7 +19,7 @@
 
       <div class="system-strip" aria-label="viewer status">
         <div class="status-chip"><span class="status-dot neutral"></span><span id="traceStatus">NO TRACE</span></div>
-        <div class="status-chip"><span class="status-dot good"></span>SIMULATOR-NEUTRAL V2</div>
+        <div class="status-chip"><span class="status-dot good"></span><span id="traceDialect">SIMULATOR-NEUTRAL V2</span></div>
         <div class="status-chip"><span class="status-dot good"></span>OBSERVER ONLY</div>
         <div class="status-chip muted-chip" id="provenanceBadge">no trace loaded</div>
       </div>
@@ -58,7 +58,7 @@
             <div>
               <div class="panel-kicker">Setup / Simulation</div>
               <h1>Single motion viewer</h1>
-              <p>The model is a visual projection of a loaded common trace, not a browser-side physics engine.</p>
+              <p>The model is a visual projection of loaded evidence, not a browser-side physics engine.</p>
             </div>
             <div class="angle-readout">
               <span id="pitchValue">Pitch —</span>
@@ -135,11 +135,11 @@
           <div class="panel-header compact-header">
             <div>
               <div class="panel-kicker">Trace contract</div>
-              <h2>Simulator-neutral common observables</h2>
+              <h2 id="contractTitle">Simulator-neutral common observables</h2>
             </div>
             <span class="small-badge">strict validation</span>
           </div>
-          <code>time_s · forward_position_m · forward_velocity_m_per_s · body_pitch_rad · body_pitch_rate_rad_per_s · body_roll_rad · body_roll_rate_rad_per_s · reaction_position_rad · reaction_rate_rad_per_s · drive_torque_nm · reaction_torque_nm</code>
+          <code id="contractFields">time_s · forward_position_m · forward_velocity_m_per_s · body_pitch_rad · body_pitch_rate_rad_per_s · body_roll_rad · body_roll_rate_rad_per_s · reaction_position_rad · reaction_rate_rad_per_s · drive_torque_nm · reaction_torque_nm</code>
         </article>
       </section>
 
@@ -150,16 +150,44 @@
             <div><dt>Trace</dt><dd id="traceName">none</dd></div>
             <div><dt>Samples</dt><dd id="sampleCount">—</dd></div>
             <div><dt>Duration</dt><dd id="durationValue">—</dd></div>
-            <div><dt>Source</dt><dd>common trace file</dd></div>
+            <div><dt>Source</dt><dd id="evidenceSource">simulator-neutral common trace</dd></div>
           </dl>
         </article>
 
         <article class="info-card" id="statePanel">
-          <div class="info-heading">State</div>
+          <div class="info-heading">Displayed state</div>
           <dl>
             <div><dt>Pitch rate</dt><dd id="pitchRate">—</dd></div>
             <div><dt>Roll rate</dt><dd id="rollRate">—</dd></div>
             <div><dt>Reaction rate</dt><dd id="reactionRate">—</dd></div>
+          </dl>
+        </article>
+
+        <article class="info-card" id="comparisonPanel" hidden>
+          <div class="info-heading">Truth vs estimate</div>
+          <dl>
+            <div><dt>Truth pitch</dt><dd id="truthPitch">—</dd></div>
+            <div><dt>Estimate pitch</dt><dd id="estimatePitch">—</dd></div>
+            <div><dt>Pitch residual*</dt><dd id="pitchResidual">—</dd></div>
+            <div><dt>Truth roll</dt><dd id="truthRoll">—</dd></div>
+            <div><dt>Estimate roll</dt><dd id="estimateRoll">—</dd></div>
+            <div><dt>Roll residual*</dt><dd id="rollResidual">—</dd></div>
+            <div><dt>Truth forward</dt><dd id="truthForward">—</dd></div>
+            <div><dt>Estimate forward</dt><dd id="estimateForward">—</dd></div>
+            <div><dt>Forward residual*</dt><dd id="forwardResidual">—</dd></div>
+            <div><dt>Truth reaction phase</dt><dd id="truthReactionPhase">—</dd></div>
+            <div><dt>Estimate reaction rate</dt><dd id="estimateReactionRate">—</dd></div>
+          </dl>
+          <p>* UI-derived truth minus estimate; diagnostic only.</p>
+        </article>
+
+        <article class="info-card" id="referencePanel" hidden>
+          <div class="info-heading">Production reference</div>
+          <dl>
+            <div><dt>Pitch</dt><dd id="referencePitch">—</dd></div>
+            <div><dt>Roll</dt><dd id="referenceRoll">—</dd></div>
+            <div><dt>Forward velocity</dt><dd id="referenceForwardVelocity">—</dd></div>
+            <div><dt>Reaction rate</dt><dd id="referenceReactionRate">—</dd></div>
           </dl>
         </article>
 
@@ -171,11 +199,26 @@
           </dl>
         </article>
 
+        <article class="info-card" id="runtimePanel" hidden>
+          <div class="info-heading">Production runtime</div>
+          <dl>
+            <div><dt>Operating state</dt><dd id="operatingState">—</dd></div>
+            <div><dt>Estimate validity</dt><dd id="estimateValidity">—</dd></div>
+            <div><dt>Sensor timing</dt><dd id="sensorTiming">—</dd></div>
+            <div><dt>Authority</dt><dd id="authorityState">—</dd></div>
+            <div><dt>Actuation</dt><dd id="actuationState">—</dd></div>
+            <div><dt>Constrained</dt><dd id="constrainedState">—</dd></div>
+            <div><dt>Hold integrator</dt><dd id="holdIntegratorState">—</dd></div>
+            <div><dt>Fault bits</dt><dd id="faultBits">—</dd></div>
+            <div><dt>Authority reasons</dt><dd id="authorityReasonBits">—</dd></div>
+          </dl>
+        </article>
+
         <article class="info-card safety-card">
           <div class="info-heading">Runtime boundary</div>
           <div class="safety-line"><span class="status-dot good"></span><strong>Observer-only UI</strong></div>
           <p>No route to firmware I/O or <code>AuthorizedActuation</code>.</p>
-          <div class="boundary-row"><span>Authority state</span><strong>not carried by common trace</strong></div>
+          <div class="boundary-row"><span>Authority state</span><strong id="authoritySummary">not carried by common trace</strong></div>
           <div class="boundary-row"><span>Browser physics</span><strong>none</strong></div>
         </article>
       </aside>
@@ -198,7 +241,7 @@
         <output id="clock">t = —</output>
       </div>
       <div class="event-log" id="eventLog" aria-live="polite">
-        <div><span class="log-time">—</span><span>Waiting for a simulator-neutral trace.</span></div>
+        <div><span class="log-time">—</span><span>Waiting for simulator-neutral or production-semantic evidence.</span></div>
       </div>
     </section>
   </main>
