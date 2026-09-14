@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "kind": "encoder-one-revolution-preregistration",
+  "assembly": "reference-assembly",
+  "encoder_channel": "encoder_2",
+  "installed_role": "DriveWheel",
+  "runtime_counter": "TIM4",
+  "mechanical_coordinate": "drive_wheel_relative_angle",
+  "positive_direction_definition": "relative wheel rotation that produces +X forward rolling when body pitch is held fixed",
+  "safety": {
+    "firmware_target": "observation",
+    "physical_motor_backend_present": false,
+    "motor_actuation_allowed": false,
+    "manual_rotation_only": true
+  },
+  "prediction": {
+    "positive_trial_must_produce_nonzero_net_counts": true,
+    "negative_trial_must_invert_counter_sign": true,
+    "one_revolution_absolute_count_must_repeat": true,
+    "counter_sign_for_mechanical_positive": "unknown",
+    "sign_prediction_basis": "The raw TIM4 counter polarity for the project-defined physical positive direction is intentionally unknown. Legacy software negated Read_Encoder(2), but that software convention is not accepted physical sign evidence for the current reference assembly."
+  },
+  "forbidden_interpretations": [
+    "Do not infer physical sign from legacy controller algebra.",
+    "Do not infer counts per revolution from the conflicted legacy 13-line / 19:1 arithmetic.",
+    "Do not infer encoder_max_abs_delta_counts_per_sample from slow manual rotation.",
+    "Do not change estimator, controller, or actuator signs to make the capture look expected."
+  ]
+}
