@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Serve the Single console and stream persistent Rust SITL evidence over SSE.
 
-The browser remains a read-only evidence consumer. This is simulation evidence
-only. This bridge owns only the localhost transport/process lifetime. Plant,
-estimator, controller, supervisor, and authority semantics remain in the Rust
+The browser remains a read-only evidence consumer. This is simulation evidence only.
+This bridge owns only the localhost transport/process lifetime. Plant, estimator,
+controller, supervisor, and authority semantics remain in the Rust
 `single_sitl_live` process.
 """
 
