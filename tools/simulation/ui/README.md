@@ -96,9 +96,10 @@ The repository's dedicated #17 validator remains authoritative for the full clos
 | Setup    | side: pitch / forward motion        | Evidence        |
 | Sim      | front: roll / reaction wheel        | State           |
 | State    |                                      | Truth/estimate  |
-| Inputs   | split / side / front views          | Reference       |
+| Inputs   | synchronized trends                  | Reference       |
 | Evidence |                                      | Runtime         |
-| Contract |                                      | Applied input   |
+| Trends   | split / side / front views          | Applied input   |
+| Contract |                                      |                 |
 +----------+--------------------------------------+-----------------+
 | restart | play/pause | speed | timeline | time | event log       |
 +-------------------------------------------------------------------+
@@ -107,6 +108,28 @@ The repository's dedicated #17 validator remains authoritative for the full clos
 The event log reports local viewer events plus meaningful closed-loop state/authority transitions during forward replay. It is not a production runtime logger.
 
 The durable information-architecture boundary is recorded in [`CONSOLE_LAYOUT.md`](CONSOLE_LAYOUT.md).
+
+## Synchronized trends
+
+`charts.js` adds a local-only projection of the same normalized evidence already used by the model and inspector. It does not introduce a charting dependency or a second data model.
+
+The trend panel contains:
+
+- pitch/roll attitude traces,
+- production truth/estimate overlays when both are explicitly available,
+- authorized drive/reaction torque,
+- a runtime lane for `apply` / `revoke`,
+- semantic markers only when operating state, authority, actuation, constraint, or fault state changes,
+- a playback cursor synchronized with the main scrubber,
+- click-to-seek to the nearest recorded sample.
+
+The trend path is deliberately sample-faithful:
+
+```text
+recorded sample -> UI normalization -> SVG projection
+```
+
+There is no smoothing, filtering, interpolation, resampling, integration, or browser-side estimation. The simulator-neutral dialect therefore shows attitude/torque only and labels runtime authority as unavailable.
 
 ## Run
 
@@ -139,7 +162,7 @@ Both are synthetic presentation fixtures only. Neither is a recorded simulator r
 
 ## Semantic boundary
 
-The drawings and residuals are visual projections of evidence. They are not a physics backend and are not evidence by themselves.
+The drawings, residuals, and trend plots are visual projections of evidence. They are not a physics backend and are not evidence by themselves.
 
 The console must not:
 
@@ -153,6 +176,6 @@ The console must not:
 - communicate with firmware or physical hardware,
 - change simulator/control behavior.
 
-The static contract test in `../test_simulation_ui_static.py` pins both supported evidence dialects and the observer-only/no-network boundary.
+The static contract test in `../test_simulation_ui_static.py` pins both supported evidence dialects, the synchronized trend sidecar, and the observer-only/no-network boundary.
 
 > If the little robot falls over, the console's job is to show the fall clearly. If the estimator disagrees with reality, the console's job is to preserve the disagreement long enough for us to learn something from it.
