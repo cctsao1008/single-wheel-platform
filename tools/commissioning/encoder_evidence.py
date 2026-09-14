@@ -112,7 +112,36 @@ def _analyze_trial(rows: list[dict], encoder_index: int, trial: dict) -> dict:
     }
 
 
-def analyze_rows(rows: Iterable[dict], plan: dict, capture_sha256: str) -> dict:
+def _prediction_comparison(preregistration: dict | None, observed_positive_sign: int | None) -> dict | None:
+    if preregistration is None:
+        return None
+
+    hypothesis = preregistration.get("counter_sign_hypothesis")
+    if observed_positive_sign is None:
+        status = "insufficient_observed_evidence"
+    elif hypothesis == "unknown":
+        status = "not_prejudged"
+    else:
+        expected = 1 if hypothesis == "increase" else -1
+        status = "match" if observed_positive_sign == expected else "counterexample"
+
+    return {
+        "counter_sign_hypothesis": hypothesis,
+        "observed_counter_sign_for_mechanical_positive": observed_positive_sign,
+        "status": status,
+        "note": (
+            "Prediction comparison is evidence only. A counterexample must not be repaired "
+            "by controller, estimator, or actuator sign changes."
+        ),
+    }
+
+
+def analyze_rows(
+    rows: Iterable[dict],
+    plan: dict,
+    capture_sha256: str,
+    preregistration: dict | None = None,
+) -> dict:
     rows = list(rows)
     if not rows:
         raise EvidenceError("capture contains no valid raw-observation records")
@@ -123,6 +152,12 @@ def analyze_rows(rows: Iterable[dict], plan: dict, capture_sha256: str) -> dict:
     if channel not in {"encoder_1", "encoder_2"}:
         raise EvidenceError("encoder_channel must be 'encoder_1' or 'encoder_2'")
     encoder_index = 1 if channel == "encoder_1" else 2
+
+    if preregistration is not None:
+        if preregistration.get("encoder_channel") != channel:
+            raise EvidenceError("trial plan encoder_channel does not match preregistration")
+        if plan.get("mechanical_coordinate") != preregistration.get("mechanical_coordinate"):
+            raise EvidenceError("trial plan mechanical_coordinate does not match preregistration")
 
     trials = plan.get("trials")
     if not isinstance(trials, list) or not trials:
@@ -164,7 +199,7 @@ def analyze_rows(rows: Iterable[dict], plan: dict, capture_sha256: str) -> dict:
         else "inconsistent_or_incomplete_evidence"
     )
 
-    return {
+    result = {
         "schema": 1,
         "assembly": plan.get("assembly", "reference-assembly"),
         "encoder_channel": channel,
@@ -192,6 +227,14 @@ def analyze_rows(rows: Iterable[dict], plan: dict, capture_sha256: str) -> dict:
         "trials": analyzed,
     }
 
+    if preregistration is not None:
+        result["preregistration"] = preregistration
+        result["prediction_comparison"] = _prediction_comparison(
+            preregistration, positive_counter_sign
+        )
+
+    return result
+
 
 def decoded_records(stream):
     repo_root = Path(__file__).resolve().parents[2]
@@ -213,19 +256,47 @@ def load_plan(path: Path) -> dict:
     return value
 
 
+def load_preregistration(path: Path) -> dict:
+    commissioning_dir = Path(__file__).resolve().parent
+    if str(commissioning_dir) not in sys.path:
+        sys.path.insert(0, str(commissioning_dir))
+    try:
+        import encoder_preregistration
+    except ModuleNotFoundError as exc:
+        raise EvidenceError("encoder_preregistration.py is not available") from exc
+
+    document = encoder_preregistration.load(path)
+    return encoder_preregistration.validate(document)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Analyze marked one-revolution encoder trials without actuating the motors."
     )
     parser.add_argument("capture", type=Path, help="binary RecordedObservation capture")
     parser.add_argument("--plan", required=True, type=Path, help="commissioning trial plan JSON")
+    parser.add_argument(
+        "--preregistration",
+        type=Path,
+        help="validated pre-capture encoder preregistration JSON",
+    )
     parser.add_argument("--output", type=Path, help="write evidence JSON here; default is stdout")
     args = parser.parse_args()
 
     try:
         plan = load_plan(args.plan)
+        preregistration = (
+            load_preregistration(args.preregistration)
+            if args.preregistration is not None
+            else None
+        )
         with args.capture.open("rb") as stream:
-            result = analyze_rows(decoded_records(stream), plan, sha256_file(args.capture))
+            result = analyze_rows(
+                decoded_records(stream),
+                plan,
+                sha256_file(args.capture),
+                preregistration,
+            )
     except (OSError, json.JSONDecodeError, EvidenceError, KeyError, TypeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
