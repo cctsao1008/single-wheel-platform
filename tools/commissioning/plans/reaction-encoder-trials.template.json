@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "assembly": "reference-assembly",
+  "encoder_channel": "encoder_1",
+  "mechanical_coordinate": "reaction_wheel_relative_angle",
+  "positive_direction_definition": "relative wheel rotation about body +X by the right-hand rule",
+  "preregistration": "tools/commissioning/plans/reaction-encoder-one-rev.preregistration.json",
+  "note": "Copy this file outside the committed template path after capture, then replace the null sequence boundaries with exact RecordedObservation sequence numbers. Do not change the physical-positive definition to fit the observed sign.",
+  "trials": [
+    {
+      "name": "positive-1",
+      "direction": "positive",
+      "start_sequence": null,
+      "end_sequence": null
+    },
+    {
+      "name": "negative-1",
+      "direction": "negative",
+      "start_sequence": null,
+      "end_sequence": null
+    },
+    {
+      "name": "positive-2",
+      "direction": "positive",
+      "start_sequence": null,
+      "end_sequence": null
+    },
+    {
+      "name": "negative-2",
+      "direction": "negative",
+      "start_sequence": null,
+      "end_sequence": null
+    }
+  ]
+}
